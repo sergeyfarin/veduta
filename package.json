@@ -1,0 +1,20 @@
+{
+  "name": "veduta",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.20.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "concurrently --names api,web --prefix-colors blue,magenta --kill-others-on-fail \"go run ./cmd/veduta serve\" \"pnpm --filter veduta-web dev\"",
+    "build": "pnpm --filter veduta-web build && go build -o veduta ./cmd/veduta",
+    "check": "go vet ./... && go test ./... && pnpm --filter veduta-web check",
+    "test": "go test ./...",
+    "contracts": "go test ./internal/contracts/...",
+    "update": "pnpm --recursive update --latest && go get -u ./... && go mod tidy"
+  },
+  "devDependencies": {
+    "concurrently": "10.0.5"
+  }
+}

@@ -1,4 +1,8 @@
-# Pinned toolchain. `mise install` sets everything up; `mise run check` runs what CI runs.
+# Pinned toolchain. `mise install` sets everything up.
+#
+# Day-to-day commands run through pnpm from the repository root, because the dev loop spans both
+# halves: `pnpm dev` runs the Go API and Vite together. The mise tasks below are the same things
+# for anyone who prefers them, plus what CI runs.
 [tools]
 go = "1.27"
 node = "24"
@@ -8,8 +12,12 @@ pnpm = "11"
 CGO_ENABLED = "0"
 
 [tasks.install]
-description = "Install dependencies"
-run = ["go mod download", "pnpm --dir web install"]
+description = "Install Go modules and workspace packages"
+run = ["go mod download", "pnpm install"]
+
+[tasks.dev]
+description = "Run the Go API and the Vite dev server together"
+run = "pnpm dev"
 
 [tasks.contracts]
 description = "The contract suite: schemas, RE2 pattern portability, canonical digests, cross-document semantics"
@@ -20,16 +28,16 @@ description = "All Go tests"
 run = "go test ./..."
 
 [tasks.lint]
-description = "Vet and format check"
-run = ["go vet ./...", "test -z \"$(gofmt -l cmd internal)\""]
+description = "Vet, format check and frontend typecheck"
+run = ["go vet ./...", "test -z \"$(gofmt -l cmd internal)\"", "pnpm --filter veduta-web check"]
 
-[tasks.web]
-description = "Frontend dev server (proxies /api to the Go server)"
-run = "pnpm --dir web dev"
+[tasks.build]
+description = "Build the SPA and the binary"
+run = "pnpm build"
 
-[tasks.build-web]
-description = "Build the SPA into web/build for embedding"
-run = "pnpm --dir web build"
+[tasks.update]
+description = "Update every dependency to its latest version (a reviewable commit, never automatic)"
+run = "pnpm run update"
 
 [tasks.check]
 description = "Everything CI runs"

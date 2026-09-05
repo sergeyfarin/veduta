@@ -15,7 +15,22 @@ describes what it wants; the core decides whether it is allowed, and holds every
 Design complete and frozen; implementation starting at milestone A1. The contract suite in
 `internal/contracts` is the CI gate from the first commit — `mise run contracts`.
 
-Toolchain is pinned in [mise.toml](mise.toml): Go 1.27, Node 24, pnpm 11. `mise install && mise run check`.
+Toolchain is pinned in [mise.toml](mise.toml): Go 1.27, Node 24, pnpm 11.
+
+```bash
+mise install && pnpm install
+pnpm dev        # Go API on 127.0.0.1:8099 and Vite on :5173, /api proxied to the API
+pnpm check      # go vet, go test (contract suite included), svelte-check
+pnpm build      # SPA into web/build, then the binary
+pnpm run update # every dependency, npm and Go, to latest
+```
+
+Frontend dependencies are pinned to exact versions — `.npmrc` sets `save-exact`, so `pnpm add`
+and `pnpm update` write `1.2.3`, never `^1.2.3`. A dependency change should be a reviewable
+commit, not something a fresh install decides.
+
+Until authentication lands (milestone H1) the server refuses to bind anything but loopback: it
+holds service credentials from Phase D onward.
 
 This repository currently contains:
 
@@ -35,7 +50,8 @@ This repository currently contains:
 | [internal/contracts/](internal/contracts/) | The contract suite: structural, RE2 portability, canonical digest and semantic layers |
 | [internal/canonical/](internal/canonical/) | Strict decoder and RFC 8785 canonical manifest digest |
 | [mise.toml](mise.toml) | Pinned toolchain and task runner |
-| [web/](web/) | Svelte 5 + Vite + TypeScript SPA skeleton (pnpm) |
+| [web/](web/) | Svelte 5 + Vite + TypeScript SPA skeleton (pnpm workspace) |
+| [internal/api/](internal/api/) | HTTP foundation: health, build identity, the loopback gate |
 | [LICENSING.md](LICENSING.md) | Multi-license layout, plugin exception, AGPL §13 obligations |
 
 ## Product principles

@@ -2,7 +2,6 @@
   "name": "veduta-web",
   "private": true,
   "type": "module",
-  "packageManager": "pnpm@11.20.0",
   "scripts": {
     "dev": "vite",
     "build": "svelte-check --tsconfig ./tsconfig.json && vite build",
@@ -10,11 +9,11 @@
     "check": "svelte-check --tsconfig ./tsconfig.json"
   },
   "devDependencies": {
-    "@sveltejs/vite-plugin-svelte": "^6.2.1",
-    "@tsconfig/svelte": "^5.0.4",
-    "svelte": "^5.39.5",
-    "svelte-check": "^4.3.2",
-    "typescript": "^5.9.2",
-    "vite": "^7.1.5"
+    "@sveltejs/vite-plugin-svelte": "7.3.0",
+    "@tsconfig/svelte": "5.0.8",
+    "svelte": "5.57.0",
+    "svelte-check": "4.7.6",
+    "typescript": "5.9.3",
+    "vite": "8.2.2"
   }
 }

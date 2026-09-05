@@ -1,4 +1,7 @@
-# pnpm 11 reads settings from here rather than package.json.
+# Root workspace. `pnpm dev`, `pnpm build`, `pnpm check` and `pnpm update` all run from here.
+packages:
+  - web
+
 # esbuild ships a prebuilt platform binary and needs its postinstall to run; nothing else does.
 allowBuilds:
   esbuild: true

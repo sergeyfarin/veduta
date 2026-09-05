@@ -132,7 +132,9 @@ Tests: Go test asserting `GET /` returns HTML and `GET /assets/*.js` returns JS 
 content type; a `web` build test in CI.
 AC: `go build` after `npm run build` yields one binary that serves the app with no Node at runtime.
 
-**A3 · Server foundation** · 0.5 d · deps: A1 · ⇉ with A2
+**A3 · Server foundation** · 0.5 d · deps: A1 · ⇉ with A2 — **partially landed**: `internal/api`
+serves `/api/v1/health` and `/api/v1/version`, with timeouts, panic recovery, structured logging,
+graceful shutdown and the loopback gate below. Request-id middleware and config flags remain.
 **Gate:** the listener defaults to `127.0.0.1:8099` and **refuses to bind a non-loopback address**
 until H1 has landed and `auth` is configured with a mode other than `none`. The dashboard holds
 service credentials from Phase D onward, and Phase H used to sit after the container image and the
