@@ -47,6 +47,14 @@
   /* Tabular numerals: live values must not jitter the layout as digits change width. */
   --v-font-num: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
 
+  /* Deliberately theme-invariant: a caption overlaid on a photo (poster-grid, image-grid) sits on
+   * top of unknown, variable photo luminance, not the page background - it needs to stay legible
+   * against ANY photo in either theme, so it is not one of the light/dark pairs below. Still a
+   * token, and still enforced by TestComponentsUseTokensNotHardcodedColours: this is the one
+   * legitimate exception to "every colour is a token", not a literal in a component. */
+  --v-overlay-text: #ffffff;
+  --v-overlay-scrim: rgb(0 0 0 / 70%);
+
   color-scheme: light;
 }
 

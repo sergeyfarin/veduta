@@ -13,11 +13,11 @@ describes what it wants; the core decides whether it is allowed, and holds every
 ## Status
 
 Design complete and frozen. Implementation under way: Phase A (repository bootstrap, embedded
-SPA), B1 (design tokens, card shell, all four execution states), B2 (Widget Document, signals,
-the CardState envelope, and Go/TypeScript types generated from one schema) and B3 (block
-renderers for status/metrics/key-value/progress/list/text, with a Vitest harness) are done and
-green in CI; spikes S2 (upstream API reality check) and S4 (visual prototype) are done. Next
-up: B4 (media block renderers). See
+SPA) and B1–B4 (design tokens and card shell; the Widget Document / CardState envelope with
+Go/TypeScript types generated from one schema; and renderers for all nine block types -
+status, metrics, key-value, progress, list, text/markdown, image, image-grid, poster-grid,
+table, actions) are done and green in CI; spikes S2 (upstream API reality check) and S4 (visual
+prototype) are done. Next up: B5 (fixture dashboard and visual regression baseline). See
 [docs/02-implementation-plan.md](docs/02-implementation-plan.md) for the full milestone table and
 what's marked **DONE**.
 
@@ -71,6 +71,7 @@ This repository currently contains:
 | [web/src/lib/blocks/](web/src/lib/blocks/) | Six Widget Document block renderers, a registry, and the unknown-type placeholder |
 | [web/src/lib/format.ts](web/src/lib/format.ts) | The one place a `Scalar` value is turned into display text, per its `Format` hint |
 | [web/src/lib/markdown.ts](web/src/lib/markdown.ts) | Restricted-subset markdown parser — never produces an HTML string, only an AST |
+| [web/src/lib/assets.ts](web/src/lib/assets.ts) | The one place an `Image.ref` becomes a fetchable URL |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | DCO sign-off, the licence split, what a change needs |
 | [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md) | Every dependency and its licence, enforced by a test |
 | [LICENSING.md](LICENSING.md) | Multi-license layout, plugin exception, AGPL §13 obligations |

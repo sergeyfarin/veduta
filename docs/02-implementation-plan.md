@@ -337,12 +337,63 @@ since a successful match on a hand-written fixed-capture-group regex always has 
 AC met: every component has Vitest coverage including the stated edge cases; `{@html}` is absent
 from `web/` and a mutation-tested Go test (not a shell grep) enforces it in CI.
 
-**B4 · Block renderers II (media)** · 1 d · deps: B3
-Blocks: `image`, `image-grid`, `poster-grid`, `table`, `markdown`, `actions` (rendered disabled in 0.1).
-Includes aspect-ratio boxes, lazy loading, blur-up placeholder, error/broken-image state, and
-overflow behaviour for long tables.
-AC: a 6-photo grid and a 5-poster row render with zero cumulative layout shift (measured in the
-Playwright run).
+**B4 · Block renderers II (media)** · 1 d · deps: B3 · **DONE**
+Blocks: `image`, `image-grid`, `poster-grid` (one `MediaBlock.svelte` + `MediaTile.svelte`,
+switching grid density and default aspect by kind - `markdown` was already covered by B3's
+`TextBlock`, since the schema's `blockText` carries both `text` and `markdown` under one type),
+`table`, `actions` (rendered disabled - see below). All nine v1 block types are now registered.
+
+Creates: `web/src/lib/blocks/{MediaBlock,MediaTile,TableBlock,ActionsBlock}.svelte`,
+`web/src/lib/assets.ts` (the one place an `Image.ref` becomes a fetchable URL, and the one place
+the schema's `"W:H"` aspect syntax becomes CSS `aspect-ratio` syntax).
+
+- **Aspect-ratio boxes**: every tile reserves its box via CSS `aspect-ratio` before the image
+  exists, using the item's own `image.aspect` when present, else a per-kind default (16:9 for a
+  single `image`, 1:1 for `image-grid`, 2:3 for `poster-grid`, matching the S4 prototype).
+- **Lazy loading**: `loading="lazy" decoding="async"` on every `<img>`.
+- **Blur-up placeholder**: a shimmer skeleton (reusing B1's `Skeleton.svelte`) shown until `load`
+  fires, then a plain opacity cross-fade. `Image.blurhash` exists in the schema for a true
+  decoded-thumbnail placeholder; implementing the BlurHash algorithm itself (decode → pixel grid →
+  canvas) is real, separable work, named here as a deliberate deferral rather than silently
+  dropped.
+- **Broken-image state**: an `error` handler swaps the `<img>` for a placeholder that still
+  fills the exact same aspect-ratio box - the failure never collapses the layout, only the pixels
+  inside it change.
+- **Table overflow**: a `.scroll` container with `overflow: auto` on both axes (the schema allows
+  up to 100 rows and 8 columns, either of which can exceed a card's fixed row-quantised height or
+  width) plus a sticky header.
+- **Actions rendered disabled**: real, labelled `<button disabled>` elements, not omitted and not
+  silently enabled - executing an action needs authentication, an authorisation check and an audit
+  trail on the core side (none of which exists before Phase D/H), so an inert button is honest and
+  a fake-working one would not be.
+
+Tests: 22 new Vitest cases (`MediaBlock` 10, `MediaTile` 5, `TableBlock` 5, `ActionsBlock` 3),
+including the milestone's own stated cases: an item's own aspect overriding the per-kind default,
+the asset URL built from `ref` alone (never a raw URL an integration could supply), the broken
+placeholder reserving the identical aspect box as a real image would, and every action rendered
+disabled. `BlockRenderer.test.ts`'s assertion from B3 ("media/table/actions are NOT yet
+registered") now correctly fails and is updated to assert the full set of nine.
+
+AC verified for real, not approximated: `pnpm dev` plus the same borrowed Playwright engine used
+for B1/B3, this time going further than a screenshot. The asset endpoint does not exist until
+milestone E1, so every image in the wired-in showcase honestly 404s right now - confirmed and
+screenshotted as the correct, working broken-image path (right icon, right aspect ratio, no
+crash). To verify the *successful*-load path and measure real CLS without faking the app's own
+code, Playwright's `page.route()` intercepted `/api/v1/assets/**` and served a real 1×1 JPEG - a
+test-side technique simulating the not-yet-built backend, not a change to any shipped code. Against
+that, the browser's own Layout Instability API (`PerformanceObserver({type:'layout-shift'})`,
+summed for the page's lifetime) measured **0** across all 11 images in the showcase (a 5-poster
+row, a 6-photo grid, and one more), which is the literal AC metric rather than a proxy for it.
+
+Found while looking at the honestly-404ing screenshot, not by any automated check: the caption
+overlay (`MediaTile`'s hover caption, ported from the S4 prototype) used literal `#fff` and
+`rgb(0 0 0 / 70%)` instead of tokens, which `TestComponentsUseTokensNotHardcodedColours` (added in
+B1) correctly rejected. Fixed properly rather than exempted: two new **deliberately
+theme-invariant** tokens, `--v-overlay-text`/`--v-overlay-scrim`, defined once in `:root` and never
+redefined per theme - a caption sits on top of unknown, variable photo luminance, not the page
+background, so it needs to stay legible against any photo in either theme, which a light/dark pair
+cannot express. Still a token, still enforced by the same test; this is the one legitimate
+exception to "every colour is a token," not a literal smuggled past the guard.
 
 **B5 · Fixture dashboard + visual regression baseline** · 0.5 d · deps: B3, B4
 Creates: `testdata/dashboards/showcase.json` (deterministic documents, checked-in local images),

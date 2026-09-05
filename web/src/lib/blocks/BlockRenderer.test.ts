@@ -16,15 +16,12 @@ describe('BlockRenderer', () => {
     expect(screen.getByText('chart')).toBeInTheDocument();
   });
 
-  it('the registry covers every block type this milestone claims to implement', () => {
-    for (const type of ['status', 'metrics', 'key-value', 'progress', 'list', 'text']) {
+  it('the registry covers every one of the nine v1 block types (B3 + B4 complete the set)', () => {
+    for (const type of [
+      'status', 'metrics', 'key-value', 'progress', 'list', 'text', 'markdown',
+      'image', 'image-grid', 'poster-grid', 'table', 'actions'
+    ]) {
       expect(registry[type]).toBeDefined();
-    }
-  });
-
-  it('the registry does NOT yet cover media/table/actions types - B4 and later', () => {
-    for (const type of ['image', 'image-grid', 'poster-grid', 'table', 'actions']) {
-      expect(registry[type]).toBeUndefined();
     }
   });
 });

@@ -42,7 +42,21 @@
   <Section title="Card states">
     <Grid>
       <Card title="Jellyfin" icon="JF" span={{ columns: 2, rows: 2 }} href="#">
-        <p class="placeholder">poster-grid — milestone B4</p>
+        <!-- Real refs, pointing at the documented /api/v1/assets/{token} endpoint - it does not
+             exist until milestone E1, so these honestly 404 in dev today, exercising the
+             broken-image state for real rather than faking a happy path. -->
+        <BlockRenderer
+          block={{
+            type: 'poster-grid',
+            items: [
+              { id: 'a1', title: 'Dune', subtitle: '2021', image: { ref: 'v1.aGVsbG8.d29ybGQ', aspect: '2:3' } },
+              { id: 'a2', title: 'Arrival', subtitle: '2016', image: { ref: 'v1.aGVsbG8.d29ybGE', aspect: '2:3' } },
+              { id: 'a3', title: 'Blade Runner 2049', image: { ref: 'v1.aGVsbG8.d29ybGI', aspect: '2:3' } },
+              { id: 'a4', title: 'Severance', subtitle: 'S2', image: { ref: 'v1.aGVsbG8.d29ybGM', aspect: '2:3' } },
+              { id: 'a5', title: 'Andor', subtitle: 'S2', image: { ref: 'v1.aGVsbG8.d29ybGQ2', aspect: '2:3' } }
+            ]
+          }}
+        />
       </Card>
 
       <Card title="coding-server" icon="CS" statusText="34d" span={{ rows: 2 }}>
@@ -143,6 +157,52 @@
           }}
         />
       </Card>
+      <Card title="Immich" icon="IM" span={{ columns: 2, rows: 2 }}>
+        <BlockRenderer
+          block={{
+            type: 'image-grid',
+            columns: 6,
+            items: [
+              { id: 'p1', image: { ref: 'v1.aW1n.MQ' } },
+              { id: 'p2', image: { ref: 'v1.aW1n.Mg' } },
+              { id: 'p3', image: { ref: 'v1.aW1n.Mw' } },
+              { id: 'p4', image: { ref: 'v1.aW1n.NA' } },
+              { id: 'p5', image: { ref: 'v1.aW1n.NQ' } },
+              { id: 'p6', image: { ref: 'v1.aW1n.Ng' } }
+            ]
+          }}
+        />
+      </Card>
+
+      <Card title="Disks" icon="DK" span={{ columns: 2, rows: 2 }}>
+        <BlockRenderer
+          block={{
+            type: 'table',
+            columns: [
+              { key: 'mount', label: 'Mount' },
+              { key: 'used', label: 'Used', format: 'bytes', align: 'end' },
+              { key: 'percent', label: 'Full', format: 'percent', align: 'end' }
+            ],
+            rows: [
+              { mount: '/', used: 214748364800, percent: 0.92 },
+              { mount: '/data', used: 4200000000000, percent: 0.61 },
+              { mount: '/backup', used: 900000000000, percent: 0.31 }
+            ]
+          }}
+        />
+      </Card>
+
+      <Card title="Jellyfin" icon="JF" span={{ rows: 2 }}>
+        <BlockRenderer
+          block={{
+            type: 'actions',
+            actions: [
+              { id: 'restart', label: 'Restart', icon: '↻' },
+              { id: 'scan', label: 'Scan library' }
+            ]
+          }}
+        />
+      </Card>
     </Grid>
   </Section>
 
@@ -194,11 +254,6 @@
     color: var(--v-text);
   }
 
-  .placeholder {
-    margin: 0;
-    color: var(--v-faint);
-    font-size: 13px;
-  }
   .pending {
     display: flex;
     flex-direction: column;
