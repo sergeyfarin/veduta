@@ -107,7 +107,8 @@ func manifestCmd(args []string) error {
 
 func serve(args []string) error {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
-	listen := fs.String("listen", "127.0.0.1:8099", "address to listen on (loopback until H1)")
+	listen := fs.String("listen", "", "address to listen on (overrides server.listen in config)")
+	configPath := fs.String("config", "veduta.yaml", "path to the primary config file")
 	override := fs.Bool("i-know-what-im-doing", false,
 		"allow a non-loopback bind before authentication exists")
 	logFormat := fs.String("log-format", "text", "log format: text or json")
@@ -129,7 +130,6 @@ func serve(args []string) error {
 	logger := slog.New(secrets.NewHandler(handler, secrets.DefaultRegistry()))
 
 	cfg := api.Config{
-		Listen:                 *listen,
 		Logger:                 logger,
 		AllowPublicWithoutAuth: *override,
 	}
@@ -139,8 +139,34 @@ func serve(args []string) error {
 			return fmt.Errorf("--fixtures: %w", err)
 		}
 		cfg.Fixtures = &bundle
+		cfg.Listen = *listen
 		logger.Warn("serving the checked-in showcase dashboard, not real configuration",
 			"hint", "this is --fixtures - remove it for a real deployment")
+	} else {
+		loader := func(path string) (*config.Snapshot, config.Diagnostics) {
+			snapshot, diags := config.LoadPath(path)
+			if snapshot == nil || diags.HasErrors() {
+				return nil, diags
+			}
+			_, secretDiags := secrets.ResolveAll(snapshot.SecretRefs, secrets.DefaultResolver())
+			diags = append(diags, secretDiags...)
+			if diags.HasErrors() {
+				return nil, diags
+			}
+			return snapshot, diags
+		}
+		store, diags := config.Open(*configPath, logger, loader)
+		if diags.HasErrors() {
+			return fmt.Errorf("load config:\n%s", diags.String())
+		}
+		if err := validateAuthNone(store.Snapshot(), *override); err != nil {
+			return err
+		}
+		cfg.ConfigStore = store
+		cfg.Listen = store.Snapshot().Config.Server.Listen
+		if *listen != "" {
+			cfg.Listen = *listen
+		}
 	}
 
 	srv, err := api.New(cfg)
@@ -150,8 +176,23 @@ func serve(args []string) error {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	if cfg.ConfigStore != nil {
+		go func() {
+			if err := cfg.ConfigStore.Watch(ctx); err != nil && !errors.Is(err, context.Canceled) {
+				logger.Error("config watcher stopped", "error", err)
+				stop()
+			}
+		}()
+	}
 	if err := srv.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
 		return err
+	}
+	return nil
+}
+
+func validateAuthNone(snapshot *config.Snapshot, override bool) error {
+	if snapshot.Config.Auth.Mode == config.AuthNone && len(snapshot.SecretRefs) > 0 && !override {
+		return errors.New("auth.mode is none but the configuration references secrets; pass --i-know-what-im-doing to acknowledge the risk")
 	}
 	return nil
 }

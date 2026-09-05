@@ -19,7 +19,9 @@ import (
 	"net/http"
 	"time"
 
+	"veduta.dev/veduta/internal/config"
 	"veduta.dev/veduta/internal/fixtures"
+	"veduta.dev/veduta/internal/state"
 	"veduta.dev/veduta/internal/version"
 	"veduta.dev/veduta/web"
 )
@@ -45,6 +47,10 @@ type Config struct {
 	// /cards and /assets/{token} - a dev-only stand-in for configuration and the scheduler, and
 	// what the visual regression suite (milestone B5) runs against. Never set in production.
 	Fixtures *fixtures.Bundle
+
+	// ConfigStore is the atomically reloadable real configuration. Until the scheduler lands,
+	// configured cards are returned honestly as pending so the production render path is usable.
+	ConfigStore *config.Store
 }
 
 // Server wraps the HTTP server and its lifecycle.
@@ -126,6 +132,9 @@ func (s *Server) routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/v1/health", s.handleHealth)
 	mux.HandleFunc("GET /api/v1/version", s.handleVersion)
+	if s.cfg.ConfigStore != nil {
+		s.routeConfig(mux)
+	}
 
 	if s.cfg.Fixtures != nil {
 		s.routeFixtures(mux)
@@ -142,6 +151,56 @@ func (s *Server) routes() http.Handler {
 	mux.Handle("/", s.staticHandler(assets, present))
 
 	return s.recoverPanics(mux)
+}
+
+func (s *Server) routeConfig(mux *http.ServeMux) {
+	store := s.cfg.ConfigStore
+	mux.HandleFunc("GET /api/v1/config/status", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, store.Status())
+	})
+	mux.HandleFunc("GET /api/v1/dashboard", func(w http.ResponseWriter, r *http.Request) {
+		snapshot := store.Snapshot()
+		if snapshot == nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "no valid configuration loaded"})
+			return
+		}
+		type card struct {
+			ID    string      `json:"id"`
+			Title string      `json:"title"`
+			Icon  string      `json:"icon,omitempty"`
+			Href  string      `json:"href,omitempty"`
+			Span  config.Span `json:"span"`
+		}
+		type section struct {
+			Title string `json:"title,omitempty"`
+			Cards []card `json:"cards"`
+		}
+		sections := make([]section, 0, len(snapshot.Config.Sections))
+		for _, configured := range snapshot.Config.Sections {
+			out := section{Title: configured.Title, Cards: make([]card, 0, len(configured.Cards))}
+			for _, c := range configured.Cards {
+				title := c.Title
+				if title == "" {
+					title = c.ID
+				}
+				out.Cards = append(out.Cards, card{ID: c.ID, Title: title, Icon: c.Icon, Href: c.Href, Span: c.Span})
+			}
+			sections = append(sections, out)
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"sections": sections})
+	})
+	mux.HandleFunc("GET /api/v1/cards", func(w http.ResponseWriter, r *http.Request) {
+		snapshot := store.Snapshot()
+		cards := make([]state.CardState, 0)
+		if snapshot != nil {
+			for _, section := range snapshot.Config.Sections {
+				for _, c := range section.Cards {
+					cards = append(cards, state.Pending(c.ID))
+				}
+			}
+		}
+		writeJSON(w, http.StatusOK, cards)
+	})
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {

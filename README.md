@@ -18,9 +18,10 @@ Go/TypeScript types generated from one schema; renderers for all nine block type
 metrics, key-value, progress, list, text/markdown, image, image-grid, poster-grid, table,
 actions; and a fixture dashboard with a Playwright visual regression baseline), C1 (the config
 loader: `veduta.yaml` + `conf.d/*.yaml` merged, schema-validated and semantically checked, every
-error carrying `file:line:col`) and C2 (secrets: `env:`/`file:` providers, a redacting `Value`
-type, a log scrubber active by default) are done and green in CI; spikes S2 (upstream API reality
-check) and S4 (visual prototype) are done. Next up: C3 (watcher, atomic reload, status). See
+error carrying `file:line:col`), C2 (secrets: `env:`/`file:` providers, a redacting `Value`
+type, a log scrubber active by default), and C3 (atomic live reload with status) are done and green
+in CI; spikes S2 (upstream API reality check) and S4 (visual prototype) are done. Next up: D1
+(connection registry and HTTP client). See
 [docs/02-implementation-plan.md](docs/02-implementation-plan.md) for the full
 milestone table and what's marked **DONE**, and [docs/03-backlog.md](docs/03-backlog.md) for
 open gaps found along the way (currently: a config/schema asymmetry, a still-undone expression-
@@ -34,7 +35,8 @@ Toolchain is pinned in [mise.toml](mise.toml): Go 1.27, Node 24, pnpm 11.
 
 ```bash
 mise install && pnpm install
-pnpm dev        # Go API on 127.0.0.1:8099 and Vite on :5173, /api proxied to the API
+pnpm dev        # showcase API on 127.0.0.1:8099 and Vite on :5173, /api proxied to the API
+pnpm run dev:config # real config + live reload (requires the example's secrets in the environment)
 pnpm dev -- --host  # same, plus reachable from another device on your LAN (see web/README.md)
 pnpm check      # go vet, go test (contract suite included), svelte-check
 pnpm build      # SPA into web/build, then the binary

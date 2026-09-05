@@ -1,0 +1,192 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
+package config
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"log/slog"
+	"os"
+	"path/filepath"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"github.com/fsnotify/fsnotify"
+)
+
+const reloadDebounce = 300 * time.Millisecond
+
+// Loader performs the complete load-time pipeline. Callers may wrap LoadPath to add steps such
+// as secret resolution; a failed step must return a nil snapshot and diagnostics.
+type Loader func(path string) (*Snapshot, Diagnostics)
+
+// Status is the last config load result. A failed reload updates this value but never replaces
+// the live snapshot or its checksum/generation.
+type Status struct {
+	OK          bool        `json:"ok"`
+	Generation  uint64      `json:"generation"`
+	Checksum    string      `json:"checksum,omitempty"`
+	LoadedAt    time.Time   `json:"loadedAt,omitempty"`
+	AttemptedAt time.Time   `json:"attemptedAt"`
+	Diagnostics Diagnostics `json:"diagnostics"`
+}
+
+// Store owns the process-wide immutable config snapshot and its live-reload status.
+type Store struct {
+	path    string
+	load    Loader
+	log     *slog.Logger
+	current atomic.Pointer[Snapshot]
+	mu      sync.RWMutex
+	status  Status
+}
+
+// Open loads the initial snapshot. The server must not start without one valid configuration.
+func Open(path string, logger *slog.Logger, loader Loader) (*Store, Diagnostics) {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	if loader == nil {
+		loader = LoadPath
+	}
+	s := &Store{path: filepath.Clean(path), load: loader, log: logger}
+	snapshot, diags := loader(s.path)
+	now := time.Now().UTC()
+	if snapshot == nil || diags.HasErrors() {
+		s.status = Status{OK: false, AttemptedAt: now, Diagnostics: copyDiagnostics(diags)}
+		return s, diags
+	}
+	s.current.Store(snapshot)
+	s.status = Status{OK: true, Generation: 1, Checksum: snapshotChecksum(snapshot), LoadedAt: now, AttemptedAt: now, Diagnostics: copyDiagnostics(diags)}
+	return s, diags
+}
+
+// Snapshot returns the current immutable snapshot. It is safe and lock-free for concurrent use.
+func (s *Store) Snapshot() *Snapshot { return s.current.Load() }
+
+// Status returns a copy of the latest load result.
+func (s *Store) Status() Status {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := s.status
+	out.Diagnostics = copyDiagnostics(out.Diagnostics)
+	return out
+}
+
+// Watch blocks until ctx is cancelled, reloading after relevant filesystem events settle.
+func (s *Store) Watch(ctx context.Context) error {
+	w, err := fsnotify.NewWatcher()
+	if err != nil {
+		return fmt.Errorf("watch config: %w", err)
+	}
+	defer w.Close()
+
+	parent := filepath.Dir(s.path)
+	if err := w.Add(parent); err != nil {
+		return fmt.Errorf("watch config directory %s: %w", parent, err)
+	}
+	confDir := filepath.Join(parent, "conf.d")
+	watchConfDir := func() {
+		if err := w.Add(confDir); err != nil && !errors.Is(err, os.ErrNotExist) {
+			s.log.Warn("could not watch config fragment directory", "path", confDir, "error", err)
+		}
+	}
+	watchConfDir()
+
+	var timer *time.Timer
+	var timerC <-chan time.Time
+	schedule := func() {
+		if timer == nil {
+			timer = time.NewTimer(reloadDebounce)
+		} else {
+			if !timer.Stop() {
+				select {
+				case <-timer.C:
+				default:
+				}
+			}
+			timer.Reset(reloadDebounce)
+		}
+		timerC = timer.C
+	}
+	defer func() {
+		if timer != nil {
+			timer.Stop()
+		}
+	}()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case err, ok := <-w.Errors:
+			if !ok {
+				return nil
+			}
+			s.log.Warn("config watcher error", "error", err)
+		case event, ok := <-w.Events:
+			if !ok {
+				return nil
+			}
+			if filepath.Clean(event.Name) == confDir && event.Op&fsnotify.Create != 0 {
+				watchConfDir()
+			}
+			if s.relevant(event.Name) {
+				schedule()
+			}
+		case <-timerC:
+			timerC = nil
+			s.reload()
+		}
+	}
+}
+
+func (s *Store) relevant(name string) bool {
+	name = filepath.Clean(name)
+	if name == s.path {
+		return true
+	}
+	confDir := filepath.Join(filepath.Dir(s.path), "conf.d")
+	return filepath.Dir(name) == confDir && filepath.Ext(name) == ".yaml"
+}
+
+func (s *Store) reload() {
+	snapshot, diags := s.load(s.path)
+	now := time.Now().UTC()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.status.AttemptedAt = now
+	s.status.Diagnostics = copyDiagnostics(diags)
+	if snapshot == nil || diags.HasErrors() {
+		s.status.OK = false
+		s.log.Error("config reload rejected; keeping previous configuration", "diagnostics", diags.String())
+		return
+	}
+	s.current.Store(snapshot)
+	s.status.OK = true
+	s.status.Generation++
+	s.status.Checksum = snapshotChecksum(snapshot)
+	s.status.LoadedAt = now
+	s.log.Info("configuration reloaded", "generation", s.status.Generation, "checksum", s.status.Checksum)
+}
+
+func snapshotChecksum(snapshot *Snapshot) string {
+	body, err := json.Marshal(snapshot.Config)
+	if err != nil {
+		panic("config: schema-valid snapshot cannot fail JSON encoding: " + err.Error())
+	}
+	sum := sha256.Sum256(body)
+	return hex.EncodeToString(sum[:])
+}
+
+func copyDiagnostics(in Diagnostics) Diagnostics {
+	if in == nil {
+		return Diagnostics{}
+	}
+	return append(Diagnostics(nil), in...)
+}

@@ -11,6 +11,7 @@ Veduta's core is AGPL-3.0-or-later. Apache-2.0, BSD and MIT code is one-way comp
 
 | Module | Licence | Why |
 | --- | --- | --- |
+| `github.com/fsnotify/fsnotify` | BSD-3-Clause | Portable filesystem notifications for atomic, debounced configuration reloads |
 | `github.com/santhosh-tekuri/jsonschema/v6` | Apache-2.0 | One JSON Schema implementation validates configuration, manifests, lock records and widget documents — the same schema files the editor and the frontend use |
 | `gopkg.in/yaml.v3` | Apache-2.0 / MIT | YAML parsing with node positions, so configuration errors can carry `file:line:col` |
 
@@ -18,6 +19,7 @@ Veduta's core is AGPL-3.0-or-later. Apache-2.0, BSD and MIT code is one-way comp
 
 | Module | Licence |
 | --- | --- |
+| `golang.org/x/sys` | BSD-3-Clause |
 | `golang.org/x/text` | BSD-3-Clause |
 
 ## Frontend

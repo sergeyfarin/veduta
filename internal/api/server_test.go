@@ -7,10 +7,14 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"testing/fstest"
 
 	"veduta.dev/veduta/internal/api"
+	"veduta.dev/veduta/internal/config"
 )
 
 // TestRefusesPublicBindWithoutAuth is the D46 gate: the dashboard holds service credentials, and
@@ -40,6 +44,48 @@ func TestRefusesPublicBindWithoutAuth(t *testing.T) {
 	}
 	if _, err := api.New(api.Config{Listen: ":8099", AllowPublicWithoutAuth: true}); err != nil {
 		t.Fatalf("explicit override should succeed, got %v", err)
+	}
+}
+
+func TestConfigRoutesExposeSnapshotAndStatus(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "veduta.yaml")
+	body := []byte(`version: 1
+server: {listen: "127.0.0.1:8099"}
+auth: {mode: none}
+dashboard: {title: Home, theme: auto, layout: {columns: 4, gap: normal}, groupBy: section}
+connections: {}
+integrations: [{id: demo, source: builtin}]
+sections:
+  - title: Test
+    cards:
+      - {id: card-one, title: Card One, integration: demo, operation: show, span: {columns: 2, rows: 1}}
+rules: []
+notifications: {channels: {}}
+`)
+	if err := os.WriteFile(path, body, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	store, diags := config.Open(path, nil, nil)
+	if diags.HasErrors() {
+		t.Fatal(diags.String())
+	}
+	s, err := api.New(api.Config{Listen: "127.0.0.1:0", Assets: fstest.MapFS{}, ConfigStore: store})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		path, contains string
+	}{
+		{"/api/v1/config/status", `"generation":1`},
+		{"/api/v1/dashboard", `"columns":2`},
+		{"/api/v1/cards", `"state":"pending"`},
+	} {
+		rec := httptest.NewRecorder()
+		s.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, tc.path, nil))
+		if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), tc.contains) {
+			t.Errorf("GET %s = %d %s, want 200 containing %s", tc.path, rec.Code, rec.Body.String(), tc.contains)
+		}
 	}
 }
 

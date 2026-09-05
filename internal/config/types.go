@@ -171,8 +171,8 @@ type Section struct {
 // the --fixtures showcase and predates this one, but the schema is the single source of truth
 // for both, so field-for-field they must never diverge.
 type Span struct {
-	Columns int `yaml:"columns"`
-	Rows    int `yaml:"rows"`
+	Columns int `yaml:"columns" json:"columns,omitempty"`
+	Rows    int `yaml:"rows" json:"rows,omitempty"`
 }
 
 // Card is one dashboard tile: which integration/operation runs, which connections its slots bind

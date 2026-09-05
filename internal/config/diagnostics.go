@@ -23,11 +23,11 @@ const (
 // whenever the source of the problem is a specific node in the tree - never just a JSON Schema
 // path, which means nothing to someone editing a file in an editor.
 type Diagnostic struct {
-	Severity Severity
-	File     string
-	Line     int // 1-based; 0 means no specific position is available
-	Column   int
-	Message  string
+	Severity Severity `json:"severity"`
+	File     string   `json:"file,omitempty"`
+	Line     int      `json:"line,omitempty"` // 1-based; 0 means no specific position is available
+	Column   int      `json:"column,omitempty"`
+	Message  string   `json:"message"`
 }
 
 // String renders "file:line:col: message", matching compiler-style diagnostics tools already

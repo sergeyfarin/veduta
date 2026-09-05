@@ -590,10 +590,20 @@ stated AC (redaction across all fmt verbs and JSON, both bare and nested; a miss
 diagnostic; provider ordering and error handling; the log scrubber against message/attr/group/
 WithAttrs; the Reveal boundary) plus the three gaps above.
 
-**C3 · Watcher, atomic reload, status** · 0.5 d · deps: C1
+**C3 · Watcher, atomic reload, status** · 0.5 d · deps: C1 · **DONE**
 Creates: `internal/config/watch.go` (fsnotify + 300 ms debounce), `GET /api/v1/config/status`.
 Tests: invalid edit keeps the previous snapshot live and reports the error; valid edit swaps within
 1 s; rapid successive edits coalesce; watcher survives editor rename-and-replace saves (vim/VS Code).
+
+Implemented with a process-wide `config.Store`: readers load an immutable snapshot through an
+`atomic.Pointer`, while status is copied under a small lock. Startup requires a valid config and
+resolved secrets; reload repeats that complete pipeline and changes the pointer, generation and
+checksum only on success. The watcher observes the containing directory (not the config inode),
+plus `conf.d`, so rename-and-replace saves remain visible. The configured listener is used unless
+`--listen` explicitly overrides it. Until the scheduler produces real documents, configured cards
+are returned as honest `pending` envelopes, which makes the real dashboard path usable without
+pretending integrations have run. `pnpm dev` deliberately uses the complete fixture showcase;
+`pnpm run dev:config` is the separate real-config development path.
 
 ### Phase D — Connections, broker, declarative runtime (5 d) — the security core
 

@@ -435,7 +435,7 @@
         "baseUrl": {
           "type": "string",
           "maxLength": 512,
-          "pattern": "^https?://[^\\\\s/?#@]+(/[^\\\\s?#]*)?$",
+          "pattern": "^https?://[^\\s/?#@]+(/[^\\s?#]*)?$",
           "description": "Scheme, authority, optional base path. Userinfo (user:pass@), query strings and fragments are rejected structurally AND by the loader: credentials belong in the typed auth block, which is the only path that gets redaction. Bracketed IPv6 is accepted. Host and port semantics are validated with net/url."
         },
         "auth": {

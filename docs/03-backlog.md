@@ -28,19 +28,15 @@ configs, arguably a design call, not C1's own scope of "build the loader for the
 exists"). Priority: low-medium, whenever `schemas/config.v1.schema.json` next gets a deliberate
 revision - do not roll it into an unrelated milestone's diff.
 
-### `auth: none` + secrets/actions guard is not implemented
+### `auth: none` + actions guard is not implemented
 
 The schema's own description for `auth.mode: none` says: "additionally requires the
-`--i-know-what-im-doing` flag when any action or secret is configured (semantic check)." Still not
-implemented after C2, though C2 removed half the blocker: `internal/secrets.ResolveAll` can now
-answer "how many secrets does this config actually reference" (`len(snapshot.SecretRefs) > 0`),
-but this check also needs to know whether `--i-know-what-im-doing` was passed, which only `cmd/
-veduta`'s `serve` knows - and `serve` still does not load configuration at all (deliberately
-deferred to C3, both in C1's and now C2's completion accounts). "Any action... configured" is
-still fully blocked: `ActionsBlock` renders permanently disabled until Phase H gives actions a
-real execution path. Priority: implement once `serve` actually loads a `*Snapshot` (C3 at the
-earliest) - the secrets half is ready to wire in the moment that happens; the actions half stays
-blocked until Phase H.
+`--i-know-what-im-doing` flag when any action or secret is configured (semantic check)." C3
+implemented the secrets half: `serve` now loads a `*Snapshot`, resolves every secret before
+publishing it, and refuses `auth.mode: none` plus any secret reference unless the override was
+passed. "Any action... configured" remains blocked: `ActionsBlock` renders permanently disabled
+until Phase H gives actions a real execution path. Priority: Phase H; extend the same startup guard
+once an enabled action has a real configuration representation.
 
 ### `${secret:NAME}` cannot be embedded in a larger string - but Jellyfin's real auth header needs exactly that
 
@@ -76,6 +72,14 @@ here and D3), but this is a decision to make deliberately, not something to disc
 ---
 
 ## Resolved
+
+### Config: `baseUrl` whitespace regex accidentally rejected the letter `s`
+
+Found while adding C3's startup security test with the ordinary hostname `service`. The JSON
+Schema encoded `\\s` with one escaping layer too many, so the regex engine saw a character class
+excluding a backslash and the literal letter `s`, rather than whitespace. Hosts and paths containing
+`s` were rejected while existing examples happened not to expose it. Resolved in C3 by correcting
+the JSON escaping and keeping `http://service:8080` in the regression test.
 
 ### Config: `SecretRef` carried no position, blocking C2's "diagnostic naming the config location"
 

@@ -9,6 +9,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
+
+	"veduta.dev/veduta/internal/config"
 )
 
 // TestCheckConfig_Success exercises the non-exiting path directly: a valid config returns no
@@ -51,5 +53,37 @@ func TestCheckConfig_ExitsNonZeroOnError(t *testing.T) {
 	}
 	if !bytes.Contains(stderr.Bytes(), []byte("notAField")) {
 		t.Fatalf("stderr should name the offending field, got: %s", stderr.String())
+	}
+}
+
+func TestAuthNoneWithSecretsRequiresExplicitOverride(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "veduta.yaml")
+	body := []byte(`version: 1
+server: {listen: "127.0.0.1:8099"}
+auth: {mode: none}
+dashboard: {title: Home, theme: auto, layout: {columns: 4, gap: normal}, groupBy: section}
+connections:
+  service:
+    kind: http
+    baseUrl: http://service:8080
+    auth: {type: bearer, value: "${secret:TOKEN}"}
+integrations: []
+sections: []
+rules: []
+notifications: {channels: {}}
+`)
+	if err := os.WriteFile(path, body, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, diags := config.LoadPath(path)
+	if diags.HasErrors() {
+		t.Fatal(diags.String())
+	}
+	if err := validateAuthNone(snapshot, false); err == nil {
+		t.Fatal("auth none with a secret should require the explicit override")
+	}
+	if err := validateAuthNone(snapshot, true); err != nil {
+		t.Fatalf("explicit override was rejected: %v", err)
 	}
 }
