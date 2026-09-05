@@ -178,12 +178,19 @@ amd64 and arm64.
 
 ### Phase B — Renderer and design system (4 d) — the product's face
 
-**B1 · Design tokens and layout** · 1 d · deps: A2, S4
-Creates: `web/src/styles/tokens.css`, `themes/{light,dark}.css`, `web/src/lib/Grid.svelte`,
-`Card.svelte`, `Section.svelte`, typography and spacing scales, `prefers-color-scheme` + explicit
-theme override.
-AC: the S4 prototype is reproduced within Svelte; a card grid reflows correctly at 360/768/1280/1920 px;
-contrast passes WCAG AA in both themes (checked in CI).
+**B1 · Design tokens and layout** · 1 d · deps: A2, S4 · **DONE**
+Creates: `web/src/styles/tokens.css` (24 tokens, light and dark, with the three-state theme
+cascade), `web/src/lib/{Grid,Card,Section,Status,Skeleton}.svelte`, `web/src/lib/theme.ts`.
+`Card` owns all four execution states, because they are core-owned facts about the run rather than
+content: `stale` dims and dates its retained document instead of blanking, `error` gives the reason
+and the retry, `pending` shows skeletons, `disabled` says what a human has to do.
+
+AC met, with one caveat. Contrast is enforced by `TestTokenContrast`, which parses `tokens.css` and
+computes WCAG 2.1 ratios for both palettes rather than trusting a browser to be present - it caught
+`--v-faint` at 4.44:1 on its first run. `TestComponentsUseTokensNotHardcodedColours` enforces the S4
+constraint that no component may use a colour literal. **The visual comparison against the S4
+prototype is still by eye** (`pnpm dev`); automating it is B5's job, and until then "reproduces the
+prototype" is a claim a human has to check.
 
 **B2 · Widget Document, signals, and the CardState envelope** · 1.5 d · deps: Part 0 · ⇉ with B1
 Creates: `internal/widgets/document.go` (typed structs, per-block-type item unions),

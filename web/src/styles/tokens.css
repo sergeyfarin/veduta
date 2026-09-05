@@ -1,26 +1,106 @@
-/* Placeholder tokens. The real design system lands in milestone B1, after the S4 visual
-   prototype defines the vocabulary. Kept minimal on purpose so nothing here is load-bearing. */
+/* Design tokens, fixed by spike S4 (docs/spikes/s4-visual-prototype.md).
+ *
+ * Everything visual in the dashboard comes from here. If a component needs a colour, a radius or
+ * a spacing value that is not a token, the vocabulary is wrong - that constraint is what keeps a
+ * dashboard of heterogeneous cards looking like one product.
+ *
+ * Themes have three states: explicit light, explicit dark, and "follow the system". The light
+ * palette is defined on bare :root so it is always complete; the dark blocks redefine only what
+ * changes, once for the system preference and once for the explicit choice, so the toggle wins in
+ * both directions.
+ */
+
 :root {
-  --v-bg: #fbfbfa;
+  /* Neutrals carry a hint of warmth. A pure-grey dashboard reads as unfinished. */
+  --v-bg: #fbfbf9;
   --v-surface: #ffffff;
-  --v-text: #16161a;
-  --v-muted: #6b6b76;
-  --v-accent: #3b6ea5;
-  color-scheme: light dark;
+  --v-surface-2: #f4f4f1;
+  --v-border: #e4e4de;
+  --v-text: #17171a;
+  --v-muted: #62626a;
+  --v-faint: #737379;  /* 4.5:1 on --v-surface; the contrast test holds this line */
+
+  /* One accent. Used for progress fill and focus, never for decoration. */
+  --v-accent: #2f6f4f;
+  --v-ok: #2f7d55;
+  --v-warn: #7d5605;
+  --v-error: #a33a32;
+
+  --v-shadow: 0 1px 2px rgb(20 20 25 / 6%), 0 4px 12px rgb(20 20 25 / 4%);
+
+  --v-r-sm: 6px;
+  --v-r-md: 10px;
+  --v-r-lg: 14px;
+
+  --v-s-1: 4px;
+  --v-s-2: 8px;
+  --v-s-3: 12px;
+  --v-s-4: 16px;
+  --v-s-5: 24px;
+  --v-s-6: 32px;
+
+  /* Height rhythm: every card is an exact multiple of this, so cards of different content still
+   * line up. See span.rows in the configuration schema. */
+  --v-row: 92px;
+
+  --v-font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* Tabular numerals: live values must not jitter the layout as digits change width. */
+  --v-font-num: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+
+  color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
-    --v-bg: #121214;
-    --v-surface: #1a1a1e;
-    --v-text: #ececed;
-    --v-muted: #9a9aa4;
-    --v-accent: #7aa7d8;
+  :root:not([data-theme="light"]) {
+    --v-bg: #0f0f11;
+    --v-surface: #17171a;
+    --v-surface-2: #1e1e22;
+    --v-border: #2a2a30;
+    --v-text: #ececee;
+    --v-muted: #a3a3ad;
+    --v-faint: #8b8b95;
+    --v-accent: #6fb894;
+    --v-ok: #6fb894;
+    --v-warn: #d3a44a;
+    --v-error: #e0776d;
+    --v-shadow: 0 1px 2px rgb(0 0 0 / 40%), 0 4px 16px rgb(0 0 0 / 24%);
+    color-scheme: dark;
   }
 }
 
+:root[data-theme="dark"] {
+  --v-bg: #0f0f11;
+  --v-surface: #17171a;
+  --v-surface-2: #1e1e22;
+  --v-border: #2a2a30;
+  --v-text: #ececee;
+  --v-muted: #a3a3ad;
+  --v-faint: #8b8b95;
+  --v-accent: #6fb894;
+  --v-ok: #6fb894;
+  --v-warn: #d3a44a;
+  --v-error: #e0776d;
+  --v-shadow: 0 1px 2px rgb(0 0 0 / 40%), 0 4px 16px rgb(0 0 0 / 24%);
+  color-scheme: dark;
+}
+
+html,
 body {
   margin: 0;
   background: var(--v-bg);
-  font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  color: var(--v-text);
+  font: 400 14px/1.5 var(--v-font);
+  -webkit-font-smoothing: antialiased;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+:focus-visible {
+  outline: 2px solid var(--v-accent);
+  outline-offset: 2px;
+  border-radius: var(--v-r-sm);
 }
