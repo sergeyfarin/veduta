@@ -69,6 +69,11 @@ h1, h2, h3 { margin: 0; font-weight: 600; letter-spacing: -0.01em; }
 .topbar h1 { font-size: 20px; }
 .topbar .sub { color: var(--v-muted); font-size: 13px; }
 .topbar .spacer { flex: 1; }
+.groupby { font-size: 12px; color: var(--v-muted); display: inline-flex; align-items: center; gap: 6px; }
+.groupby select {
+  font: inherit; font-size: 12px; color: var(--v-text); background: var(--v-surface);
+  border: 1px solid var(--v-border); border-radius: var(--r-sm); padding: 5px 6px;
+}
 .themetoggle {
   border: 1px solid var(--v-border); background: var(--v-surface); color: var(--v-muted);
   border-radius: var(--r-sm); padding: 6px 10px; font: inherit; font-size: 12px; cursor: pointer;
@@ -82,13 +87,28 @@ h1, h2, h3 { margin: 0; font-weight: 600; letter-spacing: -0.01em; }
 }
 
 /* ── grid ────────────────────────────────────────────────────────────────── */
+/* Heights are QUANTISED to a row unit, not left to content. Homepage looks tidy
+   because every tile is the same size; that is not available to us, because a photo
+   wall and a three-number card genuinely want different amounts of space. What is
+   available is a shared rhythm: every card is an exact multiple of one unit, so tops
+   and bottoms line up across the whole page even when the cards differ.
+
+   The unit is (row-height x N) + (gap x (N-1)) - the arithmetic the browser does for
+   us via grid-auto-rows. Cards then fill their box rather than pooling content at the
+   top, which is what made the Jellyfin card look half-empty. */
 .grid {
   display: grid; gap: var(--s-4);
   grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-auto-rows: 92px;
   grid-auto-flow: dense;
 }
 .span-2 { grid-column: span 2; }
 .span-4 { grid-column: span 4; }
+/* Height in row units. This maps directly onto span: {columns, rows} in the config
+   schema, so the layout stays config-as-code rather than becoming per-card CSS. */
+.h-2 { grid-row: span 2; }
+.h-3 { grid-row: span 3; }
+.h-4 { grid-row: span 4; }
 @media (max-width: 1000px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .span-4 { grid-column: span 2; } }
 @media (max-width: 620px)  { .grid { grid-template-columns: 1fr; } .span-2, .span-4 { grid-column: span 1; } }
 
@@ -98,7 +118,13 @@ h1, h2, h3 { margin: 0; font-weight: 600; letter-spacing: -0.01em; }
   border-radius: var(--r-lg); box-shadow: var(--v-shadow);
   padding: var(--s-4); display: flex; flex-direction: column; gap: var(--s-3);
   container-type: inline-size;
+  min-height: 0;          /* let children shrink inside a fixed-height grid cell */
+  overflow: hidden;
 }
+/* The head and any footer keep their natural size; the body takes the slack. A card
+   is never taller than its declared rows, and never leaves a void at the bottom. */
+.card > .body { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: var(--s-3); }
+.card > .body > .fill { flex: 1; min-height: 0; }
 .card-head { display: flex; align-items: center; gap: var(--s-2); }
 .card-head .icon {
   width: 22px; height: 22px; border-radius: var(--r-sm); flex: none;
@@ -108,9 +134,16 @@ h1, h2, h3 { margin: 0; font-weight: 600; letter-spacing: -0.01em; }
 .card-head h3 { font-size: 14px; }
 .card-head .spacer { flex: 1; }
 
-/* Status is never colour alone: a dot plus a word, so it survives colour blindness
-   and a greyscale screenshot. */
+/* Status colour is never the ONLY channel - but a green dot next to the word "Online"
+   is two channels saying the same nothing. So: the dot is always present, and text
+   appears only when it carries information the dot cannot (an uptime, a count, a
+   reason). Healthy-and-unremarkable is a bare dot with an accessible label; abnormal
+   states always carry a word, so the presence of text is itself a non-colour signal. */
 .status { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--v-muted); }
+.status.bare { gap: 0; }
+.status.bare::after { content: attr(data-label); position: absolute; width: 1px; height: 1px;
+  overflow: hidden; clip-path: inset(50%); }   /* visible to a screen reader, not to the eye */
+.card-head .status[title] { cursor: help; }
 .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--v-faint); flex: none; }
 .status.ok    .dot { background: var(--v-ok); }
 .status.warn  .dot { background: var(--v-warn); }
@@ -120,14 +153,31 @@ h1, h2, h3 { margin: 0; font-weight: 600; letter-spacing: -0.01em; }
 .status.error { color: var(--v-error); }
 
 /* ── blocks: metrics ─────────────────────────────────────────────────────── */
+/* Two figures in a wide card left-align into their half and leave a trailing void on
+   the right - the second column reads as unbalanced. Three or more fill the width and
+   the column layout works. So the vocabulary splits on count rather than inventing an
+   alignment special case: 1-2 figures render as key-value ROWS (label left, value hard
+   right, which is what the eye wants to compare), 3+ as columns. Both already exist as
+   block types, so this is a rendering rule, not a new primitive. */
 .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); gap: var(--s-3); }
+.metrics.pair { display: flex; flex-direction: column; gap: var(--s-2); justify-content: center; }
+.metrics.pair .metric {
+  display: flex; align-items: baseline; justify-content: space-between; gap: var(--s-3);
+  padding-bottom: var(--s-2); border-bottom: 1px solid var(--v-border);
+}
+.metrics.pair .metric:last-child { border-bottom: 0; padding-bottom: 0; }
+.metrics.pair .label { text-transform: none; letter-spacing: 0; font-size: 13px; color: var(--v-muted); }
+.metrics.pair .value { margin-top: 0; font-size: 18px; }
 .metric .label { font-size: 11px; color: var(--v-muted); text-transform: uppercase; letter-spacing: 0.05em; }
 .metric .value { font: 500 20px/1.2 var(--num); font-variant-numeric: tabular-nums; margin-top: 2px; }
 .metric .value .unit { font-size: 12px; color: var(--v-muted); margin-left: 2px; }
 
 /* ── blocks: image grid and poster grid ──────────────────────────────────── */
-.image-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s-2); }
-.poster-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: var(--s-2); }
+.image-grid { display: grid; grid-template-columns: repeat(3, 1fr); grid-auto-rows: 1fr; gap: var(--s-2); }
+.poster-grid { display: grid; grid-template-columns: repeat(5, 1fr); grid-auto-rows: 1fr; gap: var(--s-2); }
+/* When a grid is the fill element it stretches, so the intrinsic ratio yields to the
+   card's height. object-fit: cover keeps the crop sensible either way. */
+.image-grid.fill .tile, .poster-grid.fill .tile { aspect-ratio: auto; }
 @container (max-width: 420px) { .poster-grid { grid-template-columns: repeat(3, 1fr); } }
 
 .tile { position: relative; border-radius: var(--r-md); overflow: hidden; background: var(--v-surface-2); }
@@ -162,6 +212,23 @@ h1, h2, h3 { margin: 0; font-weight: 600; letter-spacing: -0.01em; }
 .list .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .list .meta { font: 400 12px/1 var(--num); color: var(--v-muted); font-variant-numeric: tabular-nums; }
 .empty { color: var(--v-faint); font-size: 13px; padding: var(--s-3) 0; text-align: center; }
+
+/* ── blocks: weather and feed (external, credential-free sources) ────────── */
+.weather { display: flex; align-items: center; gap: var(--s-4); }
+.weather .now { font: 500 34px/1 var(--num); font-variant-numeric: tabular-nums; }
+.weather .now .unit { font-size: 16px; color: var(--v-muted); }
+.weather .desc { color: var(--v-muted); font-size: 13px; }
+.weather .glyph { width: 40px; height: 40px; flex: none; opacity: 0.9; }
+.forecast { display: grid; grid-template-columns: repeat(5, 1fr); gap: var(--s-2); margin-top: auto; }
+.forecast div { text-align: center; font-size: 11px; color: var(--v-muted); }
+.forecast .hi { display: block; font: 500 13px/1.4 var(--num); color: var(--v-text); font-variant-numeric: tabular-nums; }
+
+.feed { display: flex; flex-direction: column; overflow: hidden; }
+.feed .item { padding: 7px 0; border-bottom: 1px solid var(--v-border); }
+.feed .item:last-child { border-bottom: 0; }
+.feed .headline { display: block; color: inherit; text-decoration: none; font-size: 13px; line-height: 1.4; }
+.feed .headline:hover { color: var(--v-accent); }
+.feed .src { font-size: 11px; color: var(--v-faint); margin-top: 2px; }
 
 /* ── links block ─────────────────────────────────────────────────────────── */
 .links { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: var(--s-2); }
@@ -202,6 +269,11 @@ footer a { color: var(--v-muted); }
     <h1>Home</h1>
     <span class="sub">S4 visual prototype — static HTML, no framework</span>
     <span class="spacer"></span>
+    <!-- Sketch only. Grouping by tag is cheap and config-only; a drag-and-drop editor
+         is a separate, much larger question - see the notes. -->
+    <span class="groupby">group by
+      <select><option>section</option><option>tag</option><option>host</option></select>
+    </span>
     <button class="themetoggle" onclick="document.documentElement.dataset.theme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'">Toggle theme</button>
   </div>
 
@@ -210,42 +282,49 @@ footer a { color: var(--v-muted); }
     <h2>Media</h2>
     <div class="grid">
 
-      <article class="card span-2">
+      <!-- Both media cards are 2 x 3 units, so their tops AND bottoms line up. The grid
+           gives the height; the poster row stretches to fill it rather than leaving a
+           void underneath, which is what "half empty at the bottom" was. -->
+      <article class="card span-2 h-3">
         <div class="card-head">
           <span class="icon">JF</span><h3>Jellyfin</h3><span class="spacer"></span>
-          <span class="status ok"><span class="dot"></span>Online</span>
+          <span class="status ok bare" data-label="Online" title="Online"><span class="dot"></span></span>
         </div>
-        <div class="poster-grid">
+        <div class="body">
+          <div class="poster-grid fill">
           <div class="tile poster"><img alt="" src="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 300'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23c2703f'/%3E%3Cstop offset='1' stop-color='%235c2f16'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='200' height='300' fill='url(%23g)'/%3E%3Ccircle cx='100' cy='120' r='46' fill='%23f2c69a' opacity='.55'/%3E%3C/svg%3E"><span class="cap">Dune · 2021</span></div>
           <div class="tile poster"><img alt="" src="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 300'%3E%3Crect width='200' height='300' fill='%231d2b3a'/%3E%3Cellipse cx='100' cy='150' rx='62' ry='34' fill='%236f8fae' opacity='.6'/%3E%3C/svg%3E"><span class="cap">Arrival · 2016</span></div>
           <div class="tile poster"><img alt="" src="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 300'%3E%3Crect width='200' height='300' fill='%232b2440'/%3E%3Cpath d='M0 220 L70 130 L120 190 L200 90 L200 300 L0 300Z' fill='%236a5a9e' opacity='.65'/%3E%3C/svg%3E"><span class="cap">Blade Runner 2049</span></div>
           <div class="tile poster"><img alt="" src="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 300'%3E%3Crect width='200' height='300' fill='%23163028'/%3E%3Crect x='36' y='86' width='128' height='128' rx='10' fill='%234e8f74' opacity='.6'/%3E%3C/svg%3E"><span class="cap">Severance · S2</span></div>
           <div class="tile poster"><img alt="" src="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 300'%3E%3Crect width='200' height='300' fill='%233a2233'/%3E%3Cpath d='M100 60 L140 240 L60 240Z' fill='%23a4638d' opacity='.6'/%3E%3C/svg%3E"><span class="cap">Andor · S2</span></div>
-        </div>
-        <div class="metrics">
-          <div class="metric"><div class="label">Movies</div><div class="value">438</div></div>
-          <div class="metric"><div class="label">Shows</div><div class="value">61</div></div>
-          <div class="metric"><div class="label">Library</div><div class="value">7.88<span class="unit">TB</span></div></div>
-          <div class="metric"><div class="label">Streams</div><div class="value">2</div></div>
+          </div>
+          <div class="metrics">
+            <div class="metric"><div class="label">Movies</div><div class="value">438</div></div>
+            <div class="metric"><div class="label">Shows</div><div class="value">61</div></div>
+            <div class="metric"><div class="label">Library</div><div class="value">7.88<span class="unit">TB</span></div></div>
+            <div class="metric"><div class="label">Streams</div><div class="value">2</div></div>
+          </div>
         </div>
       </article>
 
-      <article class="card span-2">
+      <article class="card span-2 h-3">
         <div class="card-head">
           <span class="icon">IM</span><h3>Immich</h3><span class="spacer"></span>
-          <span class="status ok"><span class="dot"></span>Online</span>
+          <span class="status ok bare" data-label="Online" title="Online"><span class="dot"></span></span>
         </div>
-        <div class="image-grid">
+        <div class="body">
+          <div class="image-grid fill">
           <div class="tile square"><img alt="" src="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'%3E%3Crect width='200' height='200' fill='%23446b8a'/%3E%3Ccircle cx='150' cy='50' r='26' fill='%23ffe9b8' opacity='.85'/%3E%3Cpath d='M0 150 L60 100 L110 140 L200 80 L200 200 L0 200Z' fill='%231f3d54'/%3E%3C/svg%3E"></div>
           <div class="tile square"><img alt="" src="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'%3E%3Crect width='200' height='200' fill='%237a5a3a'/%3E%3Cpath d='M0 130 L50 90 L100 130 L150 70 L200 120 L200 200 L0 200Z' fill='%234a3320'/%3E%3C/svg%3E"></div>
           <div class="tile square"><img alt="" src="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'%3E%3Crect width='200' height='200' fill='%23375f4a'/%3E%3Ccircle cx='100' cy='105' r='52' fill='%2384c2a1' opacity='.7'/%3E%3C/svg%3E"></div>
           <div class="tile square"><img alt="" src="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'%3E%3Crect width='200' height='200' fill='%238a4b52'/%3E%3Crect x='40' y='40' width='120' height='120' rx='60' fill='%23d99aa0' opacity='.6'/%3E%3C/svg%3E"></div>
           <div class="tile square"><img alt="" src="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'%3E%3Crect width='200' height='200' fill='%232f3d5c'/%3E%3Cpath d='M0 160 L70 110 L130 150 L200 100 L200 200 L0 200Z' fill='%23566d9c'/%3E%3C/svg%3E"></div>
           <div class="tile square"><img alt="" src="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'%3E%3Crect width='200' height='200' fill='%235c5a3a'/%3E%3Ccircle cx='60' cy='70' r='34' fill='%23c9c489' opacity='.7'/%3E%3C/svg%3E"></div>
-        </div>
-        <div class="metrics">
-          <div class="metric"><div class="label">Photos</div><div class="value">48 214</div></div>
-          <div class="metric"><div class="label">Videos</div><div class="value">1 903</div></div>
+          </div>
+          <div class="metrics">
+            <div class="metric"><div class="label">Photos</div><div class="value">48 214</div></div>
+            <div class="metric"><div class="label">Videos</div><div class="value">1 903</div></div>
+          </div>
         </div>
       </article>
 
@@ -257,111 +336,193 @@ footer a { color: var(--v-muted); }
     <h2>Infrastructure</h2>
     <div class="grid">
 
-      <article class="card">
+      <!-- Every card in this row is 2 units tall: one rhythm, different content. -->
+      <article class="card h-2">
         <div class="card-head">
           <span class="icon">CS</span><h3>coding-server</h3><span class="spacer"></span>
-          <span class="status ok"><span class="dot"></span>Up 34d</span>
+          <!-- Text earns its place here: an uptime is information a dot cannot carry. -->
+          <span class="status ok"><span class="dot"></span>34d</span>
         </div>
-        <div class="progress">
-          <div class="bar-row"><span class="label">CPU</span><span class="val">12%</span>
-            <span class="bar"><span style="width:12%"></span></span></div>
-          <div class="bar-row"><span class="label">Memory</span><span class="val">61%</span>
-            <span class="bar"><span style="width:61%"></span></span></div>
-          <div class="bar-row"><span class="label">Root</span><span class="val">92%</span>
-            <span class="bar error"><span style="width:92%"></span></span></div>
+        <div class="body">
+          <div class="progress fill" style="justify-content:center">
+            <div class="bar-row"><span class="label">CPU</span><span class="val">12%</span>
+              <span class="bar"><span style="width:12%"></span></span></div>
+            <div class="bar-row"><span class="label">Memory</span><span class="val">61%</span>
+              <span class="bar"><span style="width:61%"></span></span></div>
+            <div class="bar-row"><span class="label">Root</span><span class="val">92%</span>
+              <span class="bar error"><span style="width:92%"></span></span></div>
+          </div>
         </div>
       </article>
 
-      <!-- Stale: the state a homelab dashboard spends much of its life in. Dimmed and
-           labelled with an age, never blanked - the data was true, just not now. -->
-      <article class="card stale">
+      <!-- Stale: dimmed and labelled with an age, never blanked. -->
+      <article class="card stale h-2">
         <div class="card-head">
           <span class="icon">PX</span><h3>Proxmox</h3><span class="spacer"></span>
           <span class="status warn"><span class="dot"></span>Stale</span>
         </div>
-        <div class="stale-body">
-          <div class="metrics">
-            <div class="metric"><div class="label">VMs</div><div class="value">7</div></div>
-            <div class="metric"><div class="label">CPU</div><div class="value">23%</div></div>
-            <div class="metric"><div class="label">Uptime</div><div class="value">96<span class="unit">d</span></div></div>
+        <div class="body">
+          <div class="stale-body fill">
+            <div class="metrics">
+              <div class="metric"><div class="label">VMs</div><div class="value">7</div></div>
+              <div class="metric"><div class="label">CPU</div><div class="value">23%</div></div>
+              <div class="metric"><div class="label">Uptime</div><div class="value">96<span class="unit">d</span></div></div>
+            </div>
           </div>
+          <div class="notice warn">Last refresh failed<span class="age">7m ago</span></div>
         </div>
-        <div class="notice warn">Last refresh failed — showing the previous result<span class="age">7m ago</span></div>
       </article>
 
-      <article class="card span-2">
+      <article class="card span-2 h-2">
         <div class="card-head">
           <span class="icon">DK</span><h3>Docker</h3><span class="spacer"></span>
           <span class="status ok"><span class="dot"></span>14 running</span>
         </div>
-        <div class="list">
-          <div class="row"><span class="status ok"><span class="dot"></span></span><span class="name">immich-server</span><span class="meta">2.1 GB</span></div>
-          <div class="row"><span class="status ok"><span class="dot"></span></span><span class="name">jellyfin</span><span class="meta">1.4 GB</span></div>
-          <div class="row"><span class="status warn"><span class="dot"></span></span><span class="name">frigate</span><span class="meta">restarting</span></div>
-          <div class="row"><span class="status ok"><span class="dot"></span></span><span class="name">adguard-home</span><span class="meta">86 MB</span></div>
-          <div class="row"><span class="status ok"><span class="dot"></span></span><span class="name">postgres</span><span class="meta">412 MB</span></div>
+        <div class="body">
+          <div class="list fill">
+            <div class="row"><span class="status ok bare" data-label="running"><span class="dot"></span></span><span class="name">immich-server</span><span class="meta">2.1 GB</span></div>
+            <div class="row"><span class="status ok bare" data-label="running"><span class="dot"></span></span><span class="name">jellyfin</span><span class="meta">1.4 GB</span></div>
+            <div class="row"><span class="status warn"><span class="dot"></span></span><span class="name">frigate</span><span class="meta">restarting</span></div>
+            <div class="row"><span class="status ok bare" data-label="running"><span class="dot"></span></span><span class="name">adguard-home</span><span class="meta">86 MB</span></div>
+          </div>
         </div>
       </article>
 
-      <!-- Error: no usable document at all. Distinct from stale, and it says what to do. -->
-      <article class="card">
+      <!-- Error: no usable document, and it says what happens next. -->
+      <article class="card h-2">
         <div class="card-head">
           <span class="icon">FR</span><h3>Frigate</h3><span class="spacer"></span>
           <span class="status error"><span class="dot"></span>Error</span>
         </div>
-        <div class="notice error">502 Bad Gateway<span class="age">retry 40s</span></div>
-        <div class="empty">No data has been collected yet.</div>
+        <div class="body">
+          <div class="fill" style="display:grid;place-content:center;text-align:center">
+            <div class="empty">No data collected yet</div>
+          </div>
+          <div class="notice error">502 Bad Gateway<span class="age">retry 40s</span></div>
+        </div>
       </article>
 
-      <!-- Pending: never rendered, first load in flight. -->
-      <article class="card">
+      <!-- Pending: first load in flight. -->
+      <article class="card h-2">
         <div class="card-head">
-          <span class="icon">UP</span><h3>Uptime</h3><span class="spacer"></span>
+          <span class="icon">UP</span><h3>Uptime Kuma</h3><span class="spacer"></span>
           <span class="status"><span class="dot"></span>Loading</span>
         </div>
-        <div class="metrics">
-          <div class="metric"><div class="label">&nbsp;</div><div class="skeleton" style="height:24px"></div></div>
-          <div class="metric"><div class="label">&nbsp;</div><div class="skeleton" style="height:24px"></div></div>
+        <div class="body">
+          <div class="metrics pair fill">
+            <div class="metric"><div class="label">Monitors</div><div class="skeleton" style="height:20px;width:56px"></div></div>
+            <div class="metric"><div class="label">Down</div><div class="skeleton" style="height:20px;width:56px"></div></div>
+          </div>
         </div>
       </article>
 
-      <article class="card">
+      <!-- Two figures: rendered as key-value ROWS, so the values align hard right and
+           there is no trailing void. Three or more use the column layout above. -->
+      <article class="card h-2">
         <div class="card-head">
           <span class="icon">AG</span><h3>AdGuard</h3><span class="spacer"></span>
-          <span class="status ok"><span class="dot"></span>Online</span>
+          <span class="status ok bare" data-label="Online" title="Online"><span class="dot"></span></span>
         </div>
-        <div class="metrics">
-          <div class="metric"><div class="label">Queries</div><div class="value">184 902</div></div>
-          <div class="metric"><div class="label">Blocked</div><div class="value">31.4<span class="unit">%</span></div></div>
+        <div class="body">
+          <div class="metrics pair fill">
+            <div class="metric"><div class="label">Queries today</div><div class="value">184 902</div></div>
+            <div class="metric"><div class="label">Blocked</div><div class="value">31.4<span class="unit">%</span></div></div>
+          </div>
         </div>
       </article>
 
     </div>
   </section>
 
-  <!-- ── Links: the plain case still has to look right ──────────────────── -->
+  <!-- ── Outside: credential-free public sources, same machinery ─────────── -->
+  <section class="section">
+    <h2>Outside</h2>
+    <div class="grid">
+
+      <article class="card h-2">
+        <div class="card-head">
+          <span class="icon">WX</span><h3>Weather</h3><span class="spacer"></span>
+          <span class="status ok bare" data-label="Online"><span class="dot"></span></span>
+        </div>
+        <div class="body">
+          <div class="weather">
+            <svg class="glyph" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+              <circle cx="19" cy="18" r="7"/><path d="M19 4v3M19 29v3M5 18h3M30 18h3M9 8l2 2M27 26l2 2M9 28l2-2M27 10l2-2"/>
+              <path d="M24 36h12a5 5 0 0 0 0-10 7 7 0 0 0-13-2 5 5 0 0 0 1 12z" fill="var(--v-surface)"/>
+            </svg>
+            <div>
+              <div class="now">14<span class="unit">°C</span></div>
+              <div class="desc">Partly cloudy · feels 12°</div>
+            </div>
+          </div>
+          <div class="forecast">
+            <div><span class="hi">16°</span>Sat</div><div><span class="hi">17°</span>Sun</div>
+            <div><span class="hi">13°</span>Mon</div><div><span class="hi">11°</span>Tue</div>
+            <div><span class="hi">12°</span>Wed</div>
+          </div>
+        </div>
+      </article>
+
+      <article class="card span-2 h-2">
+        <div class="card-head">
+          <span class="icon">RS</span><h3>Feeds</h3><span class="spacer"></span>
+          <span class="status ok bare" data-label="Online"><span class="dot"></span></span>
+        </div>
+        <div class="body">
+          <div class="feed fill">
+            <div class="item"><a class="headline" href="#">Go 1.28 lands with a rewritten linker</a><div class="src">golang.org · 2h</div></div>
+            <div class="item"><a class="headline" href="#">Immich v2.4: faster machine-learning indexing</a><div class="src">immich.app · 6h</div></div>
+            <div class="item"><a class="headline" href="#">Proxmox VE 9.1 released</a><div class="src">forum.proxmox.com · 11h</div></div>
+          </div>
+        </div>
+      </article>
+
+      <article class="card h-2">
+        <div class="card-head">
+          <span class="icon">FX</span><h3>Markets</h3><span class="spacer"></span>
+          <span class="status ok bare" data-label="Online"><span class="dot"></span></span>
+        </div>
+        <div class="body">
+          <div class="metrics pair fill">
+            <div class="metric"><div class="label">EUR / USD</div><div class="value">1.084</div></div>
+            <div class="metric"><div class="label">BTC</div><div class="value">61 240</div></div>
+          </div>
+        </div>
+      </article>
+
+    </div>
+  </section>
+
+  <!-- ── Links: ONLY things without a card of their own ──────────────────── -->
   <section class="section">
     <h2>Links</h2>
     <div class="grid">
-      <article class="card span-4">
-        <div class="links">
-          <a href="#"><span class="icon"></span>Immich</a>
-          <a href="#"><span class="icon"></span>Jellyfin</a>
-          <a href="#"><span class="icon"></span>Proxmox</a>
-          <a href="#"><span class="icon"></span>AdGuard</a>
-          <a href="#"><span class="icon"></span>Home Assistant</a>
-          <a href="#"><span class="icon"></span>Grafana</a>
-          <a href="#"><span class="icon"></span>Router</a>
-          <a href="#"><span class="icon"></span>NAS</a>
+      <article class="card span-4 h-2">
+        <div class="card-head">
+          <span class="icon">→</span><h3>Elsewhere</h3><span class="spacer"></span>
+          <span class="sub" style="font-size:12px;color:var(--v-faint)">services without a card</span>
+        </div>
+        <div class="body">
+          <div class="links fill" style="align-content:center">
+            <a href="#"><span class="icon"></span>Router</a>
+            <a href="#"><span class="icon"></span>NAS</a>
+            <a href="#"><span class="icon"></span>Portainer</a>
+            <a href="#"><span class="icon"></span>Grafana</a>
+            <a href="#"><span class="icon"></span>Nextcloud</a>
+            <a href="#"><span class="icon"></span>Vaultwarden</a>
+            <a href="#"><span class="icon"></span>Paperless</a>
+            <a href="#"><span class="icon"></span>Home Assistant</a>
+          </div>
         </div>
       </article>
     </div>
   </section>
 
   <footer>
-    Spike S4 — the vocabulary this fixes: status, metrics, progress, list, image-grid, poster-grid,
-    links, and the four card states (ok, stale, error, pending). Everything here is a token or a
-    block type; nothing is per-card CSS. Source of the design tokens for milestone B1.
+    Spike S4 — vocabulary: status, metrics (columns, or key-value rows when there are one or two),
+    progress, list, image-grid, poster-grid, weather, feed, links, and the four card states
+    (ok, stale, error, pending). Heights are quantised to a 92px row unit, so cards of different
+    content still line up. Everything here is a token or a block type; nothing is per-card CSS.
   </footer>
 </div>
 </body>

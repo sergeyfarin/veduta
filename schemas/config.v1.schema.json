@@ -232,6 +232,14 @@
               ]
             }
           }
+        },
+        "groupBy": {
+          "enum": [
+            "section",
+            "tag"
+          ],
+          "default": "section",
+          "description": "How cards are arranged. 'section' uses the order in this file; 'tag' regroups by the cards' tags. The viewer may switch at runtime; this is the default."
         }
       }
     },
@@ -717,9 +725,20 @@
             "rows": {
               "type": "integer",
               "minimum": 1,
-              "maximum": 4
+              "maximum": 4,
+              "description": "Height in grid row units. Heights are quantised so cards of different content still line up: a card is an exact multiple of one row unit, never an arbitrary height. See docs/spikes/s4-visual-prototype.md."
             }
           }
+        },
+        "tags": {
+          "type": "array",
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{0,31}$"
+          },
+          "description": "Free-form labels giving a card a second, cross-cutting dimension. Sections are one arrangement; tags let the same cards be regrouped (media, infra, external, a hostname) without duplicating them or nesting sections into a tree."
         }
       }
     },

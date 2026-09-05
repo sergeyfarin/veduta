@@ -163,6 +163,11 @@ type Connection struct {
     Docker *DockerConfig
 }
 
+// TODO(D1): connections that reach the PUBLIC INTERNET (weather, RSS, market data - see spike
+// S4) are a different trust category from LAN services. They want a `scope: lan | internet`
+// marker, tighter rate limits, and a rule that an integration granted an internet slot may not
+// also hold a LAN slot - otherwise a feed integration becomes an exfiltration path for data read
+// from a local service.
 type HTTPConfig struct {
     BaseURL          string          // scheme+host+optional base path
     Auth             Auth

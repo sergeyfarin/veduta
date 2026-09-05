@@ -18,6 +18,7 @@ dashboard:
   title: Home
   theme: auto                        # auto | light | dark | <custom theme name>
   layout: { columns: 4, gap: normal }
+  groupBy: section                   # section | tag - the viewer can switch at runtime
 
 # ── Connections own every URL, credential, TLS setting, timeout and rate limit.
 #    Integrations never see anything in this block.
@@ -76,7 +77,8 @@ sections:
         slots: { server: jellyfin }  # bind the plugin's abstract slot to a real connection
         params: { limit: 5 }
         refresh: 5m
-        span: { columns: 2 }
+        span: { columns: 2, rows: 3 }
+        tags: [media]
 
       - id: immich-recent
         integration: immich
@@ -84,7 +86,8 @@ sections:
         slots: { server: immich }
         params: { limit: 6 }
         refresh: 10m
-        span: { columns: 2 }
+        span: { columns: 2, rows: 3 }
+        tags: [media]
 
   - title: Infrastructure
     cards:
@@ -93,13 +96,16 @@ sections:
         operation: overview
         slots: { server: coding-server }
         refresh: 30s
+        span: { rows: 2 }
+        tags: [infra, coding-server]
 
       - id: containers
         integration: docker
         operation: containers
         slots: { server: docker-local }
         refresh: 1m
-        span: { columns: 2 }
+        span: { columns: 2, rows: 2 }
+        tags: [infra]
 
       # The generic escape hatch — Homepage's customapi equivalent, no manifest needed.
       - id: adguard
