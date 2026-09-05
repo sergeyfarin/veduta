@@ -78,9 +78,17 @@ The original plan put this first *and* on the demo critical path while describin
 by security policy rather than by sandbox ergonomics, the broker interface no longer waits on it.
 S1a keeps the early warning; S1b moves next to the code it serves.
 
-### S2 — Upstream reality check: Immich + Jellyfin · 0.5 d · **blocks E3, G4**
+### S2 — Upstream reality check: Immich + Jellyfin · 0.5 d · **blocks E3, G4** · **spec pass DONE, live pass outstanding**
 
-Against real servers, capture as `testdata/`: Immich `/api/server/statistics`, the metadata search
+Findings and consequences: [docs/spikes/s2-upstream-reality-check.md](spikes/s2-upstream-reality-check.md).
+The specification pass found two defects that would have surfaced in E3 and G4: Immich's
+`/server/statistics` is admin-only, and Jellyfin 12 removed `/Users/{userId}/Items` entirely. Both
+manifests are corrected. The live pass runs
+[`hack/capture-upstream-fixtures.sh`](../hack/capture-upstream-fixtures.sh) against real servers to
+answer what a specification cannot — chiefly the actual `Content-Type` of an Immich thumbnail,
+which decides whether the asset proxy can compare headers at all.
+
+Original scope — against real servers, capture as `testdata/`: Immich `/api/server/statistics`, the metadata search
 payload, and the exact thumbnail endpoint + auth mechanism; Jellyfin's `X-Emby-Authorization`
 format, `/Users/{id}/Items?SortBy=DateCreated`, and `/Items/{id}/Images/Primary`. Record pagination,
 whether image endpoints accept the same auth as JSON endpoints, response sizes, redirects — **and
@@ -99,11 +107,14 @@ a load-time `exprNodes` limit. In the same spike, confirm
 `santhosh-tekuri/jsonschema/v6` errors carry a usable `file:line:col` when combined with `yaml.v3`
 Node positions. **Decision produced:** D7.
 
-### S4 — Visual prototype · 1 d · **blocks B1**
+### S4 — Visual prototype · 1 d · **blocks B1** · **DONE**
 
-Static HTML/CSS of the target dashboard: Jellyfin poster row, Immich photo grid, infrastructure
-metrics and progress cards, light and dark, including the **stale** and **error** treatments the
-envelope now makes first-class. This is the screenshot that has to make people want the project.
+Delivered: [docs/spikes/s4-visual-prototype.html](spikes/s4-visual-prototype.html), with the
+decisions it settles written up in [s4-visual-prototype.md](spikes/s4-visual-prototype.md).
+24 tokens, 8 block renderings, all four card states, both themes, no per-card CSS and no external
+requests. Notable outcomes for B1: status is never colour alone; metrics use tabular numerals;
+aspect ratios come from the block so nothing reflows when an image lands; container queries rather
+than media queries inside cards.
 
 ---
 

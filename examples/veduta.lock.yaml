@@ -4,7 +4,7 @@
 version: 1
 integrations:
   immich:
-    manifestSha256: 9a68a1487e8006e1c0f20687ed6ae3badb6c4075fb420fa961b7342df8150e06
+    manifestSha256: dc88753711be8d4c462cf9062607313435e4577869a125be1190b9b67561156b
     version: 0.1.0
     runtime: declarative
     approvedAt: "2026-09-04T21:40:00Z"
@@ -26,13 +26,16 @@ integrations:
       responseMB: 4
       timeoutMs: 5000
     routes:
-      - { slot: server, method: GET,  path: /api/server/statistics }
+      - { slot: server, method: GET,  path: /api/assets/statistics }
       - { slot: server, method: POST, path: /api/search/metadata, contentType: application/json }
       - { slot: server, method: GET,  path: /api/assets/*/thumbnail, use: asset }
+      # Not approved: GET /api/server/statistics. The manifest requests it for the
+      # server-statistics operation, which needs an ADMIN api key. Approving a subset of
+      # what a manifest asks for is the normal case, not an exception.
     limits: { httpRequests: 2, timeoutMs: 5000 }
 
   jellyfin:
-    manifestSha256: b3b852817e0b96ddd7763b119b385402d62168ce60b7ff9f7bc13b8923993ee9
+    manifestSha256: 4838fe23b0401a6bda6c402300632062daf730cc5323fb1c442e0a1475b46ebf
     moduleSha256:   "0000000000000000000000000000000000000000000000000000000000000000"  # set by the build
     version: 1.0.0
     runtime: wasm
@@ -55,8 +58,10 @@ integrations:
       responseMB: 4
       timeoutMs: 3000
     routes:
-      - { slot: server, method: GET, path: /Users }
-      - { slot: server, method: GET, path: /Users/*/Items }
+      - { slot: server, method: GET, path: /Users/Me }
+      - { slot: server, method: GET, path: /Items/Latest }
+      - { slot: server, method: GET, path: /Items }
+      - { slot: server, method: GET, path: /Sessions }
       - { slot: server, method: GET, path: /Items/*/Images/Primary, use: asset }
 
   glances:

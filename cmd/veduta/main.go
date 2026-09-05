@@ -4,6 +4,7 @@
 //
 //	veduta serve [--listen host:port]   run the HTTP server
 //	veduta version [--json]             print build identity
+//	veduta manifest digest <file>...    print the canonical digest of an integration manifest
 //
 // Until authentication lands (milestone H1) the server refuses to bind a non-loopback address,
 // because it holds service credentials from Phase D onward. See docs/01-architecture.md D46.
@@ -21,6 +22,7 @@ import (
 	"syscall"
 
 	"veduta.dev/veduta/internal/api"
+	"veduta.dev/veduta/internal/canonical"
 	"veduta.dev/veduta/internal/version"
 )
 
@@ -41,12 +43,35 @@ func run(args []string) error {
 		return serve(args)
 	case "version":
 		return printVersion(args)
+	case "manifest":
+		return manifestCmd(args)
 	default:
-		return fmt.Errorf("unknown command %q (try: serve, version)", cmd)
+		return fmt.Errorf("unknown command %q (try: serve, version, manifest)", cmd)
 	}
 }
 
 func isFlag(s string) bool { return len(s) > 0 && s[0] == '-' }
+
+// manifestCmd exposes the canonical digest, which is what veduta.lock.yaml records and what an
+// approval is bound to. Having it in the CLI means an administrator can see exactly what they
+// are approving, and that the lock file can be regenerated without guessing.
+func manifestCmd(args []string) error {
+	if len(args) == 0 || args[0] != "digest" {
+		return errors.New("usage: veduta manifest digest <file>...")
+	}
+	files := args[1:]
+	if len(files) == 0 {
+		return errors.New("usage: veduta manifest digest <file>...")
+	}
+	for _, f := range files {
+		d, err := canonical.DigestFile(f)
+		if err != nil {
+			return fmt.Errorf("%s: %w", f, err)
+		}
+		fmt.Printf("%s  %s\n", d, f)
+	}
+	return nil
+}
 
 func serve(args []string) error {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)

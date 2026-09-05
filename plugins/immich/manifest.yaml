@@ -1,12 +1,15 @@
 # A complete declarative integration: no code, no rebuild, no credentials, and a
 # fully enumerated upstream request surface. Drop this file in, approve it once
 # (`veduta integration approve immich`), and the card works.
+#
+# Endpoints verified against the Immich OpenAPI specification (3.2.0-rc.0) and the
+# server source during spike S2 - see docs/spikes/s2-upstream-reality-check.md.
 apiVersion: veduta.dev/v1
 kind: Integration
 metadata:
   id: immich
   name: Immich
-  version: 0.1.0
+  version: 0.2.0
   description: Library statistics and recent photos from Immich.
   license: Apache-2.0
   icon: sh:immich
@@ -17,8 +20,11 @@ spec:
       kind: http
       description: Your Immich server
   capabilities: [http, assets]
-  limits: { httpRequests: 2, timeoutMs: 5000 }
+  limits: { httpRequests: 2, timeoutMs: 5000, inputMB: 4 }
   operations:
+    # The default operation deliberately avoids /server/statistics, which Immich
+    # guards with `admin: true` - a normal API key gets 403. /assets/statistics is
+    # per-user and needs only AssetStatistics permission.
     - id: recent-assets
       name: Recent photos
       defaultRefresh: 10m
@@ -27,7 +33,7 @@ spec:
       # grant is this set, intersected with what the administrator approved in
       # veduta.lock.yaml and with the connection's own allowedPaths.
       routes:
-        - { slot: server, method: GET,  path: /api/server/statistics, reason: Library counts and disk usage }
+        - { slot: server, method: GET,  path: /api/assets/statistics, reason: Photo and video counts }
         - { slot: server, method: POST, path: /api/search/metadata, contentType: application/json, reason: List the most recent assets }
         - { slot: server, method: GET,  path: /api/assets/*/thumbnail, use: asset, reason: Photo thumbnails }
 
@@ -35,7 +41,7 @@ spec:
       signals:
         - { name: photos, type: number, unit: count, history: true }
         - { name: videos, type: number, unit: count, history: true }
-        - { name: usage,  type: number, unit: bytes, history: true }
+        - { name: assets, type: number, unit: count, history: true }
 
       params:
         type: object
@@ -44,7 +50,7 @@ spec:
 
       pipeline:
         - as: stats
-          request: { slot: server, method: GET, path: /api/server/statistics }
+          request: { slot: server, method: GET, path: /api/assets/statistics }
         - as: recent
           request:
             slot: server
@@ -53,7 +59,8 @@ spec:
             body:
               json:                       # structured, not a string template
                 size: { expr: params.limit }
-                order: desc
+                order: desc               # AssetOrder enum: asc | desc
+                visibility: timeline      # exclude archived and hidden assets
 
       # A string is always a literal string. An expression is always an {expr} node.
       output:
@@ -62,9 +69,9 @@ spec:
           level: ok
           text: Online
         signals:
-          photos: { value: { expr: stats.photos } }
+          photos: { value: { expr: stats.images } }
           videos: { value: { expr: stats.videos } }
-          usage:  { value: { expr: stats.usage } }
+          assets: { value: { expr: stats.total } }
         blocks:
           - type: image-grid
             columns: 3
@@ -80,7 +87,34 @@ spec:
                   asset:
                     slot: server
                     path: { expr: '"/api/assets/" + photo.id + "/thumbnail"' }
-                    query: { size: preview }
+                    query: { size: preview }   # AssetMediaSize: original|fullsize|preview|thumbnail
+          - type: metrics
+            items:
+              - { label: Photos, value: { expr: stats.images }, format: number }
+              - { label: Videos, value: { expr: stats.videos }, format: number }
+
+    # Disk usage lives only on the admin endpoint, so it is a separate operation an
+    # administrator approves knowingly with an admin API key - rather than making the
+    # common case demand admin rights it does not need.
+    - id: server-statistics
+      name: Server statistics (requires an admin API key)
+      defaultRefresh: 30m
+      routes:
+        - { slot: server, method: GET, path: /api/server/statistics, reason: Instance-wide counts and disk usage (admin only) }
+      signals:
+        - { name: photos, type: number, unit: count, history: true }
+        - { name: videos, type: number, unit: count, history: true }
+        - { name: usage,  type: number, unit: bytes, history: true }
+      pipeline:
+        - as: stats
+          request: { slot: server, method: GET, path: /api/server/statistics }
+      output:
+        title: Immich
+        signals:
+          photos: { value: { expr: stats.photos } }
+          videos: { value: { expr: stats.videos } }
+          usage:  { value: { expr: stats.usage } }
+        blocks:
           - type: metrics
             items:
               - { label: Photos, value: { expr: stats.photos }, format: number }

@@ -1,5 +1,10 @@
 # The WASM proof case: multi-step auth and cross-endpoint logic that a declarative
 # pipeline cannot express. The module is built from sdk/ - see docs/02 milestone G4.
+#
+# Endpoints verified against the Jellyfin OpenAPI specification (12.0.0) during spike
+# S2 - see docs/spikes/s2-upstream-reality-check.md. Jellyfin 12 removed
+# /Users/{userId}/Items entirely; it is /Items with a userId query parameter, and
+# recently-added is /Items/Latest.
 apiVersion: veduta.dev/v1
 kind: Integration
 metadata:
@@ -24,13 +29,17 @@ spec:
       name: Recently added
       defaultRefresh: 5m
       routes:
-        - { slot: server, method: GET, path: /Users,                   reason: Resolve the current user }
-        - { slot: server, method: GET, path: /Users/*/Items,           reason: Recently added items }
+        - { slot: server, method: GET, path: /Users/Me,     reason: Resolve the authenticated user }
+        - { slot: server, method: GET, path: /Items/Latest, reason: Recently added items }
+        - { slot: server, method: GET, path: /Items,        reason: Library counts by type }
+        - { slot: server, method: GET, path: /Sessions,     reason: Active streams }
+        # Jellyfin serves item images without authentication, so this route exists for
+        # caching and to keep the server's address out of the browser - not to inject a
+        # credential. See the spike notes.
         - { slot: server, method: GET, path: /Items/*/Images/Primary, use: asset, reason: Posters }
       signals:
         - { name: movies,         type: number, unit: count, history: true }
         - { name: shows,          type: number, unit: count, history: true }
-        - { name: library_bytes,  type: number, unit: bytes, history: true }
         - { name: active_streams, type: number, unit: count, history: true }
       params:
         type: object
