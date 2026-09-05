@@ -441,6 +441,24 @@ also why running the app under plain `--fixtures` without Playwright shows the s
 with real time: that is correct, expected behaviour for a dev flag, not a bug the frozen clock
 needs to hide.
 
+A second, real gap surfaced only once this ran in GitHub Actions rather than only locally: the
+first pushed baselines, generated on this repository's own dev VM, failed both light and dark in
+CI - `ubuntu-latest` plus `playwright install --with-deps chromium` is the identical pinned
+browser build, but a different font-rendering environment, and roughly 1% of pixels came out a
+few shades off from font hinting alone. This is precisely what C14 means by "one OS/font
+environment" - a dev VM's system fonts were never a controlled artefact, and pinning only the
+browser was not enough. The fix has two parts. First, both generating and CI-verifying the
+baselines now use the exact same reproducible environment - the official
+`mcr.microsoft.com/playwright:v1.62.1-noble` image, matching `@playwright/test`'s pinned version
+- rather than a bare `ubuntu-latest` runner or this dev VM; `.github/workflows/ci.yml`'s `visual`
+job runs inside that image via `container:`. Second, even *that* is not perfectly bit-reproducible
+across separate cold containers: two runs inside the *same* running container were byte-identical,
+but a fresh container instance still showed the same ~1% noise with no code change, apparently
+from the font cache building fresh on first use. `playwright.config.ts` now sets
+`expect.toHaveScreenshot.maxDiffPixelRatio: 0.02` - confirmed, not assumed, to still fail the
+CSS-mutation check above (24-36% of pixels moved) while comfortably clearing the ~1% noise floor
+measured directly, in both a warm-container and cold-container run.
+
 ### Phase C — Configuration (2.5 d)
 
 **C1 · Config schema, loader, validation** · 1.5 d · deps: A3, S3

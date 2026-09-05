@@ -28,6 +28,28 @@ sibling-cached engine described above is still the right tool for a one-off ad h
 the committed suite (a quick screenshot while iterating on a component before writing or updating
 a baseline) — the difference is now which one you reach for, not whether Playwright exists here.
 
+**Regenerating the committed baselines needs the pinned Docker image, not this dev VM.** This VM's
+system fonts are not the same font environment CI runs in, and the two render text with visibly
+different pixels even with the identical pinned browser build - baselines made here failed in CI
+on first push. Do it inside the exact image CI uses instead:
+
+```bash
+docker run --rm -v "$(pwd)":/work -w /work -e CI=true \
+  mcr.microsoft.com/playwright:v1.62.1-noble bash -c '
+    git config --global --add safe.directory /work
+    curl -sSL https://go.dev/dl/go1.27.0.linux-amd64.tar.gz -o /tmp/go.tgz
+    tar -C /usr/local -xzf /tmp/go.tgz
+    export PATH=$PATH:/usr/local/go/bin
+    corepack enable
+    cd web && pnpm exec playwright test --update-snapshots'
+```
+
+Match the image tag to `web/package.json`'s `@playwright/test` version whenever that gets bumped.
+`docker run` writes the new PNGs as your own UID (the bind mount inherits host ownership), but any
+stray files pnpm/corepack creates directly under the repo root (a `.pnpm-store/` cache, if `pnpm
+install` runs there instead of inside `web/`) come out root-owned - remove those the same way,
+via another `docker run ... rm -rf`, not a host-side `rm`.
+
 ## What this caught
 
 The very first thing screenshotted this way - the B1 card grid at a 380px mobile width - had a

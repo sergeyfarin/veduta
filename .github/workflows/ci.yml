@@ -73,21 +73,25 @@ jobs:
   visual:
     name: Visual regression (--fixtures)
     runs-on: ubuntu-latest
+    # The official image, pinned to the exact tag matching web/package.json's @playwright/test
+    # version - see docs/00-review-and-prior-art.md C14 ("one OS/font environment"). This is not
+    # a nicety: a bare ubuntu-latest runner plus `playwright install --with-deps chromium` still
+    # showed a real ~1% pixel difference against baselines generated on a different Ubuntu box,
+    # from font rendering alone, with the identical browser build. The baselines under
+    # web/tests/visual.spec.ts-snapshots/ were generated and re-verified inside this exact image
+    # (`docker run mcr.microsoft.com/playwright:v1.62.1-noble`) precisely so CI reproduces that,
+    # not some other machine's fonts.
+    container: mcr.microsoft.com/playwright:v1.62.1-noble
     steps:
       - uses: actions/checkout@v5
+      - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - uses: actions/setup-go@v6
         with:
           go-version: '1.27'
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v6
-        with:
-          node-version: '24'
-          cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
+      # Node and pnpm (via corepack) ship in the image already, at the versions the baselines
+      # were generated with; installing another copy would defeat the point of pinning the image.
+      - run: corepack enable
       - run: pnpm install --frozen-lockfile
-      # Pinned by web/package.json's @playwright/test version - see docs/00-review-and-prior-art.md
-      # C14: one browser, one OS/font environment, in CI and locally alike.
-      - run: pnpm --filter veduta-web exec playwright install --with-deps chromium
       - run: pnpm --filter veduta-web test:e2e
       - if: failure()
         uses: actions/upload-artifact@v4

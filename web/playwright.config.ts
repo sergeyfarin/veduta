@@ -17,6 +17,14 @@ export default defineConfig({
   reporter: 'line',
   use: { baseURL: address, trace: 'retain-on-failure' },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  // A fresh container's font cache renders a small fraction of glyph pixels a few shades off a
+  // warm one's, even with the browser and OS image pinned identical - confirmed by regenerating
+  // the baselines and immediately re-verifying inside the same mcr.microsoft.com/playwright
+  // image: back-to-back runs in one container were byte-identical (0 diff), but a second, fresh
+  // container instance showed a ~1% pixel difference with no code change at all. A real
+  // regression is nothing like that margin - a one-line CSS change deliberately tested here moved
+  // 24-36% of pixels. 2% comfortably clears the noise floor without hiding an actual change.
+  expect: { toHaveScreenshot: { maxDiffPixelRatio: 0.02 } },
   // Built here, not assumed: running the suite without building first would test whatever was
   // last built, silently, which is exactly the flakiness C14 warns about. --fixtures serves the
   // checked-in showcase (internal/fixtures) - no network, no real integration, nothing that can
