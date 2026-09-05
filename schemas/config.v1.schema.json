@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://veduta.dev/schemas/config.v1.schema.json",
-  "title": "Veduta configuration v1 (DRAFT \u2014 finalised in milestone C1)",
+  "title": "Veduta configuration v1",
   "type": "object",
   "required": [
     "version",

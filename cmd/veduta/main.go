@@ -5,6 +5,7 @@
 //	veduta serve [--listen host:port]   run the HTTP server
 //	veduta version [--json]             print build identity
 //	veduta manifest digest <file>...    print the canonical digest of an integration manifest
+//	veduta --check-config [--config path]   validate a config file and print diagnostics
 //
 // Until authentication lands (milestone H1) the server refuses to bind a non-loopback address,
 // because it holds service credentials from Phase D onward. See docs/01-architecture.md D46.
@@ -23,6 +24,7 @@ import (
 
 	"veduta.dev/veduta/internal/api"
 	"veduta.dev/veduta/internal/canonical"
+	"veduta.dev/veduta/internal/config"
 	"veduta.dev/veduta/internal/fixtures"
 	"veduta.dev/veduta/internal/version"
 )
@@ -35,6 +37,11 @@ func main() {
 }
 
 func run(args []string) error {
+	// --check-config is a flag, not a subcommand, per its own usage line above - checked first
+	// so the isFlag/subcommand split below never has to know about it.
+	if len(args) > 0 && args[0] == "--check-config" {
+		return checkConfig(args[1:])
+	}
 	cmd := "version"
 	if len(args) > 0 && !isFlag(args[0]) {
 		cmd, args = args[0], args[1:]
@@ -49,6 +56,28 @@ func run(args []string) error {
 	default:
 		return fmt.Errorf("unknown command %q (try: serve, version, manifest)", cmd)
 	}
+}
+
+// checkConfig is milestone C1's own acceptance criterion: human-readable diagnostics, a non-zero
+// exit on error. It exits directly rather than returning an error through run/main, because
+// main's own error path prints a single "veduta: <err>" line - the wrong shape for what is
+// usually several independent diagnostics, one per file:line:col.
+func checkConfig(args []string) error {
+	fs := flag.NewFlagSet("--check-config", flag.ContinueOnError)
+	path := fs.String("config", "veduta.yaml",
+		"path to the primary config file; a sibling conf.d/*.yaml is loaded automatically")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	_, diags := config.LoadPath(*path)
+	if len(diags) > 0 {
+		fmt.Fprintln(os.Stderr, diags.String())
+	}
+	if diags.HasErrors() {
+		os.Exit(1)
+	}
+	fmt.Println("config OK:", *path)
+	return nil
 }
 
 func isFlag(s string) bool { return len(s) > 0 && s[0] == '-' }

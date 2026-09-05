@@ -461,14 +461,70 @@ measured directly, in both a warm-container and cold-container run.
 
 ### Phase C — Configuration (2.5 d)
 
-**C1 · Config schema, loader, validation** · 1.5 d · deps: A3, S3
-Creates: `schemas/config.v1.schema.json`, `internal/config/{load,merge,validate,snapshot}.go`,
-`examples/veduta.yaml`.
-Contracts: `config.Load(paths...) (*Snapshot, Diagnostics)`; `Snapshot` is immutable and
-`atomic.Pointer`-swappable.
-Tests: golden configs (valid, unknown key, bad reference, duplicate id, cycle); every error carries
-`file:line:col`; `conf.d` merge order; parsing a 500-card config stays under 50 ms.
-AC: `veduta --check-config` prints human-readable diagnostics and exits non-zero on error.
+**C1 · Config schema, loader, validation** · 1.5 d · deps: A3, S3 · **DONE**
+Creates: `internal/config/{types,secretref,yamltypes,yamlmerge,schema,load,validate,snapshot,
+diagnostics}.go`, `veduta --check-config`. `schemas/config.v1.schema.json` and
+`examples/veduta.yaml` already existed from the design phase; this milestone dropped the
+schema's own "DRAFT" title marker now that a real loader validates against it.
+
+Built ahead of S3, not blocked on it: S3 is really two separable questions - which expression
+language rules use (irrelevant to C1; `rule.when` is stored and pattern-scanned for card ids as a
+plain string, never evaluated) and whether `santhosh-tekuri/jsonschema/v6` errors combine with
+`yaml.v3` Node positions into a usable `file:line:col`. The second was answered directly while
+building this, not assumed: `jsonschema.ValidationError.InstanceLocation` is a JSON-pointer-style
+path, walked through the same merged `*yaml.Node` tree that was validated
+(`nodeAtPath` in yamlmerge.go) to recover the exact node, then attributed to a source file via a
+provenance map built during conf.d merging (yamlmerge.go's `merger`). `kind.AdditionalProperties`
+extends the path one more segment for an unknown-key error specifically, since jsonschema reports
+those at the *containing* object, not the offending key - confirmed by testing both forms and
+preferring the more precise one.
+
+Pipeline, matching docs/01-architecture.md section 2 with one deliberate departure: yaml.v3 into
+`*yaml.Node` → merge conf.d (mappings recurse key-by-key, arrays and scalars replace wholesale,
+confirmed with `TestLoad_ConfDMergeOrder`) → decode straight into `any` (confirmed
+`jsonschema.Schema.Validate` accepts plain Go `int`/`float64`/`map[string]any` natively - no JSON
+round-trip needed, unlike `internal/widgets.Validate`'s JSON-only path) → schema validation →
+decode into the typed structs above (`SecretRef.UnmarshalYAML` is where `${secret:NAME}` becomes
+a marker, in place of a separate "expand" pass - simpler, same outcome) → semantic validation →
+`*Snapshot`. The one departure: the doc mentions yaml.v3's own `KnownFields(true)` as a second
+unknown-key guard: skipped, because every object in `schemas/config.v1.schema.json` already sets
+`additionalProperties: false`, so schema validation alone already catches every unknown key with
+equal-or-better `file:line:col` fidelity - a second, overlapping mechanism would just be more code
+enforcing the same rule.
+
+Semantic checks deliberately do NOT cover two things the schema's own field descriptions mention:
+whether a rule's signal name is declared by the integration operation it names, and whether a
+card's required slots are all bound. Both need an integration manifest, which does not exist
+until Phase D loads one - checking them here would make config.Load depend on the
+connections/broker package, which must not be an upward dependency of configuration loading.
+`internal/contracts/semantic.go`'s existing `checkConfig` (built during the design phase, over
+generic maps, explicitly "before the configuration types exist") is untouched: it still validates
+things this package cannot yet (manifest/lock cross-checks), so the two are not fully redundant,
+and the small overlap (card/channel/reference checks that don't need a manifest) is intentionally
+reimplemented here in the typed, positioned form production code actually needs, rather than
+made to share code with a generic-map checker built for a different job.
+
+The "cycle" AC turned out to already be solved: `yaml.v3`'s own `Node.Decode` rejects a
+self-referential anchor outright ("anchor ... value contains itself") rather than hanging -
+confirmed with an isolated repro before writing any merge code, and again with
+`TestLoad_Cycle` (a goroutine + 5s timeout, so a regression would fail loudly rather than hang
+the test suite). This package's own tree-walking code (merge, duplicate-key detection, the
+schema-error path walker) never follows `Alias` - only `Content` - which independently makes it
+immune to looping on a cyclic document regardless of what `Decode` does.
+
+Verified for real: `TestLoad_500CardsUnder50ms` generates 500 cards and times three runs, keeping
+the best (22ms measured, comfortably under the 50ms budget) - skipped under `-race` via the
+standard external `raceEnabled` build-tag pair, since race instrumentation alone measured ~180ms
+with no code change, which is not what the budget is about. `veduta --check-config --config
+examples/veduta.yaml` and a deliberately broken config were both run by hand against the built
+binary, not just through `go test`, confirming the exact AC wording (prints diagnostics, exits
+non-zero).
+
+Not done in this milestone, deliberately: `serve` does not yet load configuration at all. C3
+("watcher, atomic reload, status") owns deciding how a live `*Snapshot` interacts with `serve`'s
+own flags and the running server - wiring that in now would mean guessing at C3's design
+(precedence between `--listen` and `server.listen`, where the `atomic.Pointer[Snapshot]` lives)
+rather than deciding it when C3 actually needs to.
 
 **C2 · Secrets** · 0.5 d · deps: C1
 Creates: `internal/secrets/` with `env:`/`file:` providers, `secrets.Value` redacting type, a slog

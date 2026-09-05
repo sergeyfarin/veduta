@@ -13,14 +13,15 @@ describes what it wants; the core decides whether it is allowed, and holds every
 ## Status
 
 Design complete and frozen. Implementation under way: Phase A (repository bootstrap, embedded
-SPA) and B1–B5 (design tokens and card shell; the Widget Document / CardState envelope with
+SPA), B1–B5 (design tokens and card shell; the Widget Document / CardState envelope with
 Go/TypeScript types generated from one schema; renderers for all nine block types - status,
 metrics, key-value, progress, list, text/markdown, image, image-grid, poster-grid, table,
-actions; and a fixture dashboard with a Playwright visual regression baseline) are done and
-green in CI; spikes S2 (upstream API reality check) and S4 (visual prototype) are done. Next up:
-Phase C (configuration - schema, loader, secrets, hot reload). See
-[docs/02-implementation-plan.md](docs/02-implementation-plan.md) for the full milestone table and
-what's marked **DONE**.
+actions; and a fixture dashboard with a Playwright visual regression baseline) and C1 (the config
+loader: `veduta.yaml` + `conf.d/*.yaml` merged, schema-validated and semantically checked, every
+error carrying `file:line:col`) are done and green in CI; spikes S2 (upstream API reality check)
+and S4 (visual prototype) are done. Next up: C2 (secrets) and C3 (watcher, atomic reload,
+status). See [docs/02-implementation-plan.md](docs/02-implementation-plan.md) for the full
+milestone table and what's marked **DONE**.
 
 The contract suite in `internal/contracts` is the CI gate from the first commit —
 `mise run contracts`.
@@ -37,6 +38,8 @@ pnpm run update # every dependency, npm and Go, to latest
 
 ./veduta serve --fixtures         # serve the checked-in showcase dashboard, no config needed
 pnpm --filter veduta-web test:e2e # visual regression baseline against it (Playwright, pinned Chromium)
+
+./veduta --check-config --config examples/veduta.yaml  # validate a config, file:line:col on error
 ```
 
 Frontend dependencies are pinned to exact versions — `.npmrc` sets `save-exact`, so `pnpm add`
@@ -78,6 +81,7 @@ This repository currently contains:
 | [web/src/lib/assets.ts](web/src/lib/assets.ts) | The one place an `Image.ref` becomes a fetchable URL |
 | [internal/fixtures/](internal/fixtures/) | The checked-in showcase dashboard `--fixtures` serves: layout, every CardState, local images |
 | [web/playwright.config.ts](web/playwright.config.ts) / [web/tests/visual.spec.ts](web/tests/visual.spec.ts) | Visual regression baseline against `--fixtures`: frozen clock, one pinned browser |
+| [internal/config/](internal/config/) | `veduta.yaml` + `conf.d/*.yaml` loader: merge, schema and semantic validation, `file:line:col` on every error |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | DCO sign-off, the licence split, what a change needs |
 | [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md) | Every dependency and its licence, enforced by a test |
 | [LICENSING.md](LICENSING.md) | Multi-license layout, plugin exception, AGPL §13 obligations |
