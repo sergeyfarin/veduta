@@ -623,13 +623,57 @@ for its four secrets) in addition to the existing test suite, and matched this a
 
 ### Phase D — Connections, broker, declarative runtime (5 d) — the security core
 
-**D1 · Connection registry and HTTP client** · 1.5 d · deps: C1, C2
-Creates: `internal/connections/` (types, registry, client factory, auth injection, per-connection
-rate limiter and semaphore, IP-pinning dialer, redirect policy, response size cap).
-Tests (security-critical, all must exist): auth injected for header/query/bearer/basic; path
-traversal rejected; absolute URL in `Path` rejected; redirect to another host refused; oversized
-response truncated with an error; timeout honoured; rate limiter enforced; a rebinding DNS stub
-does not change the dialed IP mid-request; `InsecureSkipVerify` requires explicit config and logs a warning.
+**D1 · Connection registry and HTTP client** · 1.5 d · deps: C1, C2 · **DONE**
+Creates: `internal/connections/{types,build,client,dial,auth,rate,registry,request,health}.go`.
+Every Go type matches docs/01-architecture.md section 3's frozen signatures exactly (`Connection`,
+`HTTPConfig`, `Auth`, `Registry`), with one addition the doc's sketch doesn't spell out:
+`Auth.Value`/`.Pass` are `secrets.Value` even when the underlying config held a literal, never a
+real secret (`internal/config.SecretRef.Literal`) - so injection never has to distinguish "a real
+credential" from "a literal that happens to look like one," and neither is ever logged by
+accident. `New(connections, resolved, logger)` is the bridge from C1/C2's output to a working
+`Registry`: it refuses to build - loudly, not with an empty credential - if a connection
+references a `${secret:NAME}` that was never resolved, and it is the one place a
+`golang.org/x/time/rate` limiter and a small buffered-channel semaphore get attached per
+connection.
+
+Each mandatory test was built to demonstrate its property directly, not asserted from reading the
+code:
+
+- **IP pinning against rebinding**: `pinnedDialer`'s resolver is an injectable field (a stub in
+  tests, `net.DefaultResolver.LookupIP` in production), used to prove the property that actually
+  stops rebinding - a single `DialContext` call performs exactly one lookup and connects to
+  exactly that answer, so there is no separate "check" step whose result a later "use" could
+  contradict. Verified with real local listeners on two loopback addresses and a stub that
+  answers differently per call, counting calls with `atomic.Int32`.
+- **Redirects**: refused cross-host unconditionally, and same-host beyond `MaxRedirects` (default
+  0, per docs/01 section 8) - both directions verified against real `httptest` servers, including
+  proving a same-host redirect *within* an explicit limit still succeeds (the refusal is about
+  the default and cross-host safety, not redirects being broken outright).
+- **Oversized response**: `io.LimitReader(body, limit+1)` then a length check - a response that
+  reads exactly `limit+1` bytes is the error case, never silently returned truncated as if
+  complete.
+- **Path traversal / absolute URL in Path**: `joinPath` rejects scheme-bearing and `//`-prefixed
+  paths outright, then independently confirms the `path.Join`-cleaned result still starts under
+  the base path - added specifically because `path.Join("/a", "../../etc")` cleans silently to
+  `/etc` with no error from `path.Join` itself, which would otherwise be a traversal `joinPath`
+  missed by trusting the standard library's own cleaning as if it were a security boundary.
+  Deliberately self-contained and *not* the general-purpose canonicalisation D1b centralises -
+  this is refactored to call into `internal/connections/routepath` once D1b exists, per that
+  milestone's own AC ("no other package in the tree performs path comparison or unescaping").
+- **`InsecureSkipVerify` warning**: asserted against a real `slog.NewTextHandler` writing to a
+  buffer, checking for an actual `level=WARN` line - not merely that `logger.Warn` was called in
+  the source.
+
+Composes against the real `examples/veduta.yaml` end to end - `config.LoadPath` →
+`secrets.ResolveAll` → `connections.New`, the exact sequence `cmd/veduta`'s `serve` already runs
+for config and secrets - building all five real connections (three `http`, one `docker`, one
+more `http`) without error (`TestNew_RealExampleConfig`).
+
+Not wired into `cmd/veduta` in this milestone, deliberately: nothing calls `Registry.Do` yet - the
+capability broker (D2) is what integrations reach a connection through, and building a `Registry`
+in `serve` with no real consumer would be wiring for its own sake. `internal/connections` is a
+complete, independently tested package waiting on D2 to call it, the same way C1's loader waited
+on C3 to wire it into `serve`.
 
 **D1b · Route canonicalisation and matching** · 1 d · deps: D1, Part 0
 Objective: the one routine every authority check shares.
