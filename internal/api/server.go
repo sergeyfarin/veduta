@@ -46,12 +46,23 @@ type Config struct {
 	// Fixtures, when non-nil, serves the checked-in showcase dashboard from GET /dashboard,
 	// /cards and /assets/{token} - a dev-only stand-in for configuration and the scheduler, and
 	// what the visual regression suite (milestone B5) runs against. Never set in production.
+	// Mutually exclusive with ConfigStore - see New, which refuses both being set rather than
+	// letting http.ServeMux panic on the resulting duplicate route registration.
 	Fixtures *fixtures.Bundle
 
 	// ConfigStore is the atomically reloadable real configuration. Until the scheduler lands,
 	// configured cards are returned honestly as pending so the production render path is usable.
+	// Mutually exclusive with Fixtures.
 	ConfigStore *config.Store
 }
+
+// errBothFixturesAndConfigStore documents why New refuses to build a server with both set: they
+// register the identical GET /dashboard and /cards patterns, which panics inside http.ServeMux
+// rather than failing cleanly - confirmed directly by constructing exactly this Config before
+// deciding a guard was needed, not assumed from reading the route tables.
+var errBothFixturesAndConfigStore = errors.New(
+	"api: Config.Fixtures and Config.ConfigStore are mutually exclusive (both register " +
+		"GET /dashboard and /cards); set at most one")
 
 // Server wraps the HTTP server and its lifecycle.
 type Server struct {
@@ -68,6 +79,9 @@ var ErrPublicWithoutAuth = errors.New(
 
 // New builds a server. It validates the listen address before any socket is opened.
 func New(cfg Config) (*Server, error) {
+	if cfg.Fixtures != nil && cfg.ConfigStore != nil {
+		return nil, errBothFixturesAndConfigStore
+	}
 	if cfg.Logger == nil {
 		cfg.Logger = slog.Default()
 	}

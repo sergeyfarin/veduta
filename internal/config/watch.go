@@ -84,7 +84,7 @@ func (s *Store) Watch(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("watch config: %w", err)
 	}
-	defer w.Close()
+	defer func() { _ = w.Close() }()
 
 	parent := filepath.Dir(s.path)
 	if err := w.Add(parent); err != nil {

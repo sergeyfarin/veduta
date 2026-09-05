@@ -4,6 +4,7 @@ package config
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -50,7 +51,7 @@ func TestStoreReloadKeepsLastGoodAndRecoversAfterReplace(t *testing.T) {
 	cancel()
 	select {
 	case err := <-done:
-		if err != context.Canceled {
+		if !errors.Is(err, context.Canceled) {
 			t.Fatalf("Watch returned %v", err)
 		}
 	case <-time.After(time.Second):

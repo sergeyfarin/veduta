@@ -605,6 +605,22 @@ are returned as honest `pending` envelopes, which makes the real dashboard path 
 pretending integrations have run. `pnpm dev` deliberately uses the complete fixture showcase;
 `pnpm run dev:config` is the separate real-config development path.
 
+This landed as a local commit reviewed and verified separately before push (parallel work,
+per the user's own framing): `go vet`/build/gofmt were clean, but `golangci-lint` was not yet
+clean - `w.Close()`'s return value unchecked in `Watch`, and `err != context.Canceled` instead of
+`errors.Is` in the test - both fixed the same way the rest of this codebase already handles them
+(`_ = w.Close()`; `errors.Is`). More importantly, constructing `api.Config` with both `Fixtures`
+and `ConfigStore` set was found to **panic** - both register the identical `GET /dashboard` and
+`/cards` patterns, and `http.ServeMux` panics on a duplicate route rather than erroring cleanly.
+Nothing in `cmd/veduta` can reach that state today (`serve`'s `if/else` sets exactly one), but
+`api.Config` itself did not say so, and `api.New` did not check. Fixed at the root: `New` now
+refuses a `Config` with both set, with a clear error naming why, verified by constructing exactly
+that `Config` before the fix (confirmed it panicked) and after (confirmed a clean error) -
+`TestFixturesAndConfigStoreAreMutuallyExclusive`. Everything else - the config/status/dashboard/
+cards routes, the watcher's debounce and rename-survival, the `auth: none` + secrets startup
+guard - was exercised by hand against the real `examples/veduta.yaml` (with placeholder env vars
+for its four secrets) in addition to the existing test suite, and matched this account exactly.
+
 ### Phase D — Connections, broker, declarative runtime (5 d) — the security core
 
 **D1 · Connection registry and HTTP client** · 1.5 d · deps: C1, C2

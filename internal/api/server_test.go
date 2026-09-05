@@ -15,6 +15,7 @@ import (
 
 	"veduta.dev/veduta/internal/api"
 	"veduta.dev/veduta/internal/config"
+	"veduta.dev/veduta/internal/fixtures"
 )
 
 // TestRefusesPublicBindWithoutAuth is the D46 gate: the dashboard holds service credentials, and
@@ -86,6 +87,30 @@ notifications: {channels: {}}
 		if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), tc.contains) {
 			t.Errorf("GET %s = %d %s, want 200 containing %s", tc.path, rec.Code, rec.Body.String(), tc.contains)
 		}
+	}
+}
+
+// TestFixturesAndConfigStoreAreMutuallyExclusive: both register the identical GET /dashboard and
+// /cards patterns, which panics inside http.ServeMux rather than failing cleanly if New does not
+// check for it first - confirmed by constructing exactly this Config before this guard existed.
+func TestFixturesAndConfigStoreAreMutuallyExclusive(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "veduta.yaml")
+	body := []byte("version: 1\nauth: {mode: none}\n")
+	if err := os.WriteFile(path, body, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	store, diags := config.Open(path, nil, nil)
+	if diags.HasErrors() {
+		t.Fatal(diags.String())
+	}
+	bundle, err := fixtures.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = api.New(api.Config{Listen: "127.0.0.1:0", Assets: fstest.MapFS{}, Fixtures: &bundle, ConfigStore: store})
+	if err == nil {
+		t.Fatal("want an error when both Fixtures and ConfigStore are set, not a panic")
 	}
 }
 
