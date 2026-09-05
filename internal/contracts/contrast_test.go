@@ -179,3 +179,108 @@ func TestComponentsUseTokensNotHardcodedColours(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// TestStaleStateContrast is the regression guard for a real bug B3 found: Card.svelte's `.dimmed`
+// class (applied to a card's content when execution.state is "stale") used to combine
+// opacity:0.55 with a saturate() filter. That looked like a modest dim in isolation, but
+// --v-faint already sits at 4.71:1 against --v-surface - barely above the WCAG AA floor for body
+// text - and ANY opacity reduction pushes a composited near-grey token below 4.5:1: even
+// opacity:0.9 fails. No contract test caught it at the time because TestTokenContrast (above)
+// checks the BASE palette only, never a CSS transform applied on top of it - and it was only
+// found by actually rendering the stale card with real content and looking at it, which is the
+// argument for doing exactly that at every UI milestone rather than trusting typecheck and unit
+// tests alone.
+//
+// This test parses the REAL `.dimmed` rule from Card.svelte - not a hardcoded assumption of what
+// it says - simulates the same pixel pipeline a browser applies (filter, THEN opacity
+// compositing over the backdrop), and asserts the result still clears AA for every neutral text
+// token in both palettes. Reintroducing opacity on this rule fails this test again.
+func TestStaleStateContrast(t *testing.T) {
+	root := repoRoot(t)
+	body, err := os.ReadFile(filepath.Join(root, "web/src/lib/Card.svelte"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	css := string(body)
+
+	i := strings.Index(css, ".dimmed {")
+	if i < 0 {
+		t.Fatal("Card.svelte has no .dimmed rule; either it was renamed (update this test) or the " +
+			"stale-state dimming was removed entirely (update docs/01-architecture.md section 4 too)")
+	}
+	end := strings.Index(css[i:], "}")
+	if end < 0 {
+		t.Fatal("unterminated .dimmed rule")
+	}
+	rule := css[i : i+end]
+
+	opacity := 1.0
+	if m := regexp.MustCompile(`opacity:\s*([\d.]+)`).FindStringSubmatch(rule); m != nil {
+		opacity, _ = strconv.ParseFloat(m[1], 64)
+	}
+	saturation := 1.0
+	if m := regexp.MustCompile(`saturate\(([\d.]+)\)`).FindStringSubmatch(rule); m != nil {
+		saturation, _ = strconv.ParseFloat(m[1], 64)
+	}
+
+	light, dark := palettes(t)
+	neutralTokens := []string{"--v-text", "--v-muted", "--v-faint"}
+
+	for _, theme := range []struct {
+		name string
+		p    palette
+		bg   string
+	}{{"light", light, "--v-surface"}, {"dark", dark, "--v-surface"}} {
+		t.Run(theme.name, func(t *testing.T) {
+			bg, ok := theme.p[theme.bg]
+			if !ok {
+				t.Fatalf("token %s missing", theme.bg)
+			}
+			for _, tok := range neutralTokens {
+				fg, ok := theme.p[tok]
+				if !ok {
+					t.Fatalf("token %s missing", tok)
+				}
+				rendered := fg.saturate(saturation).compositeOver(bg, opacity)
+				got := contrast(rendered, bg)
+				if got < 4.5 {
+					t.Errorf("%s at opacity=%.2f, saturate=%.2f on %s = %.2f:1, want >= 4.5:1 "+
+						"(stale content must stay legible, not merely present)",
+						tok, opacity, saturation, theme.bg, got)
+				}
+			}
+		})
+	}
+}
+
+// saturate applies the CSS saturate() filter: pixels move toward their own luminance-weighted
+// grey by a factor (1.0 = unchanged, 0.0 = fully desaturated). Matches the SVG/CSS filter
+// specification, not a naive per-channel scale.
+func (c rgb) saturate(factor float64) rgb {
+	gray := 0.2126*c.r + 0.7152*c.g + 0.0722*c.b
+	clamp := func(v float64) float64 {
+		if v < 0 {
+			return 0
+		}
+		if v > 255 {
+			return 255
+		}
+		return v
+	}
+	return rgb{
+		r: clamp(gray + (c.r-gray)*factor),
+		g: clamp(gray + (c.g-gray)*factor),
+		b: clamp(gray + (c.b-gray)*factor),
+	}
+}
+
+// compositeOver simulates CSS opacity: alpha-blending this colour over a background at the given
+// opacity (1.0 = fully this colour, 0.0 = fully the background) - what a browser actually paints,
+// which is what contrast must be measured against, not the token's own nominal colour.
+func (c rgb) compositeOver(bg rgb, opacity float64) rgb {
+	return rgb{
+		r: opacity*c.r + (1-opacity)*bg.r,
+		g: opacity*c.g + (1-opacity)*bg.g,
+		b: opacity*c.b + (1-opacity)*bg.b,
+	}
+}

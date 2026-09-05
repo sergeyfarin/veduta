@@ -13,10 +13,11 @@ describes what it wants; the core decides whether it is allowed, and holds every
 ## Status
 
 Design complete and frozen. Implementation under way: Phase A (repository bootstrap, embedded
-SPA), B1 (design tokens, card shell, all four execution states) and B2 (Widget Document,
-signals, the CardState envelope, and Go/TypeScript types generated from one schema) are done
-and green in CI; spikes S2 (upstream API reality check) and S4 (visual prototype) are done.
-Next up: B3 (block renderers). See
+SPA), B1 (design tokens, card shell, all four execution states), B2 (Widget Document, signals,
+the CardState envelope, and Go/TypeScript types generated from one schema) and B3 (block
+renderers for status/metrics/key-value/progress/list/text, with a Vitest harness) are done and
+green in CI; spikes S2 (upstream API reality check) and S4 (visual prototype) are done. Next
+up: B4 (media block renderers). See
 [docs/02-implementation-plan.md](docs/02-implementation-plan.md) for the full milestone table and
 what's marked **DONE**.
 
@@ -67,6 +68,9 @@ This repository currently contains:
 | [internal/widgets/](internal/widgets/) | The Widget Document: typed Go structs, discriminated block union, `Validate` |
 | [internal/state/](internal/state/) | The CardState envelope; five constructors are the only way to build one |
 | [web/scripts/gen-types.mjs](web/scripts/gen-types.mjs) | Generates `web/src/lib/types/*.ts` from the schemas — `pnpm gen-types` |
+| [web/src/lib/blocks/](web/src/lib/blocks/) | Six Widget Document block renderers, a registry, and the unknown-type placeholder |
+| [web/src/lib/format.ts](web/src/lib/format.ts) | The one place a `Scalar` value is turned into display text, per its `Format` hint |
+| [web/src/lib/markdown.ts](web/src/lib/markdown.ts) | Restricted-subset markdown parser — never produces an HTML string, only an AST |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | DCO sign-off, the licence split, what a change needs |
 | [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md) | Every dependency and its licence, enforced by a test |
 | [LICENSING.md](LICENSING.md) | Multi-license layout, plugin exception, AGPL §13 obligations |

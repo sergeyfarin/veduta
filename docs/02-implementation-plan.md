@@ -273,12 +273,69 @@ diffs (verified both directions: a mutated schema produces a detected diff, rest
 none); no code path lets an integration write any field under `execution` (proven structurally by
 the source scanner, not merely by convention).
 
-**B3 · Block renderers I** · 1 d · deps: B1, B2
-Blocks: `status`, `metrics`, `key-value`, `progress`, `list`, `text`.
-Creates: `web/src/lib/blocks/*.svelte`, `blocks/registry.ts`, `format.ts` (bytes/percent/duration/
-relative-time/number with locale), unknown-type placeholder.
-Tests: Vitest per component incl. formatting edge cases (0, negative, huge, null); a lint rule +
-CI grep asserting `{@html}` appears nowhere in `web/`.
+**B3 · Block renderers I** · 1 d · deps: B1, B2 · **DONE**
+Blocks: `status` (as `StatusListBlock.svelte` - a list of named statuses, kept visually distinct
+in the codebase from B1's `Status.svelte`, which renders a card's own single overall health),
+`metrics`, `key-value`, `progress`, `list`, `text` (both plain and the restricted markdown subset,
+one component - the schema's own `blockText` covers both `type` values).
+
+Creates: `web/src/lib/blocks/{MetricsBlock,KeyValueBlock,ProgressBlock,StatusListBlock,ListBlock,
+TextBlock,InlineMarkdown,UnknownBlock,BlockRenderer}.svelte`, `blocks/registry.ts`, `format.ts`,
+`markdown.ts` (the restricted-subset parser - see below), plus the Vitest harness itself
+(`vitest.config.ts`, `vitest-setup.ts`, pinned `vitest`/`@testing-library/svelte`/`jsdom`/
+`@testing-library/jest-dom`) and `internal/contracts/no_html_directive_test.go` for the CI grep.
+Wired a full set of real block instances into the B1 showcase page (`App.svelte`) in place of the
+placeholder text, exercising all six types together - the one thing that actually found the two
+bugs below.
+
+Tests: 93 Vitest cases across `format.ts` (45, covering the stated 0/negative/huge/null edge cases
+for every `Format` value), `markdown.ts` (19, with the link-scheme-safety cases mutation-tested -
+disabling the href check turns 4 of them red) and one file per component (29). `format.ts`'s own
+"huge" case caught two of its own test's wrong expectations before catching anything in the
+implementation - worth noting because it means the edge-case requirement did its job even before
+touching real code. `TestNoRawHTMLDirectiveInFrontend` (Go, in `internal/contracts`) is the CI grep
+the milestone asked for, run through `go test ./...` rather than a separate shell step, and it is
+itself mutation-tested (planting a real `{@html}` directive turns it red).
+
+Two real bugs found only by actually rendering the wired-in showcase page and looking at it -
+neither would have been caught by typecheck, unit tests, or the schema contracts, because both are
+about how two things interact visually or across tool boundaries, which is exactly the class of
+bug those layers cannot see:
+
+- **The stale-state dimming failed WCAG AA**, discovered by screenshotting the Proxmox (stale)
+  card and finding its metric labels nearly unreadable. `--v-faint` sits at 4.71:1 against
+  `--v-surface` - barely above the 4.5:1 body-text floor - and Card.svelte's `.dimmed` rule
+  (`opacity: 0.55` layered under `filter: saturate(0.65)`) composited that down to 2.1:1.
+  Confirmed numerically before touching anything: **no** opacity below 1.0 keeps `--v-faint`
+  legal, since even `opacity: 0.9` computes to 3.88:1. The fix removes opacity entirely and keeps
+  only `saturate(0.4)`: verified that near-grey text tokens are ~unaffected by desaturation
+  (contrast moves by hundredths) while the accent colours a stale card actually wants to look
+  muted - the progress bar fill, a level-tinted value - genuinely desaturate toward grey.
+  `TestStaleStateContrast` (`internal/contracts`) parses the real `.dimmed` rule out of
+  `Card.svelte`, simulates the same filter-then-opacity pixel pipeline a browser applies, and
+  asserts every neutral token still clears AA in both palettes - mutation-tested by reintroducing
+  the exact original rule, which fails it in both themes (light 2.35:1/2.11:1, dark 3.05:1/2.49:1).
+  This is the concrete answer to the "cards read too tall/thin on placeholder content" feedback
+  from B1: real content was needed to judge real density and legibility, and it surfaced a
+  correctness bug the placeholder text could never have shown.
+- **`svelte-check` silently skipped every jest-dom matcher**, reported as "`toBeInTheDocument` does
+  not exist" across every single test file including ones that had type-checked cleanly minutes
+  earlier. Root cause: `vitest-setup.ts` (which imports `@testing-library/jest-dom/vitest` for its
+  ambient type augmentation) was never in `tsconfig.json`'s `include` list, so the type checker's
+  program never saw the augmentation at all - Vitest itself still ran the tests fine, since it
+  uses its own esbuild-based transform, which is why `pnpm test` kept passing throughout while
+  `pnpm check` was quietly broken. Fixed by adding `vitest.config.ts` and `vitest-setup.ts` to
+  `include`.
+
+Also fixed along the way, both confirmed with an isolated repro rather than worked around blindly:
+recursive component self-reference (`InlineMarkdown.svelte` rendering nested emphasis/links)
+needs an explicit `import Self from './InlineMarkdown.svelte'` in Svelte 5, bare self-reference by
+tag name does not resolve; and `noUncheckedIndexedAccess` correctly flags every `RegExpMatchArray`
+index in `markdown.ts` as possibly `undefined`, resolved with non-null assertions at each site
+since a successful match on a hand-written fixed-capture-group regex always has those groups.
+
+AC met: every component has Vitest coverage including the stated edge cases; `{@html}` is absent
+from `web/` and a mutation-tested Go test (not a shell grep) enforces it in CI.
 
 **B4 · Block renderers II (media)** · 1 d · deps: B3
 Blocks: `image`, `image-grid`, `poster-grid`, `table`, `markdown`, `actions` (rendered disabled in 0.1).

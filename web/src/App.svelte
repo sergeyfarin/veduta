@@ -1,5 +1,6 @@
 <script lang="ts">
   import Card from './lib/Card.svelte';
+  import BlockRenderer from './lib/blocks/BlockRenderer.svelte';
   import Grid from './lib/Grid.svelte';
   import Section from './lib/Section.svelte';
   import Skeleton from './lib/Skeleton.svelte';
@@ -7,9 +8,11 @@
   import type { BuildInfo } from './lib/types';
 
   /**
-   * Milestone B1: the shell - tokens, grid, card states, theme. The block renderers that fill a
-   * card arrive in B3 and B4, and the layout comes from configuration in C1; until then this page
-   * exercises every card state so the chrome can be reviewed against the S4 prototype.
+   * B1 supplied the shell (tokens, grid, card states, theme). B3 fills six of the nine block
+   * types with real renderers - status, metrics, key-value, progress, list, text/markdown; the
+   * remaining three (image, image-grid/poster-grid, table, actions) are B4 and later. The layout
+   * itself still comes from configuration only in C1; until then this page is a fixed showcase
+   * exercising every card state AND every B3 block type, reviewable against the S4 prototype.
    */
   let theme = $state<Theme>(stored());
   let build = $state<BuildInfo | null>(null);
@@ -29,7 +32,7 @@
 <div class="page">
   <header class="topbar">
     <h1>Home</h1>
-    <span class="sub">B1 — card shell and design tokens</span>
+    <span class="sub">B3 — block renderers: status, metrics, key-value, progress, list, text</span>
     <span class="spacer"></span>
     <button onclick={() => (theme = next(theme))}>
       Theme: {theme}
@@ -43,11 +46,29 @@
       </Card>
 
       <Card title="coding-server" icon="CS" statusText="34d" span={{ rows: 2 }}>
-        <p class="placeholder">progress — milestone B3</p>
+        <BlockRenderer
+          block={{
+            type: 'progress',
+            items: [
+              { label: 'CPU', progress: 0.12 },
+              { label: 'Memory', progress: 0.61 },
+              { label: 'Root', progress: 0.92, level: 'error' }
+            ]
+          }}
+        />
       </Card>
 
       <Card title="Proxmox" icon="PX" state="stale" age="7m ago" span={{ rows: 2 }}>
-        <p class="placeholder">metrics — retained, dimmed, never blanked</p>
+        <BlockRenderer
+          block={{
+            type: 'metrics',
+            items: [
+              { label: 'VMs', value: 7, format: 'count' },
+              { label: 'CPU', value: 0.23, format: 'percent' },
+              { label: 'Uptime', value: 8294400, format: 'duration' }
+            ]
+          }}
+        />
       </Card>
 
       <Card
@@ -75,7 +96,52 @@
       />
 
       <Card title="AdGuard" icon="AG" span={{ rows: 2 }}>
-        <p class="placeholder">key-value pair — milestone B3</p>
+        <BlockRenderer
+          block={{
+            type: 'key-value',
+            items: [
+              { label: 'Queries today', value: 184902, format: 'count' },
+              { label: 'Blocked', value: 0.314, format: 'percent' }
+            ]
+          }}
+        />
+      </Card>
+
+      <Card title="Docker" icon="DK" statusText="14 running" span={{ columns: 2, rows: 2 }}>
+        <BlockRenderer
+          block={{
+            type: 'list',
+            items: [
+              { title: 'immich-server', value: '2.1 GB' },
+              { title: 'jellyfin', value: '1.4 GB' },
+              { title: 'frigate', level: 'warn', value: 'restarting' },
+              { title: 'adguard-home', value: '86 MB' }
+            ]
+          }}
+        />
+      </Card>
+
+      <Card title="Hosts" icon="HS" span={{ rows: 2 }}>
+        <BlockRenderer
+          block={{
+            type: 'status',
+            items: [
+              { label: 'coding-server', level: 'ok' },
+              { label: 'nas', level: 'ok' },
+              { label: 'router', level: 'warn', text: 'high latency' }
+            ]
+          }}
+        />
+      </Card>
+
+      <Card title="Notes" icon="NT" span={{ columns: 2, rows: 2 }}>
+        <BlockRenderer
+          block={{
+            type: 'markdown',
+            content:
+              '**Maintenance window** this weekend for the *Proxmox* host - see the [runbook](https://example.com/runbook) beforehand.\n\n- Snapshot every VM first\n- Confirm backups landed on the NAS'
+          }}
+        />
       </Card>
     </Grid>
   </Section>

@@ -204,9 +204,18 @@
     place-content: center;
     text-align: center;
   }
+  /* Stale content stays fully legible - it is retained BECAUSE it is still useful, and B3's
+   * real block renderers made a real WCAG failure visible that B1's placeholder text never
+   * could: --v-faint already sits at 4.71:1 on --v-surface, barely above the 4.5:1 body-text
+   * floor, so ANY opacity reduction (even 0.9) pushes it below AA. Desaturation alone does the
+   * job instead: near-grey text tokens are ~unaffected by saturate() (their contrast moves by
+   * hundredths, confirmed numerically), while the accent/level colours a stale card actually
+   * wants to look "not live" - the progress bar fill, a level-tinted value - genuinely mute
+   * toward grey. The notice strip and status dot remain the primary, explicit staleness signal;
+   * this is a secondary visual cue, not the only one, so it does not need to fight legibility to
+   * do its job. */
   .dimmed {
-    opacity: 0.55;
-    filter: saturate(0.65);
+    filter: saturate(0.4);
   }
 
   .empty {

@@ -62,6 +62,7 @@ jobs:
       - run: pnpm gen-types
       - run: git diff --exit-code -- web/src/lib/types
       - run: pnpm --filter veduta-web check
+      - run: pnpm --filter veduta-web test
       - run: pnpm --filter veduta-web build
       - uses: actions/upload-artifact@v4
         with:
