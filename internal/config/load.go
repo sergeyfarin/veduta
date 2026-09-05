@@ -118,11 +118,12 @@ func Load(paths ...string) (*Snapshot, Diagnostics) {
 	}
 
 	diags = append(diags, validateSemantics(&cfg, merged, m)...)
+	diags = append(diags, suspiciousSecretRefs(merged, m)...)
 	if diags.HasErrors() {
 		return nil, diags
 	}
 
-	return newSnapshot(cfg), diags
+	return newSnapshot(cfg, secretLocations(merged, m)), diags
 }
 
 // schemaDiagnostics flattens a jsonschema validation error tree into Diagnostics, recovering a

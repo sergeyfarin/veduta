@@ -26,6 +26,7 @@ import (
 	"veduta.dev/veduta/internal/canonical"
 	"veduta.dev/veduta/internal/config"
 	"veduta.dev/veduta/internal/fixtures"
+	"veduta.dev/veduta/internal/secrets"
 	"veduta.dev/veduta/internal/version"
 )
 
@@ -122,7 +123,10 @@ func serve(args []string) error {
 	} else {
 		handler = slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo})
 	}
-	logger := slog.New(handler)
+	// Scrubbing wraps every log line by construction, not by remembering to redact at each call
+	// site - defence in depth (docs/01-architecture.md section 2), active from the first log line
+	// even before any config exists to resolve a secret from.
+	logger := slog.New(secrets.NewHandler(handler, secrets.DefaultRegistry()))
 
 	cfg := api.Config{
 		Listen:                 *listen,

@@ -9,13 +9,20 @@ package config
 type Snapshot struct {
 	Config Config
 
+	// SecretRefs is every ${secret:NAME} occurrence found while loading, in file order - see
+	// SecretLocation. internal/secrets (milestone C2) resolves each name once and reports a
+	// diagnostic per occurrence for any that fails, so a missing secret used in three places is
+	// three real locations, not one anonymous complaint.
+	SecretRefs []SecretLocation
+
 	cardsByID        map[string]*Card
 	integrationsByID map[string]*Integration
 }
 
-func newSnapshot(cfg Config) *Snapshot {
+func newSnapshot(cfg Config, secretRefs []SecretLocation) *Snapshot {
 	s := &Snapshot{
 		Config:           cfg,
+		SecretRefs:       secretRefs,
 		cardsByID:        make(map[string]*Card),
 		integrationsByID: make(map[string]*Integration, len(cfg.Integrations)),
 	}

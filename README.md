@@ -16,12 +16,16 @@ Design complete and frozen. Implementation under way: Phase A (repository bootst
 SPA), B1–B5 (design tokens and card shell; the Widget Document / CardState envelope with
 Go/TypeScript types generated from one schema; renderers for all nine block types - status,
 metrics, key-value, progress, list, text/markdown, image, image-grid, poster-grid, table,
-actions; and a fixture dashboard with a Playwright visual regression baseline) and C1 (the config
+actions; and a fixture dashboard with a Playwright visual regression baseline), C1 (the config
 loader: `veduta.yaml` + `conf.d/*.yaml` merged, schema-validated and semantically checked, every
-error carrying `file:line:col`) are done and green in CI; spikes S2 (upstream API reality check)
-and S4 (visual prototype) are done. Next up: C2 (secrets) and C3 (watcher, atomic reload,
-status). See [docs/02-implementation-plan.md](docs/02-implementation-plan.md) for the full
-milestone table and what's marked **DONE**.
+error carrying `file:line:col`) and C2 (secrets: `env:`/`file:` providers, a redacting `Value`
+type, a log scrubber active by default) are done and green in CI; spikes S2 (upstream API reality
+check) and S4 (visual prototype) are done. Next up: C3 (watcher, atomic reload, status). See
+[docs/02-implementation-plan.md](docs/02-implementation-plan.md) for the full
+milestone table and what's marked **DONE**, and [docs/03-backlog.md](docs/03-backlog.md) for
+open gaps found along the way (currently: a config/schema asymmetry, a still-undone expression-
+language spike blocking D3/J2, and how Jellyfin's real auth header exposed a real limit in
+`${secret:NAME}`).
 
 The contract suite in `internal/contracts` is the CI gate from the first commit —
 `mise run contracts`.
@@ -83,6 +87,7 @@ This repository currently contains:
 | [internal/fixtures/](internal/fixtures/) | The checked-in showcase dashboard `--fixtures` serves: layout, every CardState, local images |
 | [web/playwright.config.ts](web/playwright.config.ts) / [web/tests/visual.spec.ts](web/tests/visual.spec.ts) | Visual regression baseline against `--fixtures`: frozen clock, one pinned browser |
 | [internal/config/](internal/config/) | `veduta.yaml` + `conf.d/*.yaml` loader: merge, schema and semantic validation, `file:line:col` on every error |
+| [internal/secrets/](internal/secrets/) | `${secret:NAME}` resolution: `env:`/`file:` providers, a redacting `Value` type, the log scrubber |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | DCO sign-off, the licence split, what a change needs |
 | [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md) | Every dependency and its licence, enforced by a test |
 | [LICENSING.md](LICENSING.md) | Multi-license layout, plugin exception, AGPL §13 obligations |

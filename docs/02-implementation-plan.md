@@ -526,12 +526,69 @@ own flags and the running server - wiring that in now would mean guessing at C3'
 (precedence between `--listen` and `server.listen`, where the `atomic.Pointer[Snapshot]` lives)
 rather than deciding it when C3 actually needs to.
 
-**C2 · Secrets** · 0.5 d · deps: C1
-Creates: `internal/secrets/` with `env:`/`file:` providers, `secrets.Value` redacting type, a slog
-scrubber hook.
-Tests: a `Value` never appears in `%v`, `%+v`, JSON, or a slog line; a missing secret is a
-diagnostic naming the config location, not a panic; a secret value appearing in a Widget Document
-is rejected by validation.
+**C2 · Secrets** · 0.5 d · deps: C1 · **DONE**
+Creates: `internal/secrets/{value,provider,resolver,scrub,document}.go`, plus
+`internal/config/secretlocations.go` and `internal/config/secretsuspicious.go` (see below),
+`internal/contracts/secrets_boundary_test.go`.
+
+`Value.String`/`GoString`/`MarshalJSON` all redact to `"***"` - confirmed directly, not assumed,
+that `%v` and `%+v` both already respect `fmt.Stringer` but `%#v` does not (needs `GoString`
+specifically), and that this holds when `Value` is nested inside another struct, matching where
+it actually lives (`ConnectionAuth.Value`, `NtfyChannel.Token`, ...). `Reveal` is the one way out,
+restricted to `internal/connections`, `internal/notify` and `internal/auth` by
+`TestSecretRevealBoundary` - a source-text scan (not an import-graph check: a package that only
+passes a `Value` along, never calling `Reveal`, is fine and common) - mutation-tested by adding a
+real violation in `internal/api` and confirming it failed before removing it. `Resolver` tries
+`FileProvider` (`/run/secrets/NAME`, trimmed - Docker secrets) then `EnvProvider`, per
+docs/01-architecture.md's stated order; a provider error (permission denied) stops the search
+rather than falling through, since silently trying the next provider would mask a real
+misconfiguration. `Registry` is the slog scrubber: every `Value` ever constructed via `New`
+registers its own value for scrubbing immediately, regardless of whether `Reveal` is ever called -
+defence in depth starts at resolution, not at first use. Values under 8 characters are excluded
+(docs/01's own stated rule, avoiding false-positive redactions); `cmd/veduta/main.go`'s `serve`
+wraps its logger in `secrets.NewHandler` unconditionally, so scrubbing is active by construction,
+not by remembering to opt in.
+
+Two real gaps this milestone was explicitly asked to close, both found and written down before
+C1 was called done (see docs/03-backlog.md, now moved to its Resolved section with full detail):
+
+- `SecretRef` had no position. Fixed not by adding fields to `SecretRef` (ambiguous whenever a
+  name is referenced more than once, and would need a reflection-based walk matching decoded
+  struct fields back to schema paths) but by scanning the merged tree by *content* instead of by
+  path: `Snapshot.SecretRefs []SecretLocation` records every `${secret:NAME}` occurrence with a
+  real file:line:col, and `secrets.ResolveAll` reuses `config.Diagnostic` directly - one
+  diagnostic per occurrence of a name that fails to resolve, not one anonymous complaint.
+- "A secret value in a Widget Document is rejected by validation" cannot live in
+  `internal/widgets` (the frozen import-boundary rule: widgets never sees `secrets`). Resolved in
+  the other direction: `internal/secrets` imports `internal/widgets` instead (nothing forbids
+  that; the frozen rule constrains integrations, not core packages), and
+  `Registry.ContainsSecretInDocument` walks all nine block types explicitly by type-switch,
+  matching this project's existing preference for that over reflection. Mutation-tested: deleting
+  one block type's case from the switch was confirmed to fail
+  `TestContainsSecretInDocument_EveryBlockType` before this was considered done. Honestly still
+  pending: nothing calls this against a *real* produced Document yet, because nothing produces
+  one until Phase F's scheduler exists - this is the primitive ready for that caller, not the
+  end-to-end wiring, and is written down as such rather than implied to be more finished than it is.
+
+A third, unplanned gap turned up while smoke-testing the whole pipeline end to end for the first
+time (`config.LoadPath` → `secrets.ResolveAll` against the real `examples/veduta.yaml`, not just
+unit tests): the Jellyfin connection's real auth header
+(`Authorization: MediaBrowser Token="${secret:JELLYFIN_KEY}"`, per
+docs/spikes/s2-upstream-reality-check.md's F6) embeds a secret reference inside a larger string,
+which `secretRefPattern` has only ever recognised as an entire scalar value. As committed, that
+value silently resolves to nothing and would send a literal placeholder string as Jellyfin's
+credential once Phase D's HTTP client exists - with no error anywhere before this was found.
+Mitigated now, not fully fixed: `suspiciousSecretRefs` warns (not errors - a config must still
+load) on any scalar containing `${secret:` that isn't a whole-value match, verified to fire on
+the real example file (`TestLoad_RealExampleConfig`). The real fix - a template-aware `SecretRef`
+that composes and wraps the *whole* result in one opaque `Value` - is written down in
+docs/03-backlog.md as a decision to make deliberately before D1 implements auth injection, not
+something to guess at here.
+
+Tests: 27 across `internal/secrets` plus the boundary test in `internal/contracts` (28 total), covering every
+stated AC (redaction across all fmt verbs and JSON, both bare and nested; a missing secret's
+diagnostic; provider ordering and error handling; the log scrubber against message/attr/group/
+WithAttrs; the Reveal boundary) plus the three gaps above.
 
 **C3 · Watcher, atomic reload, status** · 0.5 d · deps: C1
 Creates: `internal/config/watch.go` (fsnotify + 300 ms debounce), `GET /api/v1/config/status`.

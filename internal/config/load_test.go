@@ -35,6 +35,14 @@ auth:
 // TestLoad_RealExampleConfig proves config.Load handles the actual shipped example, not just
 // small synthetic fixtures - if a schema change ever breaks examples/veduta.yaml, this is where
 // that shows up, not silently in production.
+//
+// It also documents a real, found-not-hypothesised gap rather than silently accepting it: the
+// Jellyfin connection's auth value needs `${secret:JELLYFIN_KEY}` embedded inside
+// `MediaBrowser Token="..."` (docs/spikes/s2-upstream-reality-check.md's F6), which the current
+// whole-scalar-only secretRef design cannot express - see docs/03-backlog.md. Load still succeeds
+// (a real fix needs a template-aware SecretRef, out of scope here), but suspiciousSecretRefs
+// catches it as a warning, so this stays visible instead of silently sending a literal
+// placeholder string as a Jellyfin credential once Phase D exists.
 func TestLoad_RealExampleConfig(t *testing.T) {
 	snap, diags := config.LoadPath("../../examples/veduta.yaml")
 	if diags.HasErrors() {
@@ -48,6 +56,71 @@ func TestLoad_RealExampleConfig(t *testing.T) {
 	}
 	if _, ok := snap.IntegrationByID("jellyfin"); !ok {
 		t.Error("expected integration jellyfin")
+	}
+	assertContains(t, diags, `JELLYFIN_KEY`)
+	found := false
+	for _, d := range diags {
+		if d.Severity == config.SeverityWarning {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("want at least one warning-severity diagnostic (the Jellyfin embedded-secret gap)")
+	}
+}
+
+// TestLoad_SuspiciousSecretRef_Warns proves suspiciousSecretRefs fires for the exact class of
+// mistake found in examples/veduta.yaml: ${secret:NAME} embedded in a larger string. It is a
+// warning, not an error - Load must still succeed.
+func TestLoad_SuspiciousSecretRef_Warns(t *testing.T) {
+	dir := t.TempDir()
+	path := write(t, dir, "veduta.yaml", minimalValid+`
+connections:
+  jellyfin:
+    kind: http
+    baseUrl: http://jellyfin:8096
+    auth:
+      type: header
+      name: Authorization
+      value: 'MediaBrowser Token="${secret:JELLYFIN_KEY}"'
+`)
+	snap, diags := config.Load(path)
+	if diags.HasErrors() {
+		t.Fatalf("an embedded secret reference should warn, not fail: %s", diags)
+	}
+	if snap == nil {
+		t.Fatal("nil snapshot despite no errors")
+	}
+	found := false
+	for _, d := range diags {
+		if d.Severity == config.SeverityWarning && strings.Contains(d.Message, "not recognised as a secret reference") {
+			found = true
+			if d.Line == 0 || d.File == "" {
+				t.Errorf("warning missing position: %s", d)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("want a warning about the embedded ${secret:...}, got: %s", diags)
+	}
+}
+
+// TestLoad_SuspiciousSecretRef_WholeValueDoesNotWarn: a real, whole-value secret reference must
+// not itself trigger the warning - only the embedded/partial case should.
+func TestLoad_SuspiciousSecretRef_WholeValueDoesNotWarn(t *testing.T) {
+	dir := t.TempDir()
+	path := write(t, dir, "veduta.yaml", minimalValid+`
+connections:
+  immich:
+    kind: http
+    baseUrl: http://immich:2283
+    auth: { type: bearer, value: "${secret:IMMICH_KEY}" }
+`)
+	_, diags := config.Load(path)
+	for _, d := range diags {
+		if strings.Contains(d.Message, "not recognised as a secret reference") {
+			t.Fatalf("a whole-value secret reference must not warn: %s", d)
+		}
 	}
 }
 
@@ -329,5 +402,36 @@ func TestLoadPath_ConfDIsAFileNotADirectory(t *testing.T) {
 	_, diags := config.LoadPath(path)
 	if !diags.HasErrors() {
 		t.Fatal("want an error when conf.d exists but is not a directory")
+	}
+}
+
+func TestLoad_SecretRefsCollectsEveryOccurrence(t *testing.T) {
+	dir := t.TempDir()
+	path := write(t, dir, "veduta.yaml", minimalValid+`
+notifications:
+  channels:
+    phone: { type: ntfy, url: https://ntfy.sh, topic: x, token: "${secret:TOK}" }
+    other: { type: ntfy, url: https://ntfy.sh, topic: y, token: "${secret:TOK}" }
+`)
+	snap, diags := config.Load(path)
+	if diags.HasErrors() {
+		t.Fatalf("unexpected errors: %s", diags)
+	}
+	var toks []config.SecretLocation
+	for _, l := range snap.SecretRefs {
+		if l.Name == "TOK" {
+			toks = append(toks, l)
+		}
+	}
+	if len(toks) != 2 {
+		t.Fatalf("got %d occurrences of TOK, want 2: %+v", len(toks), toks)
+	}
+	for _, l := range toks {
+		if l.Line == 0 || l.File == "" {
+			t.Errorf("occurrence missing position: %+v", l)
+		}
+	}
+	if toks[0].Line == toks[1].Line {
+		t.Errorf("both occurrences report the same line %d, want two distinct lines", toks[0].Line)
 	}
 }

@@ -31,15 +31,38 @@ revision - do not roll it into an unrelated milestone's diff.
 ### `auth: none` + secrets/actions guard is not implemented
 
 The schema's own description for `auth.mode: none` says: "additionally requires the
-`--i-know-what-im-doing` flag when any action or secret is configured (semantic check)." C1 does
-not implement this - found while writing `validateAuth`, deliberately not added there because
-"any action... configured" has nothing to check yet (`ActionsBlock` renders permanently disabled;
-no action can be configured until an execution path exists, several milestones out in Phase H),
-and "any secret... configured" only becomes a meaningful count once C2 gives `SecretRef` real
-resolution. Implementing half the check now (secrets only) would be a check that silently stops
-covering half of what its own description promises the day actions exist. Priority: implement
-alongside whichever of C2 (secrets half) or the Phase H action-execution milestone (actions half)
-lands second - whoever notices the other half is already there.
+`--i-know-what-im-doing` flag when any action or secret is configured (semantic check)." Still not
+implemented after C2, though C2 removed half the blocker: `internal/secrets.ResolveAll` can now
+answer "how many secrets does this config actually reference" (`len(snapshot.SecretRefs) > 0`),
+but this check also needs to know whether `--i-know-what-im-doing` was passed, which only `cmd/
+veduta`'s `serve` knows - and `serve` still does not load configuration at all (deliberately
+deferred to C3, both in C1's and now C2's completion accounts). "Any action... configured" is
+still fully blocked: `ActionsBlock` renders permanently disabled until Phase H gives actions a
+real execution path. Priority: implement once `serve` actually loads a `*Snapshot` (C3 at the
+earliest) - the secrets half is ready to wire in the moment that happens; the actions half stays
+blocked until Phase H.
+
+### `${secret:NAME}` cannot be embedded in a larger string - but Jellyfin's real auth header needs exactly that
+
+Found for real, not hypothesised, while smoke-testing C2's resolver against the actual shipped
+`examples/veduta.yaml` end to end for the first time (`config.LoadPath` → `secrets.ResolveAll`).
+The Jellyfin connection's auth value must be `Authorization: MediaBrowser Token="${secret:
+JELLYFIN_KEY}"` (`docs/spikes/s2-upstream-reality-check.md`'s F6 - this is Jellyfin's actual,
+documented scheme, not a choice this project made). `secretRefPattern` only recognises
+`${secret:NAME}` as an entire scalar value ("there is no defined way to redact half a string" -
+`internal/config/secretref.go`), so as committed, this value is silently a **literal string
+containing the placeholder text verbatim** - it would never resolve, and would send the wrong
+header the moment a real HTTP client exists (Phase D). No error existed anywhere for this before
+today. Mitigated, not fixed: `internal/config/secretsuspicious.go`'s `suspiciousSecretRefs` now
+emits a **warning** (`TestLoad_RealExampleConfig` asserts it fires on the real file) for any
+scalar containing `${secret:` that doesn't match the whole-value pattern, so this is at least
+visible at `--check-config` time instead of failing silently at runtime. The real fix needs
+`SecretRef` to become template-aware (a string with one or more named placeholders, composed and
+wrapped in a single opaque `secrets.Value` - not a per-placeholder redaction problem, since the
+*whole* composed result can just always print as `***`). Priority: **decide before D1** actually
+implements auth injection for HTTP connections - D1 is the first place this needs to actually
+work, and rewriting `examples/veduta.yaml`'s Jellyfin block to a syntax that doesn't yet exist
+would be premature before D1 settles the shape.
 
 ### S3 (expr vs cel bake-off) is still undone and genuinely blocks D3 and J2
 
@@ -53,3 +76,35 @@ here and D3), but this is a decision to make deliberately, not something to disc
 ---
 
 ## Resolved
+
+### Config: `SecretRef` carried no position, blocking C2's "diagnostic naming the config location"
+
+Found while planning C2, which needs to report *where* a missing secret was referenced, not just
+that one was missing - C1's `SecretRef{Literal, Name}` had no file/line/col, and nothing else
+retained one after `Load` returned a `*Snapshot`. Resolved in C2, not by adding position fields to
+`SecretRef` itself (that would need a reflection-based walk matching decoded struct fields back to
+schema paths, and would be ambiguous whenever the same secret name is referenced more than once -
+which name lives are the case for). Instead: `internal/config/secretlocations.go` scans the merged
+tree by *content* (any scalar matching `${secret:NAME}`) rather than by structural path, producing
+`Snapshot.SecretRefs []SecretLocation{Name, File, Line, Column}` with one entry per occurrence.
+`secrets.ResolveAll` resolves each distinct name once and emits a `config.Diagnostic` - reusing
+the existing type rather than inventing a parallel one - for every occurrence of a name that
+failed, so a secret referenced in three places and missing is three real locations, not one
+anonymous complaint. See `TestLoad_SecretRefsCollectsEveryOccurrence` and `TestResolveAll`.
+
+### Config: where does "a secret value in a Widget Document is rejected" live?
+
+Found while planning C2, which states this as its own acceptance test. `internal/widgets` cannot
+import `internal/secrets` (docs/01-architecture.md's frozen import-boundary rule: integrations,
+and the widgets package they emit into, never see credentials at all), so the check cannot live in
+`widgets.Validate`. Resolved in the other direction instead: `internal/secrets` imports
+`internal/widgets` (nothing forbids that direction - the frozen rule constrains what integrations
+can reach, not what core packages may import) and `Registry.ContainsSecretInDocument(doc)` walks
+every text-bearing field of all nine v1 block types explicitly (a type-switch, matching this
+project's existing preference for that over reflection - see `internal/widgets/blocks.go`'s own
+dispatch), reusing the same `Registry.ContainsSecret` substring check the log scrubber uses.
+`TestContainsSecretInDocument_EveryBlockType` covers all nine block types and is itself mutation-
+tested: deleting one type's case from the switch was confirmed to fail the test before this was
+considered done. What's still pending, honestly: nothing calls this yet against a *real* produced
+Document - that caller is Phase F's scheduler, which does not exist. This is the primitive ready
+for that caller, not the end-to-end wiring.
