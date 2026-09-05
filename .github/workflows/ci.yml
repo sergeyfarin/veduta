@@ -33,18 +33,23 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version: '1.27'
+      # install-mode: goinstall builds the linter with the Go toolchain above. The prebuilt
+      # binaries are compiled with an older Go and refuse a go.mod that targets a newer one:
+      # "the Go language version (go1.25) used to build golangci-lint is lower than the
+      # targeted Go version (1.27)".
       - uses: golangci/golangci-lint-action@v9
         with:
           version: v2.6.2
+          install-mode: goinstall
 
   web:
     name: Frontend build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+      # No version here on purpose: package.json's packageManager field is the single source
+      # of truth, and specifying both makes the action fail with a version-mismatch error.
       - uses: pnpm/action-setup@v4
-        with:
-          version: 11
       - uses: actions/setup-node@v6
         with:
           node-version: '24'
@@ -60,17 +65,17 @@ jobs:
           retention-days: 1
 
   release-build:
-    name: Cross-compile ${{ matrix.goos }}/${{ matrix.goarch }}${{ matrix.goarm && format('v{0}', matrix.goarm) || '' }}
+    name: Cross-compile ${{ matrix.label }}
     needs: web
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         include:
-          - { goos: linux, goarch: amd64 }
-          - { goos: linux, goarch: arm64 }
-          - { goos: linux, goarch: arm, goarm: '7' } # Raspberry Pi is a primary target
-          - { goos: darwin, goarch: arm64 }
+          - { label: linux-amd64, goos: linux, goarch: amd64 }
+          - { label: linux-arm64, goos: linux, goarch: arm64 }
+          - { label: linux-armv7, goos: linux, goarch: arm, goarm: '7' } # Raspberry Pi is a primary target
+          - { label: darwin-arm64, goos: darwin, goarch: arm64 }
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v6
@@ -91,6 +96,6 @@ jobs:
         run: |
           go build -trimpath \
             -ldflags "-s -w -X veduta.dev/veduta/internal/version.Version=0.0.0-ci -X veduta.dev/veduta/internal/version.Commit=${GITHUB_SHA::12}" \
-            -o "veduta-${GOOS}-${GOARCH}${GOARM:+v$GOARM}" ./cmd/veduta
+            -o "veduta-${{ matrix.label }}" ./cmd/veduta
       - name: Report size
         run: ls -lh veduta-* | awk '{print $9, $5}'
