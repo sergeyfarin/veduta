@@ -1,0 +1,769 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://veduta.dev/schemas/widget-document.v1.schema.json",
+  "title": "Veduta Widget Document v1",
+  "description": "The integration-owned half of a card: presentation (blocks) plus machine-readable semantics (signals). Freshness, staleness, errors and provenance are NOT here - they are core-owned and live in card-state.v1. See schemas/card-state.v1.schema.json.",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "blocks"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "title": {
+      "$ref": "#/$defs/shortText"
+    },
+    "subtitle": {
+      "$ref": "#/$defs/shortText"
+    },
+    "link": {
+      "$ref": "#/$defs/safeURL"
+    },
+    "status": {
+      "$ref": "#/$defs/status"
+    },
+    "blocks": {
+      "type": "array",
+      "maxItems": 12,
+      "items": {
+        "$ref": "#/$defs/block"
+      }
+    },
+    "signals": {
+      "type": "object",
+      "description": "Stable, machine-readable values. The ONLY substrate for rules, history and alerts - blocks are never queried. Every name must be declared in the integration manifest so rules can be validated at config-load time.",
+      "maxProperties": 64,
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+){0,4}$",
+        "maxLength": 96
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/signal"
+      }
+    },
+    "notices": {
+      "type": "array",
+      "description": "Integration-reported soft problems (a sub-request failed, data is partial). Distinct from a failed invocation, which the core records in execution.error.",
+      "maxItems": 4,
+      "items": {
+        "type": "object",
+        "required": [
+          "level",
+          "message"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "level": {
+            "enum": [
+              "info",
+              "warn"
+            ]
+          },
+          "message": {
+            "$ref": "#/$defs/text"
+          }
+        }
+      }
+    },
+    "hints": {
+      "type": "object",
+      "description": "Advisory only. The core clamps these to the card's configured schedule and its own maxima.",
+      "additionalProperties": false,
+      "properties": {
+        "ttlSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400
+        }
+      }
+    }
+  },
+  "$defs": {
+    "shortText": {
+      "type": "string",
+      "maxLength": 120
+    },
+    "text": {
+      "type": "string",
+      "maxLength": 512
+    },
+    "safeURL": {
+      "type": "string",
+      "maxLength": 2048,
+      "pattern": "^https?://[^\\s/?#]+(/[^\\s]*)?$",
+      "description": "Structural only: scheme, a non-empty authority, no whitespace. Accepts bracketed IPv6 (http://[fd00::1]:8096). Host and port SEMANTICS are validated by the loader with net/url - a regex that tries to validate ports and IPv6 is both wrong and unreadable."
+    },
+    "level": {
+      "enum": [
+        "ok",
+        "warn",
+        "error",
+        "info",
+        "muted",
+        "unknown"
+      ]
+    },
+    "format": {
+      "enum": [
+        "text",
+        "number",
+        "bytes",
+        "bytes-rate",
+        "percent",
+        "duration",
+        "relative-time",
+        "temperature",
+        "currency",
+        "count"
+      ]
+    },
+    "scalar": {
+      "type": [
+        "string",
+        "number",
+        "boolean",
+        "null"
+      ],
+      "maxLength": 512
+    },
+    "signal": {
+      "type": "object",
+      "required": [
+        "value"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "type": [
+            "number",
+            "string",
+            "boolean",
+            "null"
+          ],
+          "maxLength": 128
+        },
+        "unit": {
+          "enum": [
+            "count",
+            "bytes",
+            "bytes_per_second",
+            "percent",
+            "seconds",
+            "celsius",
+            "ratio",
+            "boolean",
+            "state",
+            "none"
+          ]
+        },
+        "level": {
+          "$ref": "#/$defs/level"
+        }
+      }
+    },
+    "status": {
+      "type": "object",
+      "required": [
+        "level"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "level": {
+          "$ref": "#/$defs/level"
+        },
+        "text": {
+          "$ref": "#/$defs/shortText"
+        },
+        "since": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})$"
+        }
+      }
+    },
+    "image": {
+      "type": "object",
+      "required": [
+        "ref"
+      ],
+      "additionalProperties": false,
+      "description": "ref is an opaque HMAC-signed token minted by the capability broker against an approved asset route. Integrations cannot construct one; there is deliberately no url field.",
+      "properties": {
+        "ref": {
+          "type": "string",
+          "maxLength": 1024,
+          "pattern": "^v1\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$"
+        },
+        "alt": {
+          "$ref": "#/$defs/shortText"
+        },
+        "aspect": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]?:[1-9][0-9]?$"
+        },
+        "blurhash": {
+          "type": "string",
+          "maxLength": 64
+        }
+      }
+    },
+    "metricItem": {
+      "type": "object",
+      "required": [
+        "label",
+        "value"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "$ref": "#/$defs/shortText"
+        },
+        "value": {
+          "$ref": "#/$defs/scalar"
+        },
+        "format": {
+          "$ref": "#/$defs/format"
+        },
+        "unit": {
+          "type": "string",
+          "maxLength": 16
+        },
+        "level": {
+          "$ref": "#/$defs/level"
+        },
+        "icon": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "link": {
+          "$ref": "#/$defs/safeURL"
+        }
+      }
+    },
+    "progressItem": {
+      "type": "object",
+      "required": [
+        "label",
+        "progress"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "$ref": "#/$defs/shortText"
+        },
+        "progress": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "value": {
+          "$ref": "#/$defs/scalar"
+        },
+        "format": {
+          "$ref": "#/$defs/format"
+        },
+        "level": {
+          "$ref": "#/$defs/level"
+        }
+      }
+    },
+    "statusItem": {
+      "type": "object",
+      "required": [
+        "label",
+        "level"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "$ref": "#/$defs/shortText"
+        },
+        "level": {
+          "$ref": "#/$defs/level"
+        },
+        "text": {
+          "$ref": "#/$defs/shortText"
+        },
+        "since": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})$"
+        },
+        "link": {
+          "$ref": "#/$defs/safeURL"
+        }
+      }
+    },
+    "listItem": {
+      "type": "object",
+      "required": [
+        "title"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "title": {
+          "$ref": "#/$defs/shortText"
+        },
+        "subtitle": {
+          "$ref": "#/$defs/shortText"
+        },
+        "value": {
+          "$ref": "#/$defs/scalar"
+        },
+        "format": {
+          "$ref": "#/$defs/format"
+        },
+        "level": {
+          "$ref": "#/$defs/level"
+        },
+        "icon": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "image": {
+          "$ref": "#/$defs/image"
+        },
+        "link": {
+          "$ref": "#/$defs/safeURL"
+        },
+        "timestamp": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})$"
+        }
+      }
+    },
+    "mediaItem": {
+      "type": "object",
+      "required": [
+        "image"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "image": {
+          "$ref": "#/$defs/image"
+        },
+        "title": {
+          "$ref": "#/$defs/shortText"
+        },
+        "subtitle": {
+          "$ref": "#/$defs/shortText"
+        },
+        "badge": {
+          "$ref": "#/$defs/shortText"
+        },
+        "level": {
+          "$ref": "#/$defs/level"
+        },
+        "link": {
+          "$ref": "#/$defs/safeURL"
+        },
+        "timestamp": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})$"
+        }
+      }
+    },
+    "block": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/blockMetrics"
+        },
+        {
+          "$ref": "#/$defs/blockKeyValue"
+        },
+        {
+          "$ref": "#/$defs/blockProgress"
+        },
+        {
+          "$ref": "#/$defs/blockStatus"
+        },
+        {
+          "$ref": "#/$defs/blockList"
+        },
+        {
+          "$ref": "#/$defs/blockMedia"
+        },
+        {
+          "$ref": "#/$defs/blockText"
+        },
+        {
+          "$ref": "#/$defs/blockTable"
+        },
+        {
+          "$ref": "#/$defs/blockActions"
+        }
+      ]
+    },
+    "blockMetrics": {
+      "type": "object",
+      "required": [
+        "type",
+        "items"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "metrics"
+        },
+        "title": {
+          "$ref": "#/$defs/shortText"
+        },
+        "emphasis": {
+          "enum": [
+            "normal",
+            "strong",
+            "subtle"
+          ]
+        },
+        "columns": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8
+        },
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 12,
+          "items": {
+            "$ref": "#/$defs/metricItem"
+          }
+        }
+      }
+    },
+    "blockKeyValue": {
+      "type": "object",
+      "required": [
+        "type",
+        "items"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "key-value"
+        },
+        "title": {
+          "$ref": "#/$defs/shortText"
+        },
+        "emphasis": {
+          "enum": [
+            "normal",
+            "strong",
+            "subtle"
+          ]
+        },
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 24,
+          "items": {
+            "$ref": "#/$defs/metricItem"
+          }
+        }
+      }
+    },
+    "blockProgress": {
+      "type": "object",
+      "required": [
+        "type",
+        "items"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "progress"
+        },
+        "title": {
+          "$ref": "#/$defs/shortText"
+        },
+        "emphasis": {
+          "enum": [
+            "normal",
+            "strong",
+            "subtle"
+          ]
+        },
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": {
+            "$ref": "#/$defs/progressItem"
+          }
+        }
+      }
+    },
+    "blockStatus": {
+      "type": "object",
+      "required": [
+        "type",
+        "items"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "status"
+        },
+        "title": {
+          "$ref": "#/$defs/shortText"
+        },
+        "emphasis": {
+          "enum": [
+            "normal",
+            "strong",
+            "subtle"
+          ]
+        },
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 24,
+          "items": {
+            "$ref": "#/$defs/statusItem"
+          }
+        }
+      }
+    },
+    "blockList": {
+      "type": "object",
+      "required": [
+        "type",
+        "items"
+      ],
+      "additionalProperties": false,
+      "description": "An empty items array is legal and renders the block's empty state (for example: no active streams).",
+      "properties": {
+        "type": {
+          "const": "list"
+        },
+        "title": {
+          "$ref": "#/$defs/shortText"
+        },
+        "emphasis": {
+          "enum": [
+            "normal",
+            "strong",
+            "subtle"
+          ]
+        },
+        "empty": {
+          "$ref": "#/$defs/shortText"
+        },
+        "items": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "$ref": "#/$defs/listItem"
+          }
+        }
+      }
+    },
+    "blockMedia": {
+      "type": "object",
+      "required": [
+        "type",
+        "items"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "enum": [
+            "image",
+            "image-grid",
+            "poster-grid"
+          ]
+        },
+        "title": {
+          "$ref": "#/$defs/shortText"
+        },
+        "emphasis": {
+          "enum": [
+            "normal",
+            "strong",
+            "subtle"
+          ]
+        },
+        "columns": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8
+        },
+        "empty": {
+          "$ref": "#/$defs/shortText"
+        },
+        "items": {
+          "type": "array",
+          "maxItems": 48,
+          "items": {
+            "$ref": "#/$defs/mediaItem"
+          }
+        }
+      }
+    },
+    "blockText": {
+      "type": "object",
+      "required": [
+        "type",
+        "content"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "enum": [
+            "text",
+            "markdown"
+          ]
+        },
+        "title": {
+          "$ref": "#/$defs/shortText"
+        },
+        "emphasis": {
+          "enum": [
+            "normal",
+            "strong",
+            "subtle"
+          ]
+        },
+        "level": {
+          "$ref": "#/$defs/level"
+        },
+        "content": {
+          "type": "string",
+          "maxLength": 2048,
+          "description": "markdown is a restricted subset: emphasis, links, inline code, lists. Raw HTML is rejected at validation time."
+        }
+      }
+    },
+    "blockTable": {
+      "type": "object",
+      "required": [
+        "type",
+        "columns",
+        "rows"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "table"
+        },
+        "title": {
+          "$ref": "#/$defs/shortText"
+        },
+        "emphasis": {
+          "enum": [
+            "normal",
+            "strong",
+            "subtle"
+          ]
+        },
+        "columns": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "required": [
+              "key"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "key": {
+                "type": "string",
+                "maxLength": 64
+              },
+              "label": {
+                "$ref": "#/$defs/shortText"
+              },
+              "format": {
+                "$ref": "#/$defs/format"
+              },
+              "align": {
+                "enum": [
+                  "start",
+                  "center",
+                  "end"
+                ]
+              }
+            }
+          }
+        },
+        "rows": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "type": "object",
+            "maxProperties": 8,
+            "additionalProperties": {
+              "$ref": "#/$defs/scalar"
+            }
+          }
+        }
+      }
+    },
+    "blockActions": {
+      "type": "object",
+      "required": [
+        "type",
+        "actions"
+      ],
+      "additionalProperties": false,
+      "description": "References action ids declared in configuration. A document can never express a command.",
+      "properties": {
+        "type": {
+          "const": "actions"
+        },
+        "title": {
+          "$ref": "#/$defs/shortText"
+        },
+        "emphasis": {
+          "enum": [
+            "normal",
+            "strong",
+            "subtle"
+          ]
+        },
+        "actions": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 6,
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "label"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "maxLength": 64,
+                "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+              },
+              "label": {
+                "$ref": "#/$defs/shortText"
+              },
+              "icon": {
+                "type": "string",
+                "maxLength": 64
+              },
+              "confirm": {
+                "type": "boolean"
+              },
+              "danger": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

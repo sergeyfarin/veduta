@@ -1,0 +1,357 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://veduta.dev/schemas/card-state.v1.schema.json",
+  "title": "Veduta Card State v1",
+  "description": "What the API returns for a card. The envelope separates integration-owned content (document, including its signals) from core-owned execution facts. An integration cannot influence any field under execution.",
+  "type": "object",
+  "required": [
+    "cardId",
+    "execution"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "cardId": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+    },
+    "document": {
+      "oneOf": [
+        {
+          "$ref": "https://veduta.dev/schemas/widget-document.v1.schema.json"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Last successfully validated document. Retained across failures; execution.state says whether it is current."
+    },
+    "execution": {
+      "type": "object",
+      "required": [
+        "state"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "state": {
+          "enum": [
+            "pending",
+            "ok",
+            "stale",
+            "error",
+            "disabled"
+          ],
+          "description": "pending: never run. ok: fresh and valid. stale: last-good document is past TTL or the latest run failed. error: no usable document. disabled: not scheduled - see disabledReason."
+        },
+        "generatedAt": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})$"
+        },
+        "ttlSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400,
+          "description": "Effective TTL after clamping the integration's hint to the card schedule."
+        },
+        "expiresAt": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})$"
+        },
+        "staleSince": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})$"
+        },
+        "durationMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "consecutiveFailures": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "nextRunAt": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})$"
+        },
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "integration": {
+              "type": "string"
+            },
+            "integrationVersion": {
+              "type": "string"
+            },
+            "runtime": {
+              "enum": [
+                "builtin",
+                "declarative",
+                "wasm"
+              ]
+            },
+            "operation": {
+              "type": "string"
+            },
+            "slots": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "error": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "required": [
+            "code",
+            "message"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "enum": [
+                "upstream",
+                "auth",
+                "timeout",
+                "config",
+                "denied",
+                "invalid",
+                "limit",
+                "internal"
+              ]
+            },
+            "message": {
+              "type": "string",
+              "maxLength": 512
+            },
+            "retryable": {
+              "type": "boolean"
+            },
+            "at": {
+              "type": "string",
+              "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})$"
+            }
+          }
+        },
+        "disabledReason": {
+          "enum": [
+            "unapproved",
+            "permissions-changed",
+            "integration-missing",
+            "config-error",
+            "operator"
+          ],
+          "description": "Required when state is disabled. Every value here means 'will not run without human intervention'. A tripped circuit breaker is NOT one of them - it is temporary backoff, represented as stale (with a last-good document) or error (without), carrying circuitOpenUntil."
+        },
+        "circuitOpenUntil": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})$",
+          "description": "Set while the circuit is open: the instant it becomes half-open. nextRunAt is the scheduled probe and MUST equal it - they are the same event seen from the breaker and from the scheduler. Valid only with state stale or error."
+        }
+      },
+      "dependentRequired": {
+        "circuitOpenUntil": [
+          "nextRunAt"
+        ]
+      }
+    }
+  },
+  "allOf": [
+    {
+      "title": "pending: nothing has run yet",
+      "if": {
+        "properties": {
+          "execution": {
+            "properties": {
+              "state": {
+                "const": "pending"
+              }
+            },
+            "required": [
+              "state"
+            ]
+          }
+        },
+        "required": [
+          "execution"
+        ]
+      },
+      "then": {
+        "properties": {
+          "document": {
+            "type": "null"
+          },
+          "execution": {
+            "properties": {
+              "generatedAt": false,
+              "expiresAt": false,
+              "staleSince": false,
+              "error": {
+                "type": "null"
+              },
+              "circuitOpenUntil": false
+            }
+          }
+        }
+      }
+    },
+    {
+      "title": "ok: a current document with full freshness metadata and no error",
+      "if": {
+        "properties": {
+          "execution": {
+            "properties": {
+              "state": {
+                "const": "ok"
+              }
+            },
+            "required": [
+              "state"
+            ]
+          }
+        },
+        "required": [
+          "execution"
+        ]
+      },
+      "then": {
+        "required": [
+          "document"
+        ],
+        "properties": {
+          "document": {
+            "type": "object"
+          },
+          "execution": {
+            "required": [
+              "generatedAt",
+              "ttlSeconds",
+              "expiresAt"
+            ],
+            "properties": {
+              "error": {
+                "type": "null"
+              },
+              "staleSince": false,
+              "disabledReason": false,
+              "circuitOpenUntil": false
+            }
+          }
+        }
+      }
+    },
+    {
+      "title": "stale: a retained last-good document plus when it went stale",
+      "if": {
+        "properties": {
+          "execution": {
+            "properties": {
+              "state": {
+                "const": "stale"
+              }
+            },
+            "required": [
+              "state"
+            ]
+          }
+        },
+        "required": [
+          "execution"
+        ]
+      },
+      "then": {
+        "required": [
+          "document"
+        ],
+        "properties": {
+          "document": {
+            "type": "object"
+          },
+          "execution": {
+            "required": [
+              "generatedAt",
+              "staleSince"
+            ],
+            "properties": {
+              "disabledReason": false
+            }
+          }
+        }
+      }
+    },
+    {
+      "title": "error: no usable document, and an error explaining why",
+      "if": {
+        "properties": {
+          "execution": {
+            "properties": {
+              "state": {
+                "const": "error"
+              }
+            },
+            "required": [
+              "state"
+            ]
+          }
+        },
+        "required": [
+          "execution"
+        ]
+      },
+      "then": {
+        "properties": {
+          "document": {
+            "type": "null"
+          },
+          "execution": {
+            "required": [
+              "error"
+            ],
+            "properties": {
+              "error": {
+                "type": "object"
+              },
+              "disabledReason": false
+            }
+          }
+        }
+      }
+    },
+    {
+      "title": "disabled: a retained document is permitted, and a reason is mandatory",
+      "if": {
+        "properties": {
+          "execution": {
+            "properties": {
+              "state": {
+                "const": "disabled"
+              }
+            },
+            "required": [
+              "state"
+            ]
+          }
+        },
+        "required": [
+          "execution"
+        ]
+      },
+      "then": {
+        "properties": {
+          "execution": {
+            "required": [
+              "disabledReason"
+            ],
+            "properties": {
+              "nextRunAt": false,
+              "circuitOpenUntil": false
+            }
+          }
+        }
+      }
+    }
+  ]
+}

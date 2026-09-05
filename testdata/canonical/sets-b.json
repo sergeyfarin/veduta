@@ -1,0 +1,34 @@
+{
+  "apiVersion": "veduta.dev/v1",
+  "kind": "Integration",
+  "metadata": {
+    "id": "demo",
+    "name": "Demo",
+    "version": "1.0.0"
+  },
+  "spec": {
+    "runtime": "declarative",
+    "capabilities": [
+      "assets",
+      "http"
+    ],
+    "operations": [
+      {
+        "id": "o",
+        "routes": [
+          {
+            "slot": "s",
+            "method": "GET",
+            "path": "/x",
+            "queryKeys": [
+              "b",
+              "a"
+            ]
+          }
+        ],
+        "pipeline": [],
+        "output": {}
+      }
+    ]
+  }
+}

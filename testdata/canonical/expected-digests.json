@@ -1,0 +1,33 @@
+{
+  "digests": {
+    "integers": "d5f92aea86e27c145bb58b33604839520e593fc3dd2313dab668f0b049163448",
+    "params-caps-a": "34951c251acd5f384784cc66a2a4378c535a50ab3047c4fd54008b0b8664ccdd",
+    "params-caps-b": "e7730656a65853d31ea2f49f95d43b5e554eb221f9a7de7e95a6bfc3e09e5be3",
+    "params-qk-dupes": "5fbf1a94b0074a5c3042e1747ecf6d74e6d7db6de783887ce7f23b2012e131d2",
+    "params-qk-single": "25ef9067578333780f1c2c442b3920e8e0c0aba6e10b2e3a8ba3e60af2bd6e67",
+    "sets-a": "b839a08afa32efa0bb7fd8f7b0e325ab90351c6586a463dd7517a64454633b96",
+    "sets-b": "b839a08afa32efa0bb7fd8f7b0e325ab90351c6586a463dd7517a64454633b96",
+    "unicode": "eb6c033db5288535e91c13ea71de8601a5baf603350c6a88d6966124a3723ee4"
+  },
+  "manifests": {
+    "glances": "2487e1387e05727309307158a483ee0137c22637cc88ad15a4ec7b9485637dfe",
+    "immich": "9a68a1487e8006e1c0f20687ed6ae3badb6c4075fb420fa961b7342df8150e06",
+    "jellyfin": "b3b852817e0b96ddd7763b119b385402d62168ce60b7ff9f7bc13b8923993ee9"
+  },
+  "must_differ": [
+    [
+      "params-caps-a",
+      "params-caps-b"
+    ],
+    [
+      "params-qk-dupes",
+      "params-qk-single"
+    ]
+  ],
+  "must_match": [
+    [
+      "sets-a",
+      "sets-b"
+    ]
+  ]
+}

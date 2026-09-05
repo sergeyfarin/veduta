@@ -1,0 +1,194 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://veduta.dev/schemas/integration-lock.v1.schema.json",
+  "title": "Veduta integration lock v1",
+  "description": "veduta.lock.yaml - the administrator's record of what each integration was approved to do. Written next to the configuration, reviewable and committable. An integration whose computed manifest digest or effective permissions differ from this record is refused until re-approved (veduta integration approve <id>), which prints a permission diff and writes a new record. This is what makes 'safe to install from strangers' enforceable without a marketplace.",
+  "type": "object",
+  "required": [
+    "version",
+    "integrations"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "integrations": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[a-z0-9][a-z0-9-]{1,38}$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "manifestSha256",
+          "approvedAt",
+          "capabilities",
+          "routes",
+          "effectiveLimits"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "manifestSha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "description": "sha256 over the CANONICAL manifest: the parsed document re-serialised as JSON with sorted keys and no insignificant whitespace. Reformatting or editing comments therefore does not invalidate an approval; changing any semantic value does."
+          },
+          "moduleSha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "description": "wasm runtime only"
+          },
+          "version": {
+            "type": "string"
+          },
+          "runtime": {
+            "enum": [
+              "builtin",
+              "declarative",
+              "wasm"
+            ]
+          },
+          "approvedAt": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})$"
+          },
+          "approvedBy": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "capabilities": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "enum": [
+                "http",
+                "cache",
+                "assets",
+                "log",
+                "events"
+              ]
+            }
+          },
+          "routes": {
+            "type": "array",
+            "description": "The approved upstream request surface. The effective grant is the intersection of the operation's manifest routes, these approved routes, and the connection's own allowedPaths.",
+            "maxItems": 64,
+            "items": {
+              "$ref": "#/$defs/route"
+            }
+          },
+          "limits": {
+            "$ref": "https://veduta.dev/schemas/plugin-manifest.v1.schema.json#/$defs/limits"
+          },
+          "effectiveLimits": {
+            "allOf": [
+              {
+                "$ref": "https://veduta.dev/schemas/plugin-manifest.v1.schema.json#/$defs/limits"
+              },
+              {
+                "required": [
+                  "cacheBytesKB",
+                  "cacheEntries",
+                  "exprNodes",
+                  "hostCalls",
+                  "httpRequests",
+                  "inputMB",
+                  "iterations",
+                  "jsonDepth",
+                  "jsonNodes",
+                  "memoryMB",
+                  "outputKB",
+                  "requestBodyKB",
+                  "responseMB",
+                  "timeoutMs"
+                ]
+              }
+            ],
+            "description": "The values actually in force when this approval was made: min(core maximum, manifest value-or-default, approved value-or-default) for every field. Recorded so that a core upgrade which lowers or raises a default shows up as a mismatch and forces re-approval, rather than silently changing authority. Every field is required: a partial map would leave some limits silently governed by whatever the core default happens to be at the time."
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "runtime": {
+                  "const": "wasm"
+                }
+              },
+              "required": [
+                "runtime"
+              ]
+            },
+            "then": {
+              "required": [
+                "moduleSha256"
+              ]
+            }
+          }
+        ]
+      }
+    }
+  },
+  "$defs": {
+    "route": {
+      "type": "object",
+      "required": [
+        "slot",
+        "method",
+        "path"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "slot": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,31}$"
+        },
+        "method": {
+          "enum": [
+            "GET",
+            "HEAD",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE"
+          ]
+        },
+        "path": {
+          "type": "string",
+          "maxLength": 512,
+          "pattern": "^/(?:[A-Za-z0-9_~!$&'()+,;=:@/-]|[.*][A-Za-z0-9_~!$&'()+,;=:@/-])*[.*]?$",
+          "description": "Glob pattern, RE2-compatible and lookahead-free so the Go validator can compile it. `*` matches within a single path segment and never crosses `/`. Multi-segment `**` is NOT part of v1. Percent-encoding, backslashes, `..` and `**` are structurally rejected; everything else about canonicalisation (empty segments, case, encoding) is enforced by the single canonicalisation routine described in 01-architecture.md \u00a76."
+        },
+        "use": {
+          "enum": [
+            "data",
+            "asset"
+          ],
+          "default": "data",
+          "description": "asset routes may only be minted into image refs; data routes may only be fetched via http.request. Separating them stops an integration from using assets.ref to reach a path its data grant forbids."
+        },
+        "queryKeys": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "description": "Optional allowlist of query parameter names this route may set. Compared as a sorted, de-duplicated, case-sensitive set. Omitted means any key except those the connection owns - which is WIDER than any explicit list, so omission is shown as a widening in the approval diff."
+        },
+        "contentType": {
+          "type": "string",
+          "maxLength": 128,
+          "description": "Required request Content-Type for body-bearing methods. Normalised with mime.ParseMediaType: lowercased type/subtype, ALL parameters retained with lowercased keys and sorted order (charset value lowercased). Dropping parameters would collapse semantically distinct media types such as application/vnd.api+json;profile=..."
+        },
+        "maxBodyKB": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1024
+        }
+      },
+      "description": "An approved route. Identity is the FULL tuple including queryKeys, contentType and maxBodyKB: a lock entry that omits a constraint the manifest declared is a WIDER grant and must appear as such in the diff."
+    }
+  }
+}

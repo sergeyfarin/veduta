@@ -1,0 +1,7 @@
+# Negative fixture: the semantic layer must report this.
+expect: "references unknown card"
+config:
+  rules:
+    - id: bad-card
+      when: 'state("nope") == "error"'
+      notify: [phone]

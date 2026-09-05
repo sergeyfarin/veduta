@@ -1,0 +1,16 @@
+# Negative fixture: the semantic layer must report this.
+expect: "approves a route the manifest never requested"
+manifests:
+  immich:
+    spec:
+      operations:
+        - id: recent-assets
+          routes:
+            - { slot: server, method: POST, path: /api/search/metadata, maxBodyKB: 4 }
+          pipeline: []
+          output: {}
+lock:
+  integrations:
+    immich:
+      routes:
+        - { slot: server, method: POST, path: /api/search/metadata }

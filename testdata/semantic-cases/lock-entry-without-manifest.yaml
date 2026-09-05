@@ -1,0 +1,9 @@
+# Negative fixture: the semantic layer must report this.
+expect: "no manifest for this integration"
+lock:
+  integrations:
+    ghost:
+      manifestSha256: "0000000000000000000000000000000000000000000000000000000000000000"
+      approvedAt: "2026-09-05T08:00:00Z"
+      capabilities: []
+      routes: []

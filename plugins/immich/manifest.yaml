@@ -1,0 +1,88 @@
+# A complete declarative integration: no code, no rebuild, no credentials, and a
+# fully enumerated upstream request surface. Drop this file in, approve it once
+# (`veduta integration approve immich`), and the card works.
+apiVersion: veduta.dev/v1
+kind: Integration
+metadata:
+  id: immich
+  name: Immich
+  version: 0.1.0
+  description: Library statistics and recent photos from Immich.
+  license: Apache-2.0
+  icon: sh:immich
+spec:
+  runtime: declarative
+  slots:
+    - name: server
+      kind: http
+      description: Your Immich server
+  capabilities: [http, assets]
+  limits: { httpRequests: 2, timeoutMs: 5000 }
+  operations:
+    - id: recent-assets
+      name: Recent photos
+      defaultRefresh: 10m
+
+      # Everything this operation may ever ask the connection to do. The effective
+      # grant is this set, intersected with what the administrator approved in
+      # veduta.lock.yaml and with the connection's own allowedPaths.
+      routes:
+        - { slot: server, method: GET,  path: /api/server/statistics, reason: Library counts and disk usage }
+        - { slot: server, method: POST, path: /api/search/metadata, contentType: application/json, reason: List the most recent assets }
+        - { slot: server, method: GET,  path: /api/assets/*/thumbnail, use: asset, reason: Photo thumbnails }
+
+      # Machine-readable values. Rules and history read only these, never blocks.
+      signals:
+        - { name: photos, type: number, unit: count, history: true }
+        - { name: videos, type: number, unit: count, history: true }
+        - { name: usage,  type: number, unit: bytes, history: true }
+
+      params:
+        type: object
+        properties:
+          limit: { type: integer, minimum: 1, maximum: 24, default: 6 }
+
+      pipeline:
+        - as: stats
+          request: { slot: server, method: GET, path: /api/server/statistics }
+        - as: recent
+          request:
+            slot: server
+            method: POST
+            path: /api/search/metadata
+            body:
+              json:                       # structured, not a string template
+                size: { expr: params.limit }
+                order: desc
+
+      # A string is always a literal string. An expression is always an {expr} node.
+      output:
+        title: Immich
+        status:
+          level: ok
+          text: Online
+        signals:
+          photos: { value: { expr: stats.photos } }
+          videos: { value: { expr: stats.videos } }
+          usage:  { value: { expr: stats.usage } }
+        blocks:
+          - type: image-grid
+            columns: 3
+            empty: No photos yet
+            items:
+              each: { expr: "take(recent.assets.items, params.limit)" }
+              as: photo
+              item:
+                id:        { expr: photo.id }
+                title:     { expr: photo.originalFileName }
+                timestamp: { expr: photo.fileCreatedAt }
+                image:
+                  asset:
+                    slot: server
+                    path: { expr: '"/api/assets/" + photo.id + "/thumbnail"' }
+                    query: { size: preview }
+          - type: metrics
+            items:
+              - { label: Photos, value: { expr: stats.photos }, format: number }
+              - { label: Videos, value: { expr: stats.videos }, format: number }
+              - { label: Usage,  value: { expr: stats.usage },  format: bytes }

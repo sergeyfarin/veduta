@@ -1,0 +1,52 @@
+# Host metrics without SSH and without credentials on the host: Glances exposes them over HTTP.
+apiVersion: veduta.dev/v1
+kind: Integration
+metadata:
+  id: glances
+  name: Glances
+  version: 0.1.0
+  description: CPU, memory, filesystem and uptime for a Linux host running Glances.
+  license: Apache-2.0
+  icon: sh:glances
+spec:
+  runtime: declarative
+  slots:
+    - name: server
+      kind: http
+      description: A host running `glances -w`
+  capabilities: [http]
+  limits: { httpRequests: 4, timeoutMs: 4000, inputMB: 2, iterations: 2000 }
+  operations:
+    - id: overview
+      name: Host overview
+      defaultRefresh: 30s
+      routes:
+        - { slot: server, method: GET, path: /api/4/cpu,    reason: CPU utilisation }
+        - { slot: server, method: GET, path: /api/4/mem,    reason: Memory utilisation }
+        - { slot: server, method: GET, path: /api/4/fs,     reason: Filesystem usage }
+        - { slot: server, method: GET, path: /api/4/uptime, reason: Uptime }
+      signals:
+        - { name: cpu.percent,     type: number, unit: percent, history: true }
+        - { name: mem.percent,     type: number, unit: percent, history: true }
+        - { name: fs.root.percent, type: number, unit: percent, history: true }
+      pipeline:
+        - as: cpu
+          request: { slot: server, method: GET, path: /api/4/cpu }
+        - as: mem
+          request: { slot: server, method: GET, path: /api/4/mem }
+        - as: fs
+          request: { slot: server, method: GET, path: /api/4/fs }
+      output:
+        title: Host
+        status:
+          level: ok
+        signals:
+          cpu.percent:     { value: { expr: cpu.total } }
+          mem.percent:     { value: { expr: mem.percent } }
+          fs.root.percent: { value: { expr: 'first(filter(fs, .mnt_point == "/")).percent' } }
+        blocks:
+          - type: progress
+            items:
+              - { label: CPU,    progress: { expr: cpu.total / 100 }, value: { expr: cpu.total }, format: percent }
+              - { label: Memory, progress: { expr: mem.percent / 100 }, value: { expr: mem.percent }, format: percent }
+              - { label: Root,   progress: { expr: 'first(filter(fs, .mnt_point == "/")).percent / 100' }, value: { expr: 'first(filter(fs, .mnt_point == "/")).percent' }, format: percent }

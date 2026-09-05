@@ -1,0 +1,26 @@
+/* Placeholder tokens. The real design system lands in milestone B1, after the S4 visual
+   prototype defines the vocabulary. Kept minimal on purpose so nothing here is load-bearing. */
+:root {
+  --v-bg: #fbfbfa;
+  --v-surface: #ffffff;
+  --v-text: #16161a;
+  --v-muted: #6b6b76;
+  --v-accent: #3b6ea5;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --v-bg: #121214;
+    --v-surface: #1a1a1e;
+    --v-text: #ececed;
+    --v-muted: #9a9aa4;
+    --v-accent: #7aa7d8;
+  }
+}
+
+body {
+  margin: 0;
+  background: var(--v-bg);
+  font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}

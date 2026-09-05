@@ -1,0 +1,38 @@
+# The WASM proof case: multi-step auth and cross-endpoint logic that a declarative
+# pipeline cannot express. The module is built from sdk/ - see docs/02 milestone G4.
+apiVersion: veduta.dev/v1
+kind: Integration
+metadata:
+  id: jellyfin
+  name: Jellyfin
+  version: 1.0.0
+  description: Recently added movies and shows, with posters.
+  license: Apache-2.0
+  icon: sh:jellyfin
+spec:
+  runtime: wasm
+  module: jellyfin.wasm
+  sha256: "0000000000000000000000000000000000000000000000000000000000000000"  # set by the build; the loader verifies the file against it
+  slots:
+    - name: server
+      kind: http
+      description: Your Jellyfin server
+  capabilities: [http, cache, assets, log]
+  limits: { memoryMB: 64, timeoutMs: 3000, outputKB: 64, httpRequests: 8, hostCalls: 64 }
+  operations:
+    - id: recently-added
+      name: Recently added
+      defaultRefresh: 5m
+      routes:
+        - { slot: server, method: GET, path: /Users,                   reason: Resolve the current user }
+        - { slot: server, method: GET, path: /Users/*/Items,           reason: Recently added items }
+        - { slot: server, method: GET, path: /Items/*/Images/Primary, use: asset, reason: Posters }
+      signals:
+        - { name: movies,         type: number, unit: count, history: true }
+        - { name: shows,          type: number, unit: count, history: true }
+        - { name: library_bytes,  type: number, unit: bytes, history: true }
+        - { name: active_streams, type: number, unit: count, history: true }
+      params:
+        type: object
+        properties:
+          limit: { type: integer, minimum: 1, maximum: 24, default: 5 }

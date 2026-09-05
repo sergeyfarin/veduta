@@ -1,0 +1,18 @@
+# Negative fixture: the semantic layer must report this.
+expect: "has no use=asset route"
+manifests:
+  immich:
+    spec:
+      operations:
+        - id: recent-assets
+          routes:
+            - { slot: server, method: GET, path: /api/server/statistics }
+          pipeline: []
+          output:
+            blocks:
+              - type: image-grid
+                items:
+                  item:
+                    image:
+                      asset: { slot: server, path: /api/assets/x/thumbnail }
+          signals: []

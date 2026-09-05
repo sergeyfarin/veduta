@@ -1,0 +1,15 @@
+{
+  "spec": {
+    "operations": [
+      {
+        "params": {
+          "default": {
+            "queryKeys": [
+              "a"
+            ]
+          }
+        }
+      }
+    ]
+  }
+}

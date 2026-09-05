@@ -1,0 +1,12 @@
+# Negative fixture: the semantic layer must report this.
+expect: "invalid media type"
+manifests:
+  glances:
+    spec:
+      operations:
+        - id: overview
+          routes:
+            - { slot: server, method: GET, path: /api/4/cpu, contentType: "nonsense/" }
+          signals: []
+          pipeline: []
+          output: {}

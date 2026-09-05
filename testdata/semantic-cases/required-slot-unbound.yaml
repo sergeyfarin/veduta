@@ -1,0 +1,9 @@
+# Negative fixture: the semantic layer must report this.
+expect: "required slot 'server' is not bound"
+config:
+  sections:
+    - title: Media
+      cards:
+        - id: immich-recent
+          integration: immich
+          operation: recent-assets

@@ -1,0 +1,6 @@
+# Negative fixture: the semantic layer must report this.
+expect: "but min(core, manifest, approved)"
+lock:
+  integrations:
+    immich:
+      effectiveLimits: { timeoutMs: 30000 }

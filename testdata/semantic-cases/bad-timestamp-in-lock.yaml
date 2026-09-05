@@ -1,0 +1,6 @@
+# Negative fixture: the semantic layer must report this.
+expect: "not a real timestamp"
+lock:
+  integrations:
+    immich:
+      approvedAt: "2026-99-99T99:99:99Z"

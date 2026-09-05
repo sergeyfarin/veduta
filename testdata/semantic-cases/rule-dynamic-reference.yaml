@@ -1,0 +1,7 @@
+# Negative fixture: the semantic layer must report this.
+expect: "does not use literal string arguments"
+config:
+  rules:
+    - id: dynamic
+      when: 'signal(cardName, "cpu.percent") > 90'
+      notify: [phone]

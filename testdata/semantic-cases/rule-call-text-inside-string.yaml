@@ -1,0 +1,7 @@
+# Positive control: the lexer must ignore call-like text inside a string literal.
+expect: "__NONE__"
+config:
+  rules:
+    - id: literal-text
+      when: 'state("immich-recent") == "signal(ghost, x)"'
+      notify: [phone]

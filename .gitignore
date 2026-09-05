@@ -1,0 +1,19 @@
+__pycache__/
+*.pyc
+
+# Go build artefacts (scripts/* are runnable via `go run`)
+scripts/gocheck/gocheck
+scripts/re2check/re2check
+/veduta
+/dist
+
+# Node
+node_modules/
+web/build/
+
+# Local state
+/data
+*.db
+*.db-wal
+*.db-shm
+.env

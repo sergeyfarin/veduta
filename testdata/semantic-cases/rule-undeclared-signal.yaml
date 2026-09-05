@@ -1,0 +1,7 @@
+# Negative fixture: the semantic layer must report this.
+expect: "is not declared by"
+config:
+  rules:
+    - id: bad-signal
+      when: 'signal("coding-server", "gpu.percent") > 90'
+      notify: [phone]

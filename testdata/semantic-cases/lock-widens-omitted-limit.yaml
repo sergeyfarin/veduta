@@ -1,0 +1,6 @@
+# Negative fixture: the semantic layer must report this.
+expect: "exceeds the manifest's effective request"
+lock:
+  integrations:
+    immich:
+      limits: { iterations: 100000 }

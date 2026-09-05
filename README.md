@@ -1,0 +1,62 @@
+# Veduta
+
+> *veduta* (n.) — a highly detailed, wide-angle painting of a place.
+
+A lightweight, self-hosted dashboard for your home and homelab. It shows **rich content**
+(photos, posters, camera frames, charts — not just numbers), securely queries your
+services and machines, performs a small set of **explicitly approved actions**, and
+**notifies** you when something needs attention.
+
+Its distinguishing bet: **community integrations are sandboxed by design**. An integration
+describes what it wants; the core decides whether it is allowed, and holds every credential.
+
+## Status
+
+Design complete and frozen; implementation starting at milestone A1. The contract suite in
+`scripts/` is the CI gate from the first commit — `mise run contracts`.
+
+Toolchain is pinned in [mise.toml](mise.toml): Go 1.27, Node 24, pnpm 11. `mise install && mise run check`.
+
+This repository currently contains:
+
+| Document | Contents |
+| --- | --- |
+| [docs/00-review-and-prior-art.md](docs/00-review-and-prior-art.md) | Competitive research, what not to reinvent, and 14 challenges to the original design |
+| [docs/01-architecture.md](docs/01-architecture.md) | Architecture, every contract (schemas, Go interfaces, REST, SQLite), threat model, decision log |
+| [docs/02-implementation-plan.md](docs/02-implementation-plan.md) | Spikes, dependency-ordered milestones, and an executable issue backlog |
+| [schemas/](schemas/) | JSON Schemas: Widget Document, card-state envelope, plugin manifest, integration lock, configuration |
+| [examples/veduta.yaml](examples/veduta.yaml) | Target configuration file (validates against the config schema) |
+| [plugins/immich/manifest.yaml](plugins/immich/manifest.yaml) | A complete declarative integration — no code, no rebuild |
+| [examples/veduta.lock.yaml](examples/veduta.lock.yaml) | Approved capabilities and routes per integration |
+| [testdata/widgets/](testdata/widgets/) | Golden Widget Document and card-state fixtures |
+| [testdata/schema-cases.json](testdata/schema-cases.json) | 79-case adversarial schema corpus |
+| [testdata/semantic-cases/](testdata/semantic-cases/) | 29 fixtures guarding the cross-document checks (a deleted check fails the build) |
+| [testdata/canonical/](testdata/canonical/) | Golden RFC 8785 digests with collision invariants, reproduced by Go and Python |
+| [scripts/validate-schemas.py](scripts/validate-schemas.py) | Runs four layers: structural, Go RE2 portability, canonical digest, semantic |
+| [scripts/gocheck/](scripts/gocheck/) | Go helpers the suite delegates to: strict YAML + RFC 8785 digest, `mime.ParseMediaType`, SemVer 2.0.0 |
+| [mise.toml](mise.toml) | Pinned toolchain and task runner |
+| [web/](web/) | Svelte 5 + Vite + TypeScript SPA skeleton (pnpm) |
+| [LICENSING.md](LICENSING.md) | Multi-license layout, plugin exception, AGPL §13 obligations |
+
+## Product principles
+
+- **Beautiful by default.** No hours of CSS to look good.
+- **Rich content is first-class.** Images, posters and frames are not hacks.
+- **Config as code.** Everything important is expressible in a readable file.
+- **Plugins are untrusted.** Integrations get capabilities, never machine privileges.
+- **Simple integrations should be simple.** Reading a number from an API must not require code.
+- **One application, one binary.**
+- **Observe, and perform small approved actions.** Not Grafana, not Ansible, not Home Assistant.
+- **Local-first.** No cloud dependency, ever.
+- **Migration should be easy.** Import what you already have from Homepage.
+
+## License
+
+AGPL-3.0-or-later for the core; Apache-2.0 for `sdk/`, `schemas/` and first-party integrations,
+with an explicit plugin exception so community integrations stay under whatever license their
+authors choose. See [LICENSING.md](LICENSING.md).
+
+## Non-goals
+
+Time-series database, log aggregation, workflow builder, config-driven RBAC for large
+organisations, arbitrary remote shell, browser automation, plugin marketplace.

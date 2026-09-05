@@ -1,0 +1,14 @@
+# Negative fixture: the semantic layer must report this.
+expect: "sends a json body but the route declares"
+manifests:
+  immich:
+    spec:
+      operations:
+        - id: recent-assets
+          routes:
+            - { slot: server, method: POST, path: /api/search/metadata, contentType: application/x-www-form-urlencoded }
+          signals: []
+          pipeline:
+            - as: recent
+              request: { slot: server, method: POST, path: /api/search/metadata, body: { json: { size: 6 } } }
+          output: {}

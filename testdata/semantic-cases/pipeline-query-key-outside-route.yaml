@@ -1,0 +1,19 @@
+# Negative fixture: the semantic layer must report this.
+expect: "outside the route allowlist"
+manifests:
+  immich:
+    spec:
+      operations:
+        - id: recent-assets
+          routes:
+            - { slot: server, method: POST, path: /api/search/metadata, contentType: application/json, queryKeys: [safe] }
+          signals: []
+          pipeline:
+            - as: recent
+              request:
+                slot: server
+                method: POST
+                path: /api/search/metadata
+                query: { evil: x }
+                body: { json: { size: 6 } }
+          output: {}

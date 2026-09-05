@@ -1,0 +1,10 @@
+# Negative fixture: the semantic layer must report this.
+expect: "lock/immich: approves a route the manifest never requested"
+lock:
+  integrations:
+    immich:
+      routes:
+        - { slot: server, method: GET,    path: /api/server/statistics }
+        - { slot: server, method: POST,   path: /api/search/metadata }
+        - { slot: server, method: GET,    path: /api/assets/*/thumbnail, use: asset }
+        - { slot: server, method: DELETE, path: /api/albums/* }

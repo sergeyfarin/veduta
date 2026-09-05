@@ -1,0 +1,88 @@
+# Written by `veduta integration approve <id>`; commit it alongside veduta.yaml.
+# A manifest whose digest or effective permissions differ from this record is
+# refused at load with a printed permission diff, until it is approved again.
+version: 1
+integrations:
+  immich:
+    manifestSha256: 9a68a1487e8006e1c0f20687ed6ae3badb6c4075fb420fa961b7342df8150e06
+    version: 0.1.0
+    runtime: declarative
+    approvedAt: "2026-09-04T21:40:00Z"
+    approvedBy: sergey
+    capabilities: [http, assets]
+    effectiveLimits:   # min(core maximum, manifest value-or-default, approved value-or-default)
+      cacheBytesKB: 256
+      cacheEntries: 64
+      exprNodes: 512
+      hostCalls: 256
+      httpRequests: 2
+      inputMB: 4
+      iterations: 20000
+      jsonDepth: 32
+      jsonNodes: 200000
+      memoryMB: 64
+      outputKB: 64
+      requestBodyKB: 64
+      responseMB: 4
+      timeoutMs: 5000
+    routes:
+      - { slot: server, method: GET,  path: /api/server/statistics }
+      - { slot: server, method: POST, path: /api/search/metadata, contentType: application/json }
+      - { slot: server, method: GET,  path: /api/assets/*/thumbnail, use: asset }
+    limits: { httpRequests: 2, timeoutMs: 5000 }
+
+  jellyfin:
+    manifestSha256: b3b852817e0b96ddd7763b119b385402d62168ce60b7ff9f7bc13b8923993ee9
+    moduleSha256:   "0000000000000000000000000000000000000000000000000000000000000000"  # set by the build
+    version: 1.0.0
+    runtime: wasm
+    approvedAt: "2026-09-04T21:41:00Z"
+    approvedBy: sergey
+    capabilities: [http, cache, assets, log]
+    effectiveLimits:   # min(core maximum, manifest value-or-default, approved value-or-default)
+      cacheBytesKB: 256
+      cacheEntries: 64
+      exprNodes: 512
+      hostCalls: 64
+      httpRequests: 8
+      inputMB: 4
+      iterations: 20000
+      jsonDepth: 32
+      jsonNodes: 200000
+      memoryMB: 64
+      outputKB: 64
+      requestBodyKB: 64
+      responseMB: 4
+      timeoutMs: 3000
+    routes:
+      - { slot: server, method: GET, path: /Users }
+      - { slot: server, method: GET, path: /Users/*/Items }
+      - { slot: server, method: GET, path: /Items/*/Images/Primary, use: asset }
+
+  glances:
+    manifestSha256: 2487e1387e05727309307158a483ee0137c22637cc88ad15a4ec7b9485637dfe
+    version: 0.1.0
+    runtime: declarative
+    approvedAt: "2026-09-05T08:00:00Z"
+    approvedBy: sergey
+    capabilities: [http]
+    effectiveLimits:   # min(core maximum, manifest value-or-default, approved value-or-default)
+      cacheBytesKB: 256
+      cacheEntries: 64
+      exprNodes: 512
+      hostCalls: 256
+      httpRequests: 4
+      inputMB: 2
+      iterations: 2000
+      jsonDepth: 32
+      jsonNodes: 200000
+      memoryMB: 64
+      outputKB: 64
+      requestBodyKB: 64
+      responseMB: 4
+      timeoutMs: 3000
+    routes:
+      - { slot: server, method: GET, path: /api/4/cpu }
+      - { slot: server, method: GET, path: /api/4/mem }
+      - { slot: server, method: GET, path: /api/4/fs }
+      - { slot: server, method: GET, path: /api/4/uptime }

@@ -1,0 +1,7 @@
+# Negative fixture: the semantic layer must report this.
+expect: "baseUrl carries userinfo"
+config:
+  connections:
+    immich:
+      kind: http
+      baseUrl: http://user:password@immich.local

@@ -1,0 +1,22 @@
+ADDITIONAL PERMISSION UNDER GNU AGPL VERSION 3 SECTION 7
+
+This permission applies to Veduta as distributed under the GNU Affero General
+Public License version 3 or later (see LICENSE). It is an additional permission
+under section 7 of that license; you may remove it from your copies, but you are
+not required to.
+
+An "Integration" is a work that interacts with Veduta solely through the Veduta
+Integration API: the host functions, the plugin manifest format, and the Widget
+Document format as published in the schemas/ directory of this repository, or
+through the declarative integration manifest format.
+
+Integrations are separate and independent works. Loading, running, or
+distributing an Integration, whether or not it was compiled against a Veduta
+SDK, does not by itself cause that Integration to be a work based on Veduta.
+You may license and distribute Integrations under terms of your choice.
+
+This permission does not extend to works that incorporate, link against, or
+embed source code of Veduta itself, other than the Integration API definitions
+and the SDKs distributed under the Apache License 2.0.
+
+DRAFT — review by counsel before the first public release.

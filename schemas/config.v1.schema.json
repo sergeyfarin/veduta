@@ -1,0 +1,768 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://veduta.dev/schemas/config.v1.schema.json",
+  "title": "Veduta configuration v1 (DRAFT \u2014 finalised in milestone C1)",
+  "type": "object",
+  "required": [
+    "version",
+    "auth"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "server": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "listen": {
+          "type": "string",
+          "default": "127.0.0.1:8099",
+          "description": "Defaults to LOOPBACK. Binding a non-loopback address is refused while auth.mode is none, and refused entirely until the authentication milestone (H1) has landed in the running build."
+        },
+        "dataDir": {
+          "type": "string"
+        },
+        "baseURL": {
+          "type": "string"
+        },
+        "trustedProxies": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "auth": {
+      "type": "object",
+      "required": [
+        "mode"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "enum": [
+            "password",
+            "forward",
+            "none"
+          ]
+        },
+        "admin": {
+          "type": "object",
+          "required": [
+            "username",
+            "passwordHash"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "username": {
+              "type": "string"
+            },
+            "passwordHash": {
+              "type": "string"
+            }
+          }
+        },
+        "forward": {
+          "type": "object",
+          "required": [
+            "trustedProxies"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "trustedProxies": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string"
+              }
+            },
+            "userHeader": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9!#$%&'*+.^_`|~-]+$",
+              "default": "Remote-User"
+            },
+            "groupsHeader": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9!#$%&'*+.^_`|~-]+$"
+            },
+            "adminGroups": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 16,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              "description": "Groups permitted to perform privileged operations when privilegedOperations is admin-group."
+            },
+            "privilegedOperations": {
+              "enum": [
+                "cli-only",
+                "admin-group"
+              ],
+              "default": "cli-only",
+              "description": "Who may approve integrations and perform other privileged operations under forward auth. A group header is AUTHORISATION, not proof of current human presence: it cannot substitute for re-authentication, so cli-only is the default."
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "privilegedOperations": {
+                    "const": "admin-group"
+                  }
+                },
+                "required": [
+                  "privilegedOperations"
+                ]
+              },
+              "then": {
+                "required": [
+                  "groupsHeader",
+                  "adminGroups"
+                ]
+              }
+            }
+          ]
+        },
+        "sessionTTL": {
+          "type": "string",
+          "pattern": "^[0-9]+(m|h|d)$",
+          "default": "720h"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "const": "password"
+              }
+            },
+            "required": [
+              "mode"
+            ]
+          },
+          "then": {
+            "required": [
+              "admin"
+            ],
+            "properties": {
+              "forward": false
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "const": "forward"
+              }
+            },
+            "required": [
+              "mode"
+            ]
+          },
+          "then": {
+            "required": [
+              "forward"
+            ],
+            "properties": {
+              "admin": false
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "const": "none"
+              }
+            },
+            "required": [
+              "mode"
+            ]
+          },
+          "then": {
+            "properties": {
+              "admin": false,
+              "forward": false
+            },
+            "description": "auth: none additionally requires the --i-know-what-im-doing flag when any action or secret is configured (semantic check)."
+          }
+        }
+      ],
+      "description": "Required. There is no implicit default: a dashboard that holds service credentials must state, in the file, who may reach it. With mode: none the server refuses to bind anything but loopback unless --i-know-what-im-doing is passed."
+    },
+    "dashboard": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "title": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "theme": {
+          "type": "string"
+        },
+        "layout": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "columns": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 8,
+              "default": 4
+            },
+            "gap": {
+              "enum": [
+                "tight",
+                "normal",
+                "loose"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "connections": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "kind"
+        ],
+        "oneOf": [
+          {
+            "$ref": "#/$defs/httpConnection"
+          },
+          {
+            "$ref": "#/$defs/dockerConnection"
+          }
+        ]
+      }
+    },
+    "integrations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "source"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{1,38}$"
+          },
+          "source": {
+            "type": "string",
+            "pattern": "^(builtin|path:.+)$"
+          },
+          "enabled": {
+            "type": "boolean",
+            "default": true
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 256
+          }
+        }
+      },
+      "description": "Declares which integrations exist. It does NOT grant them anything: capabilities and routes come from veduta.lock.yaml, which the administrator approves explicitly. See integration-lock.v1.schema.json."
+    },
+    "sections": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/section"
+      }
+    },
+    "rules": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/rule"
+      }
+    },
+    "notifications": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "channels": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[a-z0-9][a-z0-9-]{0,31}$"
+          },
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "type": "object",
+                "required": [
+                  "type",
+                  "url",
+                  "topic"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "type": {
+                    "const": "ntfy"
+                  },
+                  "url": {
+                    "type": "string",
+                    "maxLength": 512,
+                    "pattern": "^https?://[^\\s/?#]+(/[^\\s]*)?$",
+                    "description": "Structural only: scheme, a non-empty authority, no whitespace. Accepts bracketed IPv6 (http://[fd00::1]:8096). Host and port SEMANTICS are validated by the loader with net/url - a regex that tries to validate ports and IPv6 is both wrong and unreadable."
+                  },
+                  "topic": {
+                    "type": "string",
+                    "maxLength": 64
+                  },
+                  "token": {
+                    "$ref": "#/$defs/secretRef"
+                  },
+                  "priority": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 5
+                  },
+                  "rateLimit": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "perHour": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "default": 20
+                      },
+                      "cooldown": {
+                        "type": "string",
+                        "pattern": "^[0-9]+(s|m|h)$"
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type",
+                  "url"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "type": {
+                    "const": "webhook"
+                  },
+                  "url": {
+                    "type": "string",
+                    "maxLength": 512,
+                    "pattern": "^https?://[^\\s/?#]+(/[^\\s]*)?$",
+                    "description": "Webhook URLs commonly embed a token in the path or query, so unlike a connection baseUrl this value is SECRET-CAPABLE: it is stored as a secrets.Value, never logged in full, and appears in logs and errors only as scheme://host plus the channel id."
+                  },
+                  "method": {
+                    "enum": [
+                      "POST",
+                      "PUT"
+                    ],
+                    "default": "POST"
+                  },
+                  "headers": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "$ref": "#/$defs/secretRef"
+                    }
+                  },
+                  "rateLimit": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "perHour": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "default": 20
+                      },
+                      "cooldown": {
+                        "type": "string",
+                        "pattern": "^[0-9]+(s|m|h)$"
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "secretRef": {
+      "type": "string",
+      "description": "Literal value or ${secret:NAME} reference resolved from file:/env: providers."
+    },
+    "httpConnection": {
+      "type": "object",
+      "required": [
+        "kind",
+        "baseUrl"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "http"
+        },
+        "baseUrl": {
+          "type": "string",
+          "maxLength": 512,
+          "pattern": "^https?://[^\\\\s/?#@]+(/[^\\\\s?#]*)?$",
+          "description": "Scheme, authority, optional base path. Userinfo (user:pass@), query strings and fragments are rejected structurally AND by the loader: credentials belong in the typed auth block, which is the only path that gets redaction. Bracketed IPv6 is accepted. Host and port semantics are validated with net/url."
+        },
+        "auth": {
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "enum": [
+                "none",
+                "header",
+                "query",
+                "bearer",
+                "basic"
+              ]
+            },
+            "name": {
+              "type": "string"
+            },
+            "value": {
+              "$ref": "#/$defs/secretRef"
+            },
+            "username": {
+              "type": "string"
+            },
+            "password": {
+              "$ref": "#/$defs/secretRef"
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "type": {
+                    "enum": [
+                      "header",
+                      "query"
+                    ]
+                  }
+                },
+                "required": [
+                  "type"
+                ]
+              },
+              "then": {
+                "required": [
+                  "name",
+                  "value"
+                ]
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "type": {
+                    "const": "bearer"
+                  }
+                },
+                "required": [
+                  "type"
+                ]
+              },
+              "then": {
+                "required": [
+                  "value"
+                ],
+                "properties": {
+                  "name": false
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "type": {
+                    "const": "basic"
+                  }
+                },
+                "required": [
+                  "type"
+                ]
+              },
+              "then": {
+                "required": [
+                  "username",
+                  "password"
+                ],
+                "properties": {
+                  "name": false,
+                  "value": false
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "type": {
+                    "const": "none"
+                  }
+                },
+                "required": [
+                  "type"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "name": false,
+                  "value": false,
+                  "username": false,
+                  "password": false
+                }
+              }
+            }
+          ]
+        },
+        "headers": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "tls": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "insecureSkipVerify": {
+              "type": "boolean",
+              "default": false
+            },
+            "caFile": {
+              "type": "string"
+            },
+            "serverName": {
+              "type": "string"
+            }
+          }
+        },
+        "timeout": {
+          "type": "string",
+          "pattern": "^[0-9]+(ms|s|m)$",
+          "default": "10s"
+        },
+        "maxResponseBytes": {
+          "type": "integer",
+          "minimum": 1024,
+          "default": 8388608
+        },
+        "maxRedirects": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5,
+          "default": 0
+        },
+        "allowedPaths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "rateLimit": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "rps": {
+              "type": "number",
+              "minimum": 0.1,
+              "default": 5
+            },
+            "burst": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 10
+            }
+          }
+        },
+        "concurrency": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 32,
+          "default": 4
+        }
+      }
+    },
+    "dockerConnection": {
+      "type": "object",
+      "required": [
+        "kind",
+        "endpoint"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "docker"
+        },
+        "endpoint": {
+          "type": "string",
+          "pattern": "^(unix://|tcp://)"
+        },
+        "allowActions": {
+          "type": "boolean",
+          "default": false
+        },
+        "timeout": {
+          "type": "string",
+          "pattern": "^[0-9]+(ms|s|m)$",
+          "default": "10s"
+        }
+      }
+    },
+    "section": {
+      "type": "object",
+      "required": [
+        "cards"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "title": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "collapsed": {
+          "type": "boolean"
+        },
+        "cards": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/card"
+          }
+        }
+      }
+    },
+    "card": {
+      "type": "object",
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "href": {
+          "type": "string"
+        },
+        "icon": {
+          "type": "string"
+        },
+        "integration": {
+          "type": "string"
+        },
+        "operation": {
+          "type": "string"
+        },
+        "slots": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "params": {
+          "type": "object"
+        },
+        "view": {
+          "type": "object",
+          "description": "Optional presentation override / inline template for http-json."
+        },
+        "refresh": {
+          "type": "string",
+          "pattern": "^[0-9]+(s|m|h)$"
+        },
+        "span": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "columns": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 8
+            },
+            "rows": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4
+            }
+          }
+        }
+      }
+    },
+    "rule": {
+      "type": "object",
+      "required": [
+        "id",
+        "when",
+        "notify"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+        },
+        "when": {
+          "type": "string",
+          "description": "expr predicate over declared SIGNALS and card execution state, e.g. signal(\"coding-server\",\"fs.root.percent\") > 90 or state(\"jellyfin-recent\") == \"error\". Blocks are presentation and are never queryable. Unknown card ids and undeclared signal names are config-load errors."
+        },
+        "for": {
+          "type": "string",
+          "pattern": "^[0-9]+(s|m|h)$"
+        },
+        "severity": {
+          "enum": [
+            "info",
+            "warning",
+            "critical"
+          ]
+        },
+        "notify": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          }
+        },
+        "resolve": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    }
+  }
+}

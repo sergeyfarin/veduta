@@ -1,0 +1,13 @@
+# Negative fixture: the semantic layer must report this.
+expect: "emits signals not declared by THIS operation"
+manifests:
+  glances:
+    spec:
+      operations:
+        - id: overview
+          routes: []
+          pipeline: []
+          signals: []
+          output:
+            signals:
+              cpu.percent: { value: 1 }

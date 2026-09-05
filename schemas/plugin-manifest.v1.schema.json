@@ -1,0 +1,760 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://veduta.dev/schemas/plugin-manifest.v1.schema.json",
+  "title": "Veduta Integration Manifest v1",
+  "description": "A manifest is a REQUEST for authority, never a grant of it. Nothing here takes effect until it appears in veduta.lock.yaml (see integration-lock.v1.schema.json). Semantic checks the JSON Schema cannot express are enforced by the loader and listed under x-loader-checks.",
+  "type": "object",
+  "required": [
+    "apiVersion",
+    "kind",
+    "metadata",
+    "spec"
+  ],
+  "additionalProperties": false,
+  "x-loader-checks": [
+    "every routes[].slot and pipeline[].request.slot must be declared in spec.slots",
+    "a use=data route requires the http capability and a use=asset route requires the assets capability - an asset-only integration must not be forced to request http",
+    "routes must cover every request an operation can make; a pipeline request with no matching route is a load error, not a runtime denial",
+    "every signal referenced by a rule in configuration must be declared in operations[].signals",
+    "declarative output templates are validated node-by-node against the Widget Document template grammar",
+    "route paths are canonicalised by the shared routine before matching; empty segments, dot segments and any percent-decoding that changes segmentation are rejected there, not here",
+    "route identity for approval and diffing is the full tuple (slot, method, canonical path, use, sorted queryKeys, normalised contentType, effective maxBodyKB) - never method/path alone",
+    "pre-parse core limits (manifest bytes, YAML depth/nodes/aliases, duplicate mapping keys, module file size) are enforced BEFORE schema validation; see 01-architecture.md section 5",
+    "aggregate budgets are enforced in addition to per-expression exprNodes: total expression nodes per operation and per manifest, total template nodes and depth, total literal-string bytes",
+    "manifests may not contain floating-point numbers; every numeric value is an integer, which keeps the canonical digest portable across languages",
+    "versions are validated with a real SemVer 2.0.0 implementation (scripts/gocheck semver in the checker, a library in the loader); the pattern is a pre-filter"
+  ],
+  "properties": {
+    "apiVersion": {
+      "const": "veduta.dev/v1"
+    },
+    "kind": {
+      "const": "Integration"
+    },
+    "metadata": {
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "version"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]{1,38}$"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-((?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\\.(?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\\+([0-9a-zA-Z-]+(?:\\.[0-9a-zA-Z-]+)*))?$",
+          "description": "SemVer 2.0.0, official grammar. Structural only - the loader still parses it, and the checker delegates validity to scripts/gocheck so precedence rules and leading-zero cases are decided by real code."
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 512
+        },
+        "author": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "homepage": {
+          "type": "string",
+          "maxLength": 512,
+          "pattern": "^https?://[^\\s/?#]+(/[^\\s]*)?$",
+          "description": "Structural only: scheme, a non-empty authority, no whitespace. Accepts bracketed IPv6 (http://[fd00::1]:8096). Host and port SEMANTICS are validated by the loader with net/url - a regex that tries to validate ports and IPv6 is both wrong and unreadable."
+        },
+        "license": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "icon": {
+          "type": "string",
+          "maxLength": 64
+        }
+      }
+    },
+    "spec": {
+      "type": "object",
+      "required": [
+        "runtime",
+        "capabilities",
+        "operations"
+      ],
+      "unevaluatedProperties": false,
+      "properties": {
+        "runtime": {
+          "enum": [
+            "declarative",
+            "wasm",
+            "builtin"
+          ]
+        },
+        "slots": {
+          "type": "array",
+          "maxItems": 4,
+          "description": "Abstract connection slots the administrator binds. Integrations never name a connection or a URL.",
+          "items": {
+            "type": "object",
+            "required": [
+              "name",
+              "kind"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]{0,31}$"
+              },
+              "kind": {
+                "enum": [
+                  "http",
+                  "docker"
+                ]
+              },
+              "required": {
+                "type": "boolean",
+                "default": true
+              },
+              "description": {
+                "type": "string",
+                "maxLength": 256
+              }
+            }
+          }
+        },
+        "capabilities": {
+          "type": "array",
+          "uniqueItems": true,
+          "minItems": 0,
+          "description": "Required and explicit - there are no implicit capabilities.",
+          "items": {
+            "enum": [
+              "http",
+              "cache",
+              "assets",
+              "log",
+              "events"
+            ]
+          }
+        },
+        "limits": {
+          "$ref": "#/$defs/limits"
+        },
+        "operations": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "items": {
+            "$ref": "#/$defs/operation"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "runtime": {
+                "const": "wasm"
+              }
+            },
+            "required": [
+              "runtime"
+            ]
+          },
+          "then": {
+            "required": [
+              "module",
+              "sha256"
+            ],
+            "properties": {
+              "module": {
+                "type": "string",
+                "maxLength": 256
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "operations": {
+                "items": {
+                  "not": {
+                    "anyOf": [
+                      {
+                        "required": [
+                          "pipeline"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "output"
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "runtime": {
+                "const": "declarative"
+              }
+            },
+            "required": [
+              "runtime"
+            ]
+          },
+          "then": {
+            "properties": {
+              "module": false,
+              "sha256": false,
+              "operations": {
+                "items": {
+                  "required": [
+                    "pipeline",
+                    "output"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "runtime": {
+                "const": "builtin"
+              }
+            },
+            "required": [
+              "runtime"
+            ]
+          },
+          "then": {
+            "properties": {
+              "module": false,
+              "sha256": false,
+              "operations": {
+                "items": {
+                  "not": {
+                    "anyOf": [
+                      {
+                        "required": [
+                          "pipeline"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "output"
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "$defs": {
+    "route": {
+      "type": "object",
+      "required": [
+        "slot",
+        "method",
+        "path"
+      ],
+      "additionalProperties": false,
+      "description": "The complete upstream request surface of an operation. Method and path are part of the permission. LIMITATION, disclosed at approval time: for APIs that select the operation inside the request body (GraphQL, JSON-RPC, generic /api/action endpoints), a route grant cannot distinguish a query from a mutation. Body-bearing routes are flagged in the approval UI; queryKeys/contentType/maxBodyKB narrow them further, and a request-body schema may be added in a later apiVersion.",
+      "properties": {
+        "slot": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,31}$"
+        },
+        "method": {
+          "enum": [
+            "GET",
+            "HEAD",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE"
+          ]
+        },
+        "path": {
+          "type": "string",
+          "maxLength": 512,
+          "pattern": "^/(?:[A-Za-z0-9_~!$&'()+,;=:@/-]|[.*][A-Za-z0-9_~!$&'()+,;=:@/-])*[.*]?$",
+          "description": "Glob pattern, RE2-compatible and lookahead-free so the Go validator can compile it. `*` matches within a single path segment and never crosses `/`. Multi-segment `**` is NOT part of v1. Percent-encoding, backslashes, `..` and `**` are structurally rejected; everything else about canonicalisation (empty segments, case, encoding) is enforced by the single canonicalisation routine described in 01-architecture.md \u00a76."
+        },
+        "use": {
+          "enum": [
+            "data",
+            "asset"
+          ],
+          "default": "data"
+        },
+        "reason": {
+          "type": "string",
+          "maxLength": 160,
+          "description": "Shown verbatim in the approval prompt."
+        },
+        "queryKeys": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "description": "Optional allowlist of query parameter names this route may set. Compared as a sorted, de-duplicated, case-sensitive set. Omitted means any key except those the connection owns - which is WIDER than any explicit list, so omission is shown as a widening in the approval diff."
+        },
+        "contentType": {
+          "type": "string",
+          "maxLength": 128,
+          "description": "Required request Content-Type for body-bearing methods. Normalised with mime.ParseMediaType: lowercased type/subtype, ALL parameters retained with lowercased keys and sorted order (charset value lowercased). Dropping parameters would collapse semantically distinct media types such as application/vnd.api+json;profile=..."
+        },
+        "maxBodyKB": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1024
+        }
+      }
+    },
+    "signalDecl": {
+      "type": "object",
+      "required": [
+        "name",
+        "type"
+      ],
+      "additionalProperties": false,
+      "description": "Declares a machine-readable value this operation emits. Rules may only reference declared signals, so a typo in a rule is a config error rather than a silent never-firing alert.",
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+){0,4}$",
+          "maxLength": 96
+        },
+        "type": {
+          "enum": [
+            "number",
+            "string",
+            "boolean"
+          ]
+        },
+        "unit": {
+          "enum": [
+            "count",
+            "bytes",
+            "bytes_per_second",
+            "percent",
+            "seconds",
+            "celsius",
+            "ratio",
+            "boolean",
+            "state",
+            "none"
+          ]
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "history": {
+          "type": "boolean",
+          "default": false,
+          "description": "Retain a bounded numeric history for `for:` windows and sparklines."
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": [
+                  "string",
+                  "boolean"
+                ]
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "history": {
+                "const": false
+              },
+              "unit": {
+                "enum": [
+                  "boolean",
+                  "state",
+                  "none"
+                ]
+              }
+            },
+            "description": "Only numeric signals may carry a numeric unit or be retained in history."
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "number"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "unit": {
+                "enum": [
+                  "count",
+                  "bytes",
+                  "bytes_per_second",
+                  "percent",
+                  "seconds",
+                  "celsius",
+                  "ratio",
+                  "none"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
+    "operation": {
+      "type": "object",
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 512
+        },
+        "defaultRefresh": {
+          "type": "string",
+          "pattern": "^[0-9]+(s|m|h)$"
+        },
+        "params": {
+          "type": "object",
+          "description": "JSON Schema subset for card-level parameters; validated before invocation."
+        },
+        "routes": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "$ref": "#/$defs/route"
+          }
+        },
+        "signals": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/signalDecl"
+          }
+        },
+        "pipeline": {
+          "type": "array",
+          "maxItems": 8,
+          "description": "declarative runtime only",
+          "items": {
+            "type": "object",
+            "required": [
+              "request",
+              "as"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "as": {
+                "type": "string",
+                "pattern": "^[a-z][a-zA-Z0-9_]{0,31}$"
+              },
+              "when": {
+                "$ref": "#/$defs/exprNode"
+              },
+              "request": {
+                "type": "object",
+                "required": [
+                  "slot",
+                  "path"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "slot": {
+                    "type": "string"
+                  },
+                  "method": {
+                    "enum": [
+                      "GET",
+                      "HEAD",
+                      "POST",
+                      "PUT",
+                      "PATCH",
+                      "DELETE"
+                    ],
+                    "default": "GET"
+                  },
+                  "path": {
+                    "$ref": "#/$defs/valueNode"
+                  },
+                  "query": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "$ref": "#/$defs/valueNode"
+                    }
+                  },
+                  "headers": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "$ref": "#/$defs/valueNode"
+                    }
+                  },
+                  "body": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "description": "Structured only - there is no string template language. Exactly one of json or form.",
+                    "properties": {
+                      "json": {},
+                      "form": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "$ref": "#/$defs/valueNode"
+                        }
+                      }
+                    },
+                    "oneOf": [
+                      {
+                        "required": [
+                          "json"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "form"
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "output": {
+          "type": "object",
+          "description": "A Widget Document template. Every leaf is either a literal, an {expr} node, an {asset} node, or an {each/as/item} node. There is no name-based inference: a string is always a literal string.",
+          "additionalProperties": true
+        }
+      }
+    },
+    "exprNode": {
+      "type": "object",
+      "required": [
+        "expr"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "expr": {
+          "type": "string",
+          "maxLength": 1024
+        }
+      }
+    },
+    "assetNode": {
+      "type": "object",
+      "required": [
+        "asset"
+      ],
+      "additionalProperties": false,
+      "description": "Mints a signed image ref. Checked against the operation's use=asset routes at evaluation time.",
+      "properties": {
+        "asset": {
+          "type": "object",
+          "required": [
+            "slot",
+            "path"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "slot": {
+              "type": "string"
+            },
+            "path": {
+              "$ref": "#/$defs/valueNode"
+            },
+            "query": {
+              "type": "object",
+              "additionalProperties": {
+                "$ref": "#/$defs/valueNode"
+              }
+            },
+            "transform": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        }
+      }
+    },
+    "eachNode": {
+      "type": "object",
+      "required": [
+        "each",
+        "as",
+        "item"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "each": {
+          "$ref": "#/$defs/exprNode"
+        },
+        "as": {
+          "type": "string",
+          "pattern": "^[a-z][a-zA-Z0-9_]{0,31}$"
+        },
+        "item": {
+          "type": "object"
+        }
+      }
+    },
+    "valueNode": {
+      "oneOf": [
+        {
+          "type": [
+            "string",
+            "number",
+            "boolean",
+            "null"
+          ]
+        },
+        {
+          "$ref": "#/$defs/exprNode"
+        },
+        {
+          "$ref": "#/$defs/assetNode"
+        }
+      ]
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Requested ceilings. The core clamps each to its own maximum; a manifest can only ask for less, and every omitted value takes the core default rather than being unbounded. The declarative runtime executes inside the host process, so inputMB/jsonDepth/jsonNodes/exprNodes/iterations are load-bearing resource controls, not hints - see 01-architecture.md section 5. Defined once here and referenced by the lock schema, so manifest and approval always speak about the same fields with the same bounds and defaults.",
+      "properties": {
+        "memoryMB": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 256,
+          "default": 64
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 30000,
+          "default": 3000
+        },
+        "outputKB": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 256,
+          "default": 64
+        },
+        "httpRequests": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 32,
+          "default": 8
+        },
+        "responseMB": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16,
+          "default": 4
+        },
+        "cacheEntries": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 512,
+          "default": 64
+        },
+        "inputMB": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16,
+          "default": 4,
+          "description": "Maximum total decoded upstream response size an invocation may hold."
+        },
+        "jsonDepth": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 64,
+          "default": 32
+        },
+        "jsonNodes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000000,
+          "default": 200000,
+          "description": "Maximum decoded JSON nodes across all pipeline responses."
+        },
+        "exprNodes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4096,
+          "default": 512,
+          "description": "Maximum AST nodes in any single expression; checked at load, not at run time."
+        },
+        "iterations": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100000,
+          "default": 20000,
+          "description": "Shared per-invocation budget consumed by each/map/filter/sortBy steps and template expansion."
+        },
+        "requestBodyKB": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1024,
+          "default": 64,
+          "description": "Ceiling for request bodies this integration may send. A route's maxBodyKB may only narrow it; omitting both means the core default, never unlimited."
+        },
+        "hostCalls": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2048,
+          "default": 256,
+          "description": "Shared budget across ALL host calls in one invocation - cache get/put, asset minting, log and event emission - not just HTTP. Without it a plugin can flood the log or mint thousands of asset refs inside its deadline."
+        },
+        "cacheBytesKB": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4096,
+          "default": 256,
+          "description": "Total cache bytes per plugin instance. cacheEntries alone bounds the count, not the storage."
+        }
+      }
+    }
+  }
+}

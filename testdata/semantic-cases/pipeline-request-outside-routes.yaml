@@ -1,0 +1,14 @@
+# Negative fixture: the semantic layer must report this.
+expect: "is not covered by any declared route"
+manifests:
+  glances:
+    spec:
+      operations:
+        - id: overview
+          routes:
+            - { slot: server, method: GET, path: /api/4/cpu }
+          pipeline:
+            - as: secrets
+              request: { slot: server, method: GET, path: /api/4/processlist }
+          output: {}
+          signals: []

@@ -1,0 +1,16 @@
+{
+  "spec": {
+    "operations": [
+      {
+        "params": {
+          "default": {
+            "capabilities": [
+              "a",
+              "b"
+            ]
+          }
+        }
+      }
+    ]
+  }
+}

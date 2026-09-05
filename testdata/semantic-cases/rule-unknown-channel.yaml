@@ -1,0 +1,7 @@
+# Negative fixture: the semantic layer must report this.
+expect: "notifies undefined channel"
+config:
+  rules:
+    - id: bad-channel
+      when: 'state("immich-recent") == "error"'
+      notify: [pager]

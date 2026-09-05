@@ -1,0 +1,5 @@
+# Negative fixture: the semantic layer must report this.
+expect: "is not valid SemVer"
+manifests:
+  glances:
+    metadata: { version: 1.0.0-01 }

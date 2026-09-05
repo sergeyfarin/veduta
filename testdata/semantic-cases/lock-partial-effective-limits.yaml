@@ -1,0 +1,8 @@
+# Negative fixture: the semantic layer must report this.
+expect: "effectiveLimits is incomplete"
+lock:
+  integrations:
+    immich:
+      effectiveLimits:
+        __replace__: true
+        timeoutMs: 5000

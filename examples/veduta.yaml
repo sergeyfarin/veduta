@@ -1,0 +1,141 @@
+# yaml-language-server: $schema=https://veduta.dev/schemas/config.v1.schema.json
+version: 1
+
+server:
+  listen: "127.0.0.1:8099"   # loopback by default; see docs/01 D46
+  dataDir: /var/lib/veduta          # SQLite + asset cache live here; config never does
+
+auth:
+  mode: password                     # password | forward | none
+  # forward:
+  #   trustedProxies: [10.81.0.0/16]
+  #   userHeader: Remote-User
+  admin:
+    username: sergey
+    passwordHash: ${secret:VEDUTA_ADMIN_HASH}
+
+dashboard:
+  title: Home
+  theme: auto                        # auto | light | dark | <custom theme name>
+  layout: { columns: 4, gap: normal }
+
+# ── Connections own every URL, credential, TLS setting, timeout and rate limit.
+#    Integrations never see anything in this block.
+connections:
+  immich:
+    kind: http
+    baseUrl: http://immich:2283
+    auth: { type: header, name: x-api-key, value: "${secret:IMMICH_KEY}" }
+    rateLimit: { rps: 5, burst: 10 }
+
+  jellyfin:
+    kind: http
+    baseUrl: http://jellyfin:8096
+    auth: { type: header, name: X-Emby-Token, value: "${secret:JELLYFIN_KEY}" }
+
+  adguard:
+    kind: http
+    baseUrl: http://adguard:3000
+    auth: { type: basic, username: admin, password: "${secret:ADGUARD_PASSWORD}" }
+
+  coding-server:
+    kind: http                       # Glances running on the host — no SSH, no keys held here
+    baseUrl: http://10.81.1.12:61208
+
+  docker-local:
+    kind: docker
+    endpoint: tcp://docker-socket-proxy:2375   # read-only proxy; see docs/security
+    allowActions: false
+
+# ── Integrations are declared once; cards instantiate them.
+# Declaring an integration does NOT grant it anything. Capabilities and the exact
+# upstream routes it may call live in veduta.lock.yaml, approved once by an admin.
+integrations:
+  - id: immich
+    source: path:./plugins/immich    # the flagship declarative integration
+  - id: jellyfin
+    source: path:./plugins/jellyfin  # runtime: wasm, sha256-pinned and lock-approved
+  - id: glances
+    source: path:./plugins/glances
+  - id: docker
+    source: builtin
+  - id: http-json
+    source: builtin
+
+sections:
+  - title: Media
+    cards:
+      - id: jellyfin-recent
+        integration: jellyfin
+        operation: recently-added
+        slots: { server: jellyfin }  # bind the plugin's abstract slot to a real connection
+        params: { limit: 5 }
+        refresh: 5m
+        span: { columns: 2 }
+
+      - id: immich-recent
+        integration: immich
+        operation: recent-assets
+        slots: { server: immich }
+        params: { limit: 6 }
+        refresh: 10m
+        span: { columns: 2 }
+
+  - title: Infrastructure
+    cards:
+      - id: coding-server
+        integration: glances
+        operation: overview
+        slots: { server: coding-server }
+        refresh: 30s
+
+      - id: containers
+        integration: docker
+        operation: containers
+        slots: { server: docker-local }
+        refresh: 1m
+        span: { columns: 2 }
+
+      # The generic escape hatch — Homepage's customapi equivalent, no manifest needed.
+      - id: adguard
+        integration: http-json
+        operation: request
+        slots: { server: adguard }
+        params:
+          path: /control/stats
+        view:
+          title: AdGuard Home
+          blocks:
+            - type: metrics
+              items:
+                - { label: Queries, value: "num_dns_queries", format: number }
+                - { label: Blocked, value: "num_blocked_filtering", format: number }
+                - { label: Blocked %, value: "num_blocked_filtering / num_dns_queries", format: percent }
+
+# Rules read declared signals and core-owned execution state. Blocks are
+# presentation and are never queryable; an undeclared signal is a load error.
+rules:
+  - id: jellyfin-down
+    when: 'state("jellyfin-recent") == "error"'
+    for: 2m
+    severity: warning
+    notify: [phone]
+    resolve: true
+
+  - id: disk-full
+    when: 'signal("coding-server", "fs.root.percent") > 90'
+    for: 5m
+    severity: critical
+    notify: [phone, hooks]
+
+notifications:
+  channels:
+    phone:
+      type: ntfy
+      url: https://ntfy.sh
+      topic: veduta-home
+      token: ${secret:NTFY_TOKEN}
+      rateLimit: { perHour: 20 }
+    hooks:
+      type: webhook
+      url: http://n8n.lan/webhook/veduta

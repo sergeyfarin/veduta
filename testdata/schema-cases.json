@@ -1,0 +1,1917 @@
+{
+  "cases": [
+    {
+      "name": "auth password without admin",
+      "schema": "config",
+      "expect": "reject",
+      "doc": {
+        "version": 1,
+        "auth": {
+          "mode": "password"
+        }
+      }
+    },
+    {
+      "name": "auth password with admin",
+      "schema": "config",
+      "expect": "accept",
+      "doc": {
+        "version": 1,
+        "auth": {
+          "mode": "password",
+          "admin": {
+            "username": "a",
+            "passwordHash": "h"
+          }
+        }
+      }
+    },
+    {
+      "name": "auth forward without trustedProxies",
+      "schema": "config",
+      "expect": "reject",
+      "doc": {
+        "version": 1,
+        "auth": {
+          "mode": "forward"
+        }
+      }
+    },
+    {
+      "name": "auth forward with trustedProxies",
+      "schema": "config",
+      "expect": "accept",
+      "doc": {
+        "version": 1,
+        "auth": {
+          "mode": "forward",
+          "forward": {
+            "trustedProxies": [
+              "10.0.0.0/8"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "basic auth without credentials",
+      "schema": "config",
+      "expect": "reject",
+      "doc": {
+        "version": 1,
+        "connections": {
+          "a": {
+            "kind": "http",
+            "baseUrl": "http://x",
+            "auth": {
+              "type": "basic"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "header auth without name",
+      "schema": "config",
+      "expect": "reject",
+      "doc": {
+        "version": 1,
+        "connections": {
+          "a": {
+            "kind": "http",
+            "baseUrl": "http://x",
+            "auth": {
+              "type": "header",
+              "value": "k"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "header auth complete",
+      "schema": "config",
+      "expect": "accept",
+      "doc": {
+        "version": 1,
+        "connections": {
+          "a": {
+            "kind": "http",
+            "baseUrl": "http://x",
+            "auth": {
+              "type": "header",
+              "name": "x-api-key",
+              "value": "k"
+            }
+          }
+        },
+        "auth": {
+          "mode": "password",
+          "admin": {
+            "username": "a",
+            "passwordHash": "h"
+          }
+        }
+      }
+    },
+    {
+      "name": "connection with non-http scheme",
+      "schema": "config",
+      "expect": "reject",
+      "doc": {
+        "version": 1,
+        "connections": {
+          "a": {
+            "kind": "http",
+            "baseUrl": "file:///etc"
+          }
+        }
+      }
+    },
+    {
+      "name": "ntfy channel without topic",
+      "schema": "config",
+      "expect": "reject",
+      "doc": {
+        "version": 1,
+        "notifications": {
+          "channels": {
+            "p": {
+              "type": "ntfy",
+              "url": "https://n"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "channel with unknown field",
+      "schema": "config",
+      "expect": "reject",
+      "doc": {
+        "version": 1,
+        "notifications": {
+          "channels": {
+            "p": {
+              "type": "ntfy",
+              "url": "https://n",
+              "topic": "t",
+              "evil": 1
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "webhook channel",
+      "schema": "config",
+      "expect": "accept",
+      "doc": {
+        "version": 1,
+        "notifications": {
+          "channels": {
+            "h": {
+              "type": "webhook",
+              "url": "http://n8n/x"
+            }
+          }
+        },
+        "auth": {
+          "mode": "password",
+          "admin": {
+            "username": "a",
+            "passwordHash": "h"
+          }
+        }
+      }
+    },
+    {
+      "name": "wasm manifest carrying declarative fields",
+      "schema": "manifest",
+      "expect": "reject",
+      "doc": {
+        "apiVersion": "veduta.dev/v1",
+        "kind": "Integration",
+        "metadata": {
+          "id": "demo",
+          "name": "Demo",
+          "version": "1.0.0"
+        },
+        "spec": {
+          "runtime": "wasm",
+          "module": "m.wasm",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "capabilities": [
+            "http"
+          ],
+          "operations": [
+            {
+              "id": "o",
+              "pipeline": [
+                {
+                  "as": "a",
+                  "request": {
+                    "slot": "s",
+                    "path": "/p"
+                  }
+                }
+              ],
+              "output": {}
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "declarative manifest carrying module",
+      "schema": "manifest",
+      "expect": "reject",
+      "doc": {
+        "apiVersion": "veduta.dev/v1",
+        "kind": "Integration",
+        "metadata": {
+          "id": "demo",
+          "name": "Demo",
+          "version": "1.0.0"
+        },
+        "spec": {
+          "runtime": "declarative",
+          "module": "m.wasm",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "capabilities": [
+            "http"
+          ],
+          "operations": [
+            {
+              "id": "o",
+              "pipeline": [],
+              "output": {}
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "semver with trailing garbage",
+      "schema": "manifest",
+      "expect": "reject",
+      "doc": {
+        "apiVersion": "veduta.dev/v1",
+        "kind": "Integration",
+        "metadata": {
+          "id": "demo",
+          "name": "Demo",
+          "version": "1.2.3garbage"
+        },
+        "spec": {
+          "runtime": "declarative",
+          "capabilities": [],
+          "operations": [
+            {
+              "id": "o",
+              "pipeline": [],
+              "output": {}
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "semver prerelease",
+      "schema": "manifest",
+      "expect": "accept",
+      "doc": {
+        "apiVersion": "veduta.dev/v1",
+        "kind": "Integration",
+        "metadata": {
+          "id": "demo",
+          "name": "Demo",
+          "version": "1.2.3-rc.1"
+        },
+        "spec": {
+          "runtime": "declarative",
+          "capabilities": [],
+          "operations": [
+            {
+              "id": "o",
+              "pipeline": [],
+              "output": {}
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "manifest without capabilities key",
+      "schema": "manifest",
+      "expect": "reject",
+      "doc": {
+        "apiVersion": "veduta.dev/v1",
+        "kind": "Integration",
+        "metadata": {
+          "id": "demo",
+          "name": "Demo",
+          "version": "1.0.0"
+        },
+        "spec": {
+          "runtime": "declarative",
+          "operations": [
+            {
+              "id": "o",
+              "pipeline": [],
+              "output": {}
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "string-template request body",
+      "schema": "manifest",
+      "expect": "reject",
+      "doc": {
+        "apiVersion": "veduta.dev/v1",
+        "kind": "Integration",
+        "metadata": {
+          "id": "demo",
+          "name": "Demo",
+          "version": "1.0.0"
+        },
+        "spec": {
+          "runtime": "declarative",
+          "capabilities": [
+            "http"
+          ],
+          "operations": [
+            {
+              "id": "o",
+              "pipeline": [
+                {
+                  "as": "a",
+                  "request": {
+                    "slot": "s",
+                    "path": "/p",
+                    "body": "{{ params.limit }}"
+                  }
+                }
+              ],
+              "output": {}
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "route with path traversal",
+      "schema": "manifest",
+      "expect": "reject",
+      "doc": {
+        "apiVersion": "veduta.dev/v1",
+        "kind": "Integration",
+        "metadata": {
+          "id": "demo",
+          "name": "Demo",
+          "version": "1.0.0"
+        },
+        "spec": {
+          "runtime": "wasm",
+          "module": "m.wasm",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "capabilities": [
+            "http"
+          ],
+          "operations": [
+            {
+              "id": "o",
+              "routes": [
+                {
+                  "slot": "s",
+                  "method": "GET",
+                  "path": "/api/../../etc"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "route with unknown method",
+      "schema": "manifest",
+      "expect": "reject",
+      "doc": {
+        "apiVersion": "veduta.dev/v1",
+        "kind": "Integration",
+        "metadata": {
+          "id": "demo",
+          "name": "Demo",
+          "version": "1.0.0"
+        },
+        "spec": {
+          "runtime": "wasm",
+          "module": "m.wasm",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "capabilities": [
+            "http"
+          ],
+          "operations": [
+            {
+              "id": "o",
+              "routes": [
+                {
+                  "slot": "s",
+                  "method": "CONNECT",
+                  "path": "/x"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "wasm manifest complete",
+      "schema": "manifest",
+      "expect": "accept",
+      "doc": {
+        "apiVersion": "veduta.dev/v1",
+        "kind": "Integration",
+        "metadata": {
+          "id": "demo",
+          "name": "Demo",
+          "version": "1.0.0"
+        },
+        "spec": {
+          "runtime": "wasm",
+          "module": "m.wasm",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "capabilities": [
+            "http",
+            "assets"
+          ],
+          "slots": [
+            {
+              "name": "server",
+              "kind": "http"
+            }
+          ],
+          "operations": [
+            {
+              "id": "o",
+              "routes": [
+                {
+                  "slot": "server",
+                  "method": "GET",
+                  "path": "/api/x"
+                },
+                {
+                  "slot": "server",
+                  "method": "GET",
+                  "path": "/api/i/*/thumb",
+                  "use": "asset"
+                }
+              ],
+              "signals": [
+                {
+                  "name": "photos",
+                  "type": "number",
+                  "unit": "count",
+                  "history": true
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "13 blocks",
+      "schema": "widget",
+      "expect": "reject",
+      "doc": {
+        "schemaVersion": 1,
+        "blocks": [
+          {
+            "type": "text",
+            "content": "x"
+          },
+          {
+            "type": "text",
+            "content": "x"
+          },
+          {
+            "type": "text",
+            "content": "x"
+          },
+          {
+            "type": "text",
+            "content": "x"
+          },
+          {
+            "type": "text",
+            "content": "x"
+          },
+          {
+            "type": "text",
+            "content": "x"
+          },
+          {
+            "type": "text",
+            "content": "x"
+          },
+          {
+            "type": "text",
+            "content": "x"
+          },
+          {
+            "type": "text",
+            "content": "x"
+          },
+          {
+            "type": "text",
+            "content": "x"
+          },
+          {
+            "type": "text",
+            "content": "x"
+          },
+          {
+            "type": "text",
+            "content": "x"
+          },
+          {
+            "type": "text",
+            "content": "x"
+          }
+        ]
+      }
+    },
+    {
+      "name": "13 metric items",
+      "schema": "widget",
+      "expect": "reject",
+      "doc": {
+        "schemaVersion": 1,
+        "blocks": [
+          {
+            "type": "metrics",
+            "items": [
+              {
+                "label": "a",
+                "value": 1
+              },
+              {
+                "label": "a",
+                "value": 1
+              },
+              {
+                "label": "a",
+                "value": 1
+              },
+              {
+                "label": "a",
+                "value": 1
+              },
+              {
+                "label": "a",
+                "value": 1
+              },
+              {
+                "label": "a",
+                "value": 1
+              },
+              {
+                "label": "a",
+                "value": 1
+              },
+              {
+                "label": "a",
+                "value": 1
+              },
+              {
+                "label": "a",
+                "value": 1
+              },
+              {
+                "label": "a",
+                "value": 1
+              },
+              {
+                "label": "a",
+                "value": 1
+              },
+              {
+                "label": "a",
+                "value": 1
+              },
+              {
+                "label": "a",
+                "value": 1
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "empty metrics block",
+      "schema": "widget",
+      "expect": "reject",
+      "doc": {
+        "schemaVersion": 1,
+        "blocks": [
+          {
+            "type": "metrics",
+            "items": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "empty list block with empty text",
+      "schema": "widget",
+      "expect": "accept",
+      "doc": {
+        "schemaVersion": 1,
+        "blocks": [
+          {
+            "type": "list",
+            "items": [],
+            "empty": "No streams"
+          }
+        ]
+      }
+    },
+    {
+      "name": "image url instead of ref",
+      "schema": "widget",
+      "expect": "reject",
+      "doc": {
+        "schemaVersion": 1,
+        "blocks": [
+          {
+            "type": "image",
+            "items": [
+              {
+                "image": {
+                  "url": "http://x/y.png"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "javascript link",
+      "schema": "widget",
+      "expect": "reject",
+      "doc": {
+        "schemaVersion": 1,
+        "blocks": [
+          {
+            "type": "list",
+            "items": [
+              {
+                "title": "x",
+                "link": "javascript:alert(1)"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "aspect 0:0",
+      "schema": "widget",
+      "expect": "reject",
+      "doc": {
+        "schemaVersion": 1,
+        "blocks": [
+          {
+            "type": "poster-grid",
+            "items": [
+              {
+                "image": {
+                  "ref": "v1.a.b",
+                  "aspect": "0:0"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "aspect 2:3",
+      "schema": "widget",
+      "expect": "accept",
+      "doc": {
+        "schemaVersion": 1,
+        "blocks": [
+          {
+            "type": "poster-grid",
+            "items": [
+              {
+                "image": {
+                  "ref": "v1.a.b",
+                  "aspect": "2:3"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "metric item carrying an image",
+      "schema": "widget",
+      "expect": "reject",
+      "doc": {
+        "schemaVersion": 1,
+        "blocks": [
+          {
+            "type": "metrics",
+            "items": [
+              {
+                "label": "a",
+                "value": 1,
+                "image": {
+                  "ref": "v1.a.b"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "unknown block type",
+      "schema": "widget",
+      "expect": "reject",
+      "doc": {
+        "schemaVersion": 1,
+        "blocks": [
+          {
+            "type": "iframe",
+            "items": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "integration setting execution metadata",
+      "schema": "widget",
+      "expect": "reject",
+      "doc": {
+        "schemaVersion": 1,
+        "blocks": [
+          {
+            "type": "metrics",
+            "items": [
+              {
+                "label": "a",
+                "value": 1
+              }
+            ]
+          }
+        ],
+        "meta": {
+          "generatedAt": "2026-01-01T00:00:00Z"
+        }
+      }
+    },
+    {
+      "name": "declared signals",
+      "schema": "widget",
+      "expect": "accept",
+      "doc": {
+        "schemaVersion": 1,
+        "blocks": [
+          {
+            "type": "metrics",
+            "items": [
+              {
+                "label": "a",
+                "value": 1
+              }
+            ]
+          }
+        ],
+        "signals": {
+          "fs.root.percent": {
+            "value": 91.2,
+            "unit": "percent"
+          }
+        }
+      }
+    },
+    {
+      "name": "signal name with spaces",
+      "schema": "widget",
+      "expect": "reject",
+      "doc": {
+        "schemaVersion": 1,
+        "blocks": [
+          {
+            "type": "metrics",
+            "items": [
+              {
+                "label": "a",
+                "value": 1
+              }
+            ]
+          }
+        ],
+        "signals": {
+          "FS Root %": {
+            "value": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "markdown over 2KiB",
+      "schema": "widget",
+      "expect": "reject",
+      "doc": {
+        "schemaVersion": 1,
+        "blocks": [
+          {
+            "type": "markdown",
+            "content": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+          }
+        ]
+      }
+    },
+    {
+      "name": "lock without approved routes",
+      "schema": "lock",
+      "expect": "reject",
+      "doc": {
+        "version": 1,
+        "integrations": {
+          "immich": {
+            "manifestSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "approvedAt": "2026-01-01T00:00:00Z",
+            "capabilities": [
+              "http"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "lock with bad digest",
+      "schema": "lock",
+      "expect": "reject",
+      "doc": {
+        "version": 1,
+        "integrations": {
+          "immich": {
+            "manifestSha256": "nothex",
+            "approvedAt": "2026-01-01T00:00:00Z",
+            "capabilities": [],
+            "routes": []
+          }
+        }
+      }
+    },
+    {
+      "name": "route with encoded traversal",
+      "schema": "manifest",
+      "expect": "reject",
+      "doc": {
+        "apiVersion": "veduta.dev/v1",
+        "kind": "Integration",
+        "metadata": {
+          "id": "demo",
+          "name": "Demo",
+          "version": "1.0.0"
+        },
+        "spec": {
+          "runtime": "wasm",
+          "module": "m.wasm",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "capabilities": [
+            "http"
+          ],
+          "operations": [
+            {
+              "id": "o",
+              "routes": [
+                {
+                  "slot": "s",
+                  "method": "GET",
+                  "path": "/safe/%2e%2e/admin"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "route with literal traversal",
+      "schema": "manifest",
+      "expect": "reject",
+      "doc": {
+        "apiVersion": "veduta.dev/v1",
+        "kind": "Integration",
+        "metadata": {
+          "id": "demo",
+          "name": "Demo",
+          "version": "1.0.0"
+        },
+        "spec": {
+          "runtime": "wasm",
+          "module": "m.wasm",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "capabilities": [
+            "http"
+          ],
+          "operations": [
+            {
+              "id": "o",
+              "routes": [
+                {
+                  "slot": "s",
+                  "method": "GET",
+                  "path": "/api/../../etc"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "route with multi-segment glob",
+      "schema": "manifest",
+      "expect": "reject",
+      "doc": {
+        "apiVersion": "veduta.dev/v1",
+        "kind": "Integration",
+        "metadata": {
+          "id": "demo",
+          "name": "Demo",
+          "version": "1.0.0"
+        },
+        "spec": {
+          "runtime": "wasm",
+          "module": "m.wasm",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "capabilities": [
+            "http"
+          ],
+          "operations": [
+            {
+              "id": "o",
+              "routes": [
+                {
+                  "slot": "s",
+                  "method": "GET",
+                  "path": "/a/**/b"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "route with single-segment glob",
+      "schema": "manifest",
+      "expect": "accept",
+      "doc": {
+        "apiVersion": "veduta.dev/v1",
+        "kind": "Integration",
+        "metadata": {
+          "id": "demo",
+          "name": "Demo",
+          "version": "1.0.0"
+        },
+        "spec": {
+          "runtime": "wasm",
+          "module": "m.wasm",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "capabilities": [
+            "http"
+          ],
+          "operations": [
+            {
+              "id": "o",
+              "routes": [
+                {
+                  "slot": "s",
+                  "method": "GET",
+                  "path": "/api/assets/*/thumbnail"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "route with query-key allowlist",
+      "schema": "manifest",
+      "expect": "accept",
+      "doc": {
+        "apiVersion": "veduta.dev/v1",
+        "kind": "Integration",
+        "metadata": {
+          "id": "demo",
+          "name": "Demo",
+          "version": "1.0.0"
+        },
+        "spec": {
+          "runtime": "wasm",
+          "module": "m.wasm",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "capabilities": [
+            "http"
+          ],
+          "operations": [
+            {
+              "id": "o",
+              "routes": [
+                {
+                  "slot": "s",
+                  "method": "GET",
+                  "path": "/api/x",
+                  "queryKeys": [
+                    "size",
+                    "page"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "boolean signal with unit bytes and history",
+      "schema": "manifest",
+      "expect": "reject",
+      "doc": {
+        "apiVersion": "veduta.dev/v1",
+        "kind": "Integration",
+        "metadata": {
+          "id": "demo",
+          "name": "Demo",
+          "version": "1.0.0"
+        },
+        "spec": {
+          "runtime": "wasm",
+          "module": "m.wasm",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "capabilities": [
+            "http"
+          ],
+          "operations": [
+            {
+              "id": "o",
+              "signals": [
+                {
+                  "name": "up",
+                  "type": "boolean",
+                  "unit": "bytes",
+                  "history": true
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "boolean signal with unit state",
+      "schema": "manifest",
+      "expect": "accept",
+      "doc": {
+        "apiVersion": "veduta.dev/v1",
+        "kind": "Integration",
+        "metadata": {
+          "id": "demo",
+          "name": "Demo",
+          "version": "1.0.0"
+        },
+        "spec": {
+          "runtime": "wasm",
+          "module": "m.wasm",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "capabilities": [
+            "http"
+          ],
+          "operations": [
+            {
+              "id": "o",
+              "signals": [
+                {
+                  "name": "up",
+                  "type": "boolean",
+                  "unit": "state"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "numeric signal with unit state",
+      "schema": "manifest",
+      "expect": "reject",
+      "doc": {
+        "apiVersion": "veduta.dev/v1",
+        "kind": "Integration",
+        "metadata": {
+          "id": "demo",
+          "name": "Demo",
+          "version": "1.0.0"
+        },
+        "spec": {
+          "runtime": "wasm",
+          "module": "m.wasm",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "capabilities": [
+            "http"
+          ],
+          "operations": [
+            {
+              "id": "o",
+              "signals": [
+                {
+                  "name": "n",
+                  "type": "number",
+                  "unit": "state"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "homepage url with no host",
+      "schema": "manifest",
+      "expect": "reject",
+      "doc": {
+        "apiVersion": "veduta.dev/v1",
+        "kind": "Integration",
+        "metadata": {
+          "id": "demo",
+          "name": "Demo",
+          "version": "1.0.0",
+          "homepage": "https://"
+        },
+        "spec": {
+          "runtime": "wasm",
+          "module": "m",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "capabilities": [],
+          "operations": [
+            {
+              "id": "o"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "request body with neither json nor form",
+      "schema": "manifest",
+      "expect": "reject",
+      "doc": {
+        "apiVersion": "veduta.dev/v1",
+        "kind": "Integration",
+        "metadata": {
+          "id": "demo",
+          "name": "Demo",
+          "version": "1.0.0"
+        },
+        "spec": {
+          "runtime": "declarative",
+          "capabilities": [
+            "http"
+          ],
+          "operations": [
+            {
+              "id": "o",
+              "pipeline": [
+                {
+                  "as": "a",
+                  "request": {
+                    "slot": "s",
+                    "path": "/p",
+                    "body": {}
+                  }
+                }
+              ],
+              "output": {}
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "request body with both json and form",
+      "schema": "manifest",
+      "expect": "reject",
+      "doc": {
+        "apiVersion": "veduta.dev/v1",
+        "kind": "Integration",
+        "metadata": {
+          "id": "demo",
+          "name": "Demo",
+          "version": "1.0.0"
+        },
+        "spec": {
+          "runtime": "declarative",
+          "capabilities": [
+            "http"
+          ],
+          "operations": [
+            {
+              "id": "o",
+              "pipeline": [
+                {
+                  "as": "a",
+                  "request": {
+                    "slot": "s",
+                    "path": "/p",
+                    "body": {
+                      "json": {},
+                      "form": {}
+                    }
+                  }
+                }
+              ],
+              "output": {}
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "lock with negative timeout",
+      "schema": "lock",
+      "expect": "reject",
+      "doc": {
+        "version": 1,
+        "integrations": {
+          "immich": {
+            "manifestSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "approvedAt": "2026-01-01T00:00:00Z",
+            "capabilities": [],
+            "routes": [],
+            "limits": {
+              "timeoutMs": -5
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "lock with timeout above the core maximum",
+      "schema": "lock",
+      "expect": "reject",
+      "doc": {
+        "version": 1,
+        "integrations": {
+          "immich": {
+            "manifestSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "approvedAt": "2026-01-01T00:00:00Z",
+            "capabilities": [],
+            "routes": [],
+            "limits": {
+              "timeoutMs": 999999
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "wasm lock without moduleSha256",
+      "schema": "lock",
+      "expect": "reject",
+      "doc": {
+        "version": 1,
+        "integrations": {
+          "immich": {
+            "manifestSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "runtime": "wasm",
+            "approvedAt": "2026-01-01T00:00:00Z",
+            "capabilities": [],
+            "routes": []
+          }
+        }
+      }
+    },
+    {
+      "name": "wasm lock with moduleSha256",
+      "schema": "lock",
+      "expect": "accept",
+      "doc": {
+        "version": 1,
+        "integrations": {
+          "immich": {
+            "manifestSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "moduleSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "runtime": "wasm",
+            "approvedAt": "2026-01-01T00:00:00Z",
+            "capabilities": [],
+            "routes": [],
+            "effectiveLimits": {
+              "cacheBytesKB": 256,
+              "cacheEntries": 64,
+              "exprNodes": 512,
+              "hostCalls": 256,
+              "httpRequests": 8,
+              "inputMB": 4,
+              "iterations": 20000,
+              "jsonDepth": 32,
+              "jsonNodes": 200000,
+              "memoryMB": 64,
+              "outputKB": 64,
+              "requestBodyKB": 64,
+              "responseMB": 4,
+              "timeoutMs": 3000
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "lock with malformed approvedAt",
+      "schema": "lock",
+      "expect": "reject",
+      "doc": {
+        "version": 1,
+        "integrations": {
+          "immich": {
+            "manifestSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "approvedAt": "yesterday",
+            "capabilities": [],
+            "routes": []
+          }
+        }
+      }
+    },
+    {
+      "name": "connection baseUrl with no host",
+      "schema": "config",
+      "expect": "reject",
+      "doc": {
+        "version": 1,
+        "connections": {
+          "a": {
+            "kind": "http",
+            "baseUrl": "http://"
+          }
+        }
+      }
+    },
+    {
+      "name": "webhook url with no host",
+      "schema": "config",
+      "expect": "reject",
+      "doc": {
+        "version": 1,
+        "notifications": {
+          "channels": {
+            "h": {
+              "type": "webhook",
+              "url": "https://"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "widget link with no host",
+      "schema": "widget",
+      "expect": "reject",
+      "doc": {
+        "schemaVersion": 1,
+        "link": "https://",
+        "blocks": [
+          {
+            "type": "text",
+            "content": "x"
+          }
+        ]
+      }
+    },
+    {
+      "name": "widget timestamp not rfc3339",
+      "schema": "widget",
+      "expect": "reject",
+      "doc": {
+        "schemaVersion": 1,
+        "blocks": [
+          {
+            "type": "list",
+            "items": [
+              {
+                "title": "a",
+                "timestamp": "yesterday"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "cardstate ok without document",
+      "schema": "cardstate",
+      "expect": "reject",
+      "doc": {
+        "cardId": "c",
+        "execution": {
+          "state": "ok"
+        }
+      }
+    },
+    {
+      "name": "cardstate ok complete",
+      "schema": "cardstate",
+      "expect": "accept",
+      "doc": {
+        "cardId": "c",
+        "document": {
+          "schemaVersion": 1,
+          "blocks": [
+            {
+              "type": "text",
+              "content": "x"
+            }
+          ]
+        },
+        "execution": {
+          "state": "ok",
+          "generatedAt": "2026-09-04T21:00:00Z",
+          "ttlSeconds": 60,
+          "expiresAt": "2026-09-04T21:01:00Z"
+        }
+      }
+    },
+    {
+      "name": "cardstate error carrying a document",
+      "schema": "cardstate",
+      "expect": "reject",
+      "doc": {
+        "cardId": "c",
+        "document": {
+          "schemaVersion": 1,
+          "blocks": [
+            {
+              "type": "text",
+              "content": "x"
+            }
+          ]
+        },
+        "execution": {
+          "state": "error",
+          "error": {
+            "code": "upstream",
+            "message": "x"
+          }
+        }
+      }
+    },
+    {
+      "name": "cardstate error without error object",
+      "schema": "cardstate",
+      "expect": "reject",
+      "doc": {
+        "cardId": "c",
+        "document": null,
+        "execution": {
+          "state": "error"
+        }
+      }
+    },
+    {
+      "name": "cardstate stale without document",
+      "schema": "cardstate",
+      "expect": "reject",
+      "doc": {
+        "cardId": "c",
+        "execution": {
+          "state": "stale"
+        }
+      }
+    },
+    {
+      "name": "cardstate pending carrying a document",
+      "schema": "cardstate",
+      "expect": "reject",
+      "doc": {
+        "cardId": "c",
+        "document": {
+          "schemaVersion": 1,
+          "blocks": [
+            {
+              "type": "text",
+              "content": "x"
+            }
+          ]
+        },
+        "execution": {
+          "state": "pending"
+        }
+      }
+    },
+    {
+      "name": "cardstate disabled without reason",
+      "schema": "cardstate",
+      "expect": "reject",
+      "doc": {
+        "cardId": "c",
+        "document": {
+          "schemaVersion": 1,
+          "blocks": [
+            {
+              "type": "text",
+              "content": "x"
+            }
+          ]
+        },
+        "execution": {
+          "state": "disabled"
+        }
+      }
+    },
+    {
+      "name": "cardstate with invalid date-time",
+      "schema": "cardstate",
+      "expect": "reject",
+      "doc": {
+        "cardId": "c",
+        "document": {
+          "schemaVersion": 1,
+          "blocks": [
+            {
+              "type": "text",
+              "content": "x"
+            }
+          ]
+        },
+        "execution": {
+          "state": "ok",
+          "generatedAt": "not-a-date",
+          "ttlSeconds": 60,
+          "expiresAt": "2026-09-04T21:01:00Z"
+        }
+      }
+    },
+    {
+      "name": "cardstate disabled with an intervention reason",
+      "schema": "cardstate",
+      "expect": "accept",
+      "doc": {
+        "cardId": "c",
+        "document": {
+          "schemaVersion": 1,
+          "blocks": [
+            {
+              "type": "text",
+              "content": "x"
+            }
+          ]
+        },
+        "execution": {
+          "state": "disabled",
+          "disabledReason": "unapproved"
+        }
+      }
+    },
+    {
+      "name": "cardstate disabled claiming circuit-open",
+      "schema": "cardstate",
+      "expect": "reject",
+      "doc": {
+        "cardId": "c",
+        "document": {
+          "schemaVersion": 1,
+          "blocks": [
+            {
+              "type": "text",
+              "content": "x"
+            }
+          ]
+        },
+        "execution": {
+          "state": "disabled",
+          "disabledReason": "circuit-open"
+        }
+      }
+    },
+    {
+      "name": "cardstate disabled carrying circuitOpenUntil",
+      "schema": "cardstate",
+      "expect": "reject",
+      "doc": {
+        "cardId": "c",
+        "document": {
+          "schemaVersion": 1,
+          "blocks": [
+            {
+              "type": "text",
+              "content": "x"
+            }
+          ]
+        },
+        "execution": {
+          "state": "disabled",
+          "disabledReason": "operator",
+          "circuitOpenUntil": "2026-09-05T10:00:00Z"
+        }
+      }
+    },
+    {
+      "name": "open circuit as stale with a probe time",
+      "schema": "cardstate",
+      "expect": "accept",
+      "doc": {
+        "cardId": "c",
+        "document": {
+          "schemaVersion": 1,
+          "blocks": [
+            {
+              "type": "text",
+              "content": "x"
+            }
+          ]
+        },
+        "execution": {
+          "state": "stale",
+          "generatedAt": "2026-09-05T09:00:00Z",
+          "staleSince": "2026-09-05T09:05:00Z",
+          "circuitOpenUntil": "2026-09-05T09:20:00Z",
+          "nextRunAt": "2026-09-05T09:20:00Z"
+        }
+      }
+    },
+    {
+      "name": "open circuit as error with a probe time",
+      "schema": "cardstate",
+      "expect": "accept",
+      "doc": {
+        "cardId": "c",
+        "document": null,
+        "execution": {
+          "state": "error",
+          "error": {
+            "code": "upstream",
+            "message": "x"
+          },
+          "circuitOpenUntil": "2026-09-05T09:20:00Z",
+          "nextRunAt": "2026-09-05T09:20:00Z"
+        }
+      }
+    },
+    {
+      "name": "ok carrying circuitOpenUntil",
+      "schema": "cardstate",
+      "expect": "reject",
+      "doc": {
+        "cardId": "c",
+        "document": {
+          "schemaVersion": 1,
+          "blocks": [
+            {
+              "type": "text",
+              "content": "x"
+            }
+          ]
+        },
+        "execution": {
+          "state": "ok",
+          "generatedAt": "2026-09-05T09:00:00Z",
+          "ttlSeconds": 60,
+          "expiresAt": "2026-09-05T09:01:00Z",
+          "circuitOpenUntil": "2026-09-05T09:20:00Z"
+        }
+      }
+    },
+    {
+      "name": "forward auth admin-group without adminGroups",
+      "schema": "config",
+      "expect": "reject",
+      "doc": {
+        "version": 1,
+        "auth": {
+          "mode": "forward",
+          "forward": {
+            "trustedProxies": [
+              "10.0.0.0/8"
+            ],
+            "privilegedOperations": "admin-group"
+          }
+        }
+      }
+    },
+    {
+      "name": "forward auth admin-group complete",
+      "schema": "config",
+      "expect": "accept",
+      "doc": {
+        "version": 1,
+        "auth": {
+          "mode": "forward",
+          "forward": {
+            "trustedProxies": [
+              "10.0.0.0/8"
+            ],
+            "privilegedOperations": "admin-group",
+            "groupsHeader": "Remote-Groups",
+            "adminGroups": [
+              "veduta-admins"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "IPv6 baseUrl",
+      "schema": "config",
+      "expect": "accept",
+      "doc": {
+        "version": 1,
+        "connections": {
+          "a": {
+            "kind": "http",
+            "baseUrl": "http://[fd00::1]:8096"
+          }
+        },
+        "auth": {
+          "mode": "password",
+          "admin": {
+            "username": "a",
+            "passwordHash": "h"
+          }
+        }
+      }
+    },
+    {
+      "name": "baseUrl with no authority",
+      "schema": "config",
+      "expect": "reject",
+      "doc": {
+        "version": 1,
+        "connections": {
+          "a": {
+            "kind": "http",
+            "baseUrl": "http:///path"
+          }
+        }
+      }
+    },
+    {
+      "name": "manifest declaring declarative resource limits",
+      "schema": "manifest",
+      "expect": "accept",
+      "doc": {
+        "apiVersion": "veduta.dev/v1",
+        "kind": "Integration",
+        "metadata": {
+          "id": "demo",
+          "name": "Demo",
+          "version": "1.0.0"
+        },
+        "spec": {
+          "runtime": "wasm",
+          "module": "m.wasm",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "capabilities": [
+            "http"
+          ],
+          "operations": [
+            {
+              "id": "o"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "route maxBodyKB above the ceiling",
+      "schema": "manifest",
+      "expect": "reject",
+      "doc": {
+        "apiVersion": "veduta.dev/v1",
+        "kind": "Integration",
+        "metadata": {
+          "id": "demo",
+          "name": "Demo",
+          "version": "1.0.0"
+        },
+        "spec": {
+          "runtime": "wasm",
+          "module": "m.wasm",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "capabilities": [
+            "http"
+          ],
+          "limits": {
+            "requestBodyKB": 64
+          },
+          "operations": [
+            {
+              "id": "o",
+              "routes": [
+                {
+                  "slot": "s",
+                  "method": "POST",
+                  "path": "/x",
+                  "maxBodyKB": 2000
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "iterations budget above the core maximum",
+      "schema": "manifest",
+      "expect": "reject",
+      "doc": {
+        "apiVersion": "veduta.dev/v1",
+        "kind": "Integration",
+        "metadata": {
+          "id": "demo",
+          "name": "Demo",
+          "version": "1.0.0"
+        },
+        "spec": {
+          "runtime": "declarative",
+          "capabilities": [],
+          "limits": {
+            "iterations": 1000000000
+          },
+          "operations": [
+            {
+              "id": "o",
+              "pipeline": [],
+              "output": {}
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "lock with partial effectiveLimits",
+      "schema": "lock",
+      "expect": "reject",
+      "doc": {
+        "version": 1,
+        "integrations": {
+          "immich": {
+            "manifestSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "approvedAt": "2026-01-01T00:00:00Z",
+            "capabilities": [],
+            "routes": [],
+            "effectiveLimits": {
+              "timeoutMs": 3000
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "lock without effectiveLimits",
+      "schema": "lock",
+      "expect": "reject",
+      "doc": {
+        "version": 1,
+        "integrations": {
+          "immich": {
+            "manifestSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "approvedAt": "2026-01-01T00:00:00Z",
+            "capabilities": [],
+            "routes": []
+          }
+        }
+      }
+    },
+    {
+      "name": "config without an auth block",
+      "schema": "config",
+      "expect": "reject",
+      "doc": {
+        "version": 1,
+        "connections": {
+          "a": {
+            "kind": "http",
+            "baseUrl": "http://x"
+          }
+        }
+      }
+    }
+  ]
+}

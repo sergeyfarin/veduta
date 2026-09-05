@@ -1,0 +1,5 @@
+# Negative fixture: the semantic layer must report this.
+expect: "does not match the canonical digest"
+manifests:
+  immich:
+    metadata: { version: 0.9.9 }

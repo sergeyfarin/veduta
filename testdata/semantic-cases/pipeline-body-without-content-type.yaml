@@ -1,0 +1,14 @@
+# Negative fixture: the semantic layer must report this.
+expect: "route declares no contentType"
+manifests:
+  immich:
+    spec:
+      operations:
+        - id: recent-assets
+          routes:
+            - { slot: server, method: POST, path: /api/search/metadata }
+          signals: []
+          pipeline:
+            - as: recent
+              request: { slot: server, method: POST, path: /api/search/metadata, body: { json: { size: 6 } } }
+          output: {}

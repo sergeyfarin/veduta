@@ -1,0 +1,10 @@
+# Negative fixture: the semantic layer must report this.
+expect: "wants kind 'http' but connection"
+config:
+  sections:
+    - title: Media
+      cards:
+        - id: immich-recent
+          integration: immich
+          operation: recent-assets
+          slots: { server: docker-local }
