@@ -395,12 +395,51 @@ background, so it needs to stay legible against any photo in either theme, which
 cannot express. Still a token, still enforced by the same test; this is the one legitimate
 exception to "every colour is a token," not a literal smuggled past the guard.
 
-**B5 · Fixture dashboard + visual regression baseline** · 0.5 d · deps: B3, B4
-Creates: `testdata/dashboards/showcase.json` (deterministic documents, checked-in local images),
-`--fixtures` dev flag serving them, `web/tests/visual.spec.ts`, pinned Playwright browser in CI,
-frozen clock, single font/OS environment.
-AC: three baseline screenshots (light, dark, mobile) committed; the suite is green twice in a row
-with no flake; a deliberate CSS change fails the suite.
+**B5 · Fixture dashboard + visual regression baseline** · 0.5 d · deps: B3, B4 · **DONE**
+Creates: `internal/fixtures/{showcase.json,images/}` (13 deterministic CardStates, checked-in
+local JPEGs, exercising all 9 block types and all 5 execution states), `internal/fixtures.Load`
+(re-validates every document against the real widget schema and cross-checks every descriptor
+against its card, not just decodes), the `--fixtures` dev flag on `veduta serve`
+(`internal/api/fixtures.go`: `GET /dashboard`, `/cards`, `/cards/{id}`, `/assets/{token}`, gated
+entirely behind `Config.Fixtures` so the surface does not exist at all in a normal binary),
+`web/playwright.config.ts` + `web/tests/visual.spec.ts` (`@playwright/test` pinned to 1.62.1,
+matching the borrowed engine used for verification since B1), and the checked-in baselines under
+`web/tests/visual.spec.ts-snapshots/`.
+
+Corrected from the plan while building it: the milestone text named
+`testdata/dashboards/showcase.json` at the repository root, but `go:embed` cannot reach outside
+its package directory (no `..`, no absolute paths) - the fixture binary needs this data compiled
+in, not read from a source tree that may not exist at runtime. The data moved into
+`internal/fixtures/` itself; `docs/01-architecture.md` section 9's route table is unaffected, and
+`--fixtures` is the only thing that ever reads it.
+
+`App.svelte` changed from B1-B4's hardcoded showcase literals to a real fetch-driven renderer:
+`GET /dashboard` for layout, `GET /cards` for every CardState, mapped through the same `isOk` /
+`isStale` / `isError` / `isDisabled` / `isPending` guards B2 generated. This is not scope creep -
+the milestone's own text ("a `--fixtures` dev flag *serving* them") only makes sense if something
+fetches what is served, and it is the same component Phase C's real configuration and Phase F's
+real scheduler will drive once they exist; only the data source changes underneath. A card's
+`document.status.{level,text}` (not a hardcoded per-card prop) now drives the head status text,
+matching what the schema actually reserves that field for - "34d" and "14 running" are fixture
+content, not App.svelte literals, and `formatRelativeTime` (exported from `format.ts`, previously
+private) turns `staleSince`/`nextRunAt` into the stale/error notices' text.
+
+AC verified for real: `pnpm --filter veduta-web test:e2e` run twice consecutively, both green, no
+flake. For the third AC item a first attempt was a false pass worth recording - setting
+`.card`'s `border-radius` to 0 did **not** fail the suite, because `--v-bg` (#fbfbf9) and
+`--v-surface` (#fff) are close enough in light mode that Playwright's default perceptual
+threshold (pixelmatch, not byte-identical) judged the corner pixels unchanged. A second,
+unambiguous mutation - `--v-bg` to `#ff0000` - failed light and mobile immediately (0.24 of all
+pixels differing) while correctly leaving dark green (only the light token was touched),
+confirming the harness catches a real regression rather than merely existing. Both mutations were
+reverted before committing; `git diff --stat` was checked clean on both files first.
+
+The frozen clock is `page.clock.setFixedTime` set to an instant just after the showcase's own
+stale/error timestamps (chosen so `formatRelativeTime` renders fixed strings - "7 minutes ago",
+"retry in 40 seconds" - independent of the real wall clock on any day the suite runs), which is
+also why running the app under plain `--fixtures` without Playwright shows the same text drifting
+with real time: that is correct, expected behaviour for a dev flag, not a bug the frozen clock
+needs to hide.
 
 ### Phase C — Configuration (2.5 d)
 

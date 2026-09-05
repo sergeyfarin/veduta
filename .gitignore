@@ -21,3 +21,8 @@ web/build/*
 
 # Captured upstream fixtures are reviewed by hand before committing (see hack/capture-upstream-fixtures.sh)
 testdata/upstream/
+
+# Playwright: baselines under web/tests/*-snapshots/ ARE committed; run output is not.
+web/test-results/
+web/playwright-report/
+web/blob-report/

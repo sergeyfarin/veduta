@@ -9,9 +9,12 @@
     "check": "svelte-check --tsconfig ./tsconfig.json",
     "gen-types": "node scripts/gen-types.mjs",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "test:e2e:update": "playwright test --update-snapshots"
   },
   "devDependencies": {
+    "@playwright/test": "1.62.1",
     "@sveltejs/vite-plugin-svelte": "7.3.0",
     "@testing-library/jest-dom": "7.0.1",
     "@testing-library/svelte": "5.4.2",

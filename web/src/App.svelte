@@ -5,17 +5,23 @@
   import Section from './lib/Section.svelte';
   import Skeleton from './lib/Skeleton.svelte';
   import { apply, next, stored, type Theme } from './lib/theme';
-  import type { BuildInfo } from './lib/types';
+  import { formatRelativeTime } from './lib/format';
+  import { isStale, isError, isDisabled, isPending, type CardState as CardEnvelope } from './lib/types/cardstate';
+  import type { Dashboard } from './lib/types/dashboard';
+  import type { BuildInfo, CardState as CardVisualState } from './lib/types';
 
   /**
-   * B1 supplied the shell (tokens, grid, card states, theme). B3 fills six of the nine block
-   * types with real renderers - status, metrics, key-value, progress, list, text/markdown; the
-   * remaining three (image, image-grid/poster-grid, table, actions) are B4 and later. The layout
-   * itself still comes from configuration only in C1; until then this page is a fixed showcase
-   * exercising every card state AND every B3 block type, reviewable against the S4 prototype.
+   * The real render path (milestone B5): GET /dashboard supplies layout (sections, card
+   * descriptors, spans), GET /cards supplies every card's current CardState envelope. Neither
+   * endpoint exists outside dev today - only the --fixtures flag serves them, from the checked-in
+   * showcase - but this component itself is the same one production configuration (Phase C) and
+   * the scheduler (Phase F) will drive once they exist; only the data source changes underneath.
    */
   let theme = $state<Theme>(stored());
   let build = $state<BuildInfo | null>(null);
+  let dashboard = $state<Dashboard | null>(null);
+  let cardsById = $state<Map<string, CardEnvelope>>(new Map());
+  let loadError = $state<string | null>(null);
 
   $effect(() => {
     apply(theme);
@@ -27,184 +33,95 @@
       .then((info: BuildInfo) => (build = info))
       .catch(() => (build = null));
   });
+
+  $effect(() => {
+    Promise.all([
+      fetch('/api/v1/dashboard').then((r) =>
+        r.ok ? (r.json() as Promise<Dashboard>) : Promise.reject(new Error(`GET /dashboard: HTTP ${r.status}`))
+      ),
+      fetch('/api/v1/cards').then((r) =>
+        r.ok ? (r.json() as Promise<CardEnvelope[]>) : Promise.reject(new Error(`GET /cards: HTTP ${r.status}`))
+      )
+    ])
+      .then(([d, cards]) => {
+        dashboard = d;
+        cardsById = new Map(cards.map((c) => [c.cardId, c]));
+        loadError = null;
+      })
+      .catch((err: unknown) => {
+        loadError = err instanceof Error ? err.message : String(err);
+      });
+  });
+
+  // disabledReason is core-owned and machine-readable (schemas/card-state.v1); this is the one
+  // place it becomes the sentence a person reads on the card.
+  const disabledReasonText: Record<string, string> = {
+    unapproved: 'Awaiting approval',
+    'permissions-changed': 'Permissions changed',
+    'integration-missing': 'Integration missing',
+    'config-error': 'Configuration error',
+    operator: 'Turned off'
+  };
+
+  function visualState(cs: CardEnvelope | undefined): CardVisualState {
+    return cs?.execution.state ?? 'pending';
+  }
 </script>
 
 <div class="page">
   <header class="topbar">
     <h1>Home</h1>
-    <span class="sub">B3 — block renderers: status, metrics, key-value, progress, list, text</span>
     <span class="spacer"></span>
     <button onclick={() => (theme = next(theme))}>
       Theme: {theme}
     </button>
   </header>
 
-  <Section title="Card states">
-    <Grid>
-      <Card title="Jellyfin" icon="JF" span={{ columns: 2, rows: 2 }} href="#">
-        <!-- Real refs, pointing at the documented /api/v1/assets/{token} endpoint - it does not
-             exist until milestone E1, so these honestly 404 in dev today, exercising the
-             broken-image state for real rather than faking a happy path. -->
-        <BlockRenderer
-          block={{
-            type: 'poster-grid',
-            items: [
-              { id: 'a1', title: 'Dune', subtitle: '2021', image: { ref: 'v1.aGVsbG8.d29ybGQ', aspect: '2:3' } },
-              { id: 'a2', title: 'Arrival', subtitle: '2016', image: { ref: 'v1.aGVsbG8.d29ybGE', aspect: '2:3' } },
-              { id: 'a3', title: 'Blade Runner 2049', image: { ref: 'v1.aGVsbG8.d29ybGI', aspect: '2:3' } },
-              { id: 'a4', title: 'Severance', subtitle: 'S2', image: { ref: 'v1.aGVsbG8.d29ybGM', aspect: '2:3' } },
-              { id: 'a5', title: 'Andor', subtitle: 'S2', image: { ref: 'v1.aGVsbG8.d29ybGQ2', aspect: '2:3' } }
-            ]
-          }}
-        />
-      </Card>
+  {#if loadError}
+    <p class="error-banner">Could not load the dashboard: {loadError}</p>
+  {/if}
 
-      <Card title="coding-server" icon="CS" statusText="34d" span={{ rows: 2 }}>
-        <BlockRenderer
-          block={{
-            type: 'progress',
-            items: [
-              { label: 'CPU', progress: 0.12 },
-              { label: 'Memory', progress: 0.61 },
-              { label: 'Root', progress: 0.92, level: 'error' }
-            ]
-          }}
-        />
-      </Card>
-
-      <Card title="Proxmox" icon="PX" state="stale" age="7m ago" span={{ rows: 2 }}>
-        <BlockRenderer
-          block={{
-            type: 'metrics',
-            items: [
-              { label: 'VMs', value: 7, format: 'count' },
-              { label: 'CPU', value: 0.23, format: 'percent' },
-              { label: 'Uptime', value: 8294400, format: 'duration' }
-            ]
-          }}
-        />
-      </Card>
-
-      <Card
-        title="Frigate"
-        icon="FR"
-        state="error"
-        error="502 Bad Gateway"
-        retry="40s"
-        span={{ rows: 2 }}
-      />
-
-      <Card title="Uptime Kuma" icon="UP" state="pending" span={{ rows: 2 }}>
-        <div class="pending">
-          <Skeleton width="56px" />
-          <Skeleton width="80px" />
-        </div>
-      </Card>
-
-      <Card
-        title="Immich"
-        icon="IM"
-        state="disabled"
-        disabledReason="Awaiting approval"
-        span={{ rows: 2 }}
-      />
-
-      <Card title="AdGuard" icon="AG" span={{ rows: 2 }}>
-        <BlockRenderer
-          block={{
-            type: 'key-value',
-            items: [
-              { label: 'Queries today', value: 184902, format: 'count' },
-              { label: 'Blocked', value: 0.314, format: 'percent' }
-            ]
-          }}
-        />
-      </Card>
-
-      <Card title="Docker" icon="DK" statusText="14 running" span={{ columns: 2, rows: 2 }}>
-        <BlockRenderer
-          block={{
-            type: 'list',
-            items: [
-              { title: 'immich-server', value: '2.1 GB' },
-              { title: 'jellyfin', value: '1.4 GB' },
-              { title: 'frigate', level: 'warn', value: 'restarting' },
-              { title: 'adguard-home', value: '86 MB' }
-            ]
-          }}
-        />
-      </Card>
-
-      <Card title="Hosts" icon="HS" span={{ rows: 2 }}>
-        <BlockRenderer
-          block={{
-            type: 'status',
-            items: [
-              { label: 'coding-server', level: 'ok' },
-              { label: 'nas', level: 'ok' },
-              { label: 'router', level: 'warn', text: 'high latency' }
-            ]
-          }}
-        />
-      </Card>
-
-      <Card title="Notes" icon="NT" span={{ columns: 2, rows: 2 }}>
-        <BlockRenderer
-          block={{
-            type: 'markdown',
-            content:
-              '**Maintenance window** this weekend for the *Proxmox* host - see the [runbook](https://example.com/runbook) beforehand.\n\n- Snapshot every VM first\n- Confirm backups landed on the NAS'
-          }}
-        />
-      </Card>
-      <Card title="Immich" icon="IM" span={{ columns: 2, rows: 2 }}>
-        <BlockRenderer
-          block={{
-            type: 'image-grid',
-            columns: 6,
-            items: [
-              { id: 'p1', image: { ref: 'v1.aW1n.MQ' } },
-              { id: 'p2', image: { ref: 'v1.aW1n.Mg' } },
-              { id: 'p3', image: { ref: 'v1.aW1n.Mw' } },
-              { id: 'p4', image: { ref: 'v1.aW1n.NA' } },
-              { id: 'p5', image: { ref: 'v1.aW1n.NQ' } },
-              { id: 'p6', image: { ref: 'v1.aW1n.Ng' } }
-            ]
-          }}
-        />
-      </Card>
-
-      <Card title="Disks" icon="DK" span={{ columns: 2, rows: 2 }}>
-        <BlockRenderer
-          block={{
-            type: 'table',
-            columns: [
-              { key: 'mount', label: 'Mount' },
-              { key: 'used', label: 'Used', format: 'bytes', align: 'end' },
-              { key: 'percent', label: 'Full', format: 'percent', align: 'end' }
-            ],
-            rows: [
-              { mount: '/', used: 214748364800, percent: 0.92 },
-              { mount: '/data', used: 4200000000000, percent: 0.61 },
-              { mount: '/backup', used: 900000000000, percent: 0.31 }
-            ]
-          }}
-        />
-      </Card>
-
-      <Card title="Jellyfin" icon="JF" span={{ rows: 2 }}>
-        <BlockRenderer
-          block={{
-            type: 'actions',
-            actions: [
-              { id: 'restart', label: 'Restart', icon: '↻' },
-              { id: 'scan', label: 'Scan library' }
-            ]
-          }}
-        />
-      </Card>
-    </Grid>
-  </Section>
+  {#if dashboard}
+    {#each dashboard.sections as section, i (section.title ?? i)}
+      <Section title={section.title}>
+        <Grid>
+          {#each section.cards as descriptor (descriptor.id)}
+            {@const cs = cardsById.get(descriptor.id)}
+            <Card
+              title={descriptor.title}
+              icon={descriptor.icon}
+              href={descriptor.href}
+              span={descriptor.span}
+              state={visualState(cs)}
+              statusLevel={cs?.document?.status?.level}
+              statusText={cs?.document?.status?.text}
+              age={cs && isStale(cs) ? formatRelativeTime(cs.execution.staleSince) : undefined}
+              error={cs && isError(cs) ? cs.execution.error?.message : undefined}
+              retry={cs && isError(cs) && cs.execution.nextRunAt
+                ? formatRelativeTime(cs.execution.nextRunAt)
+                : undefined}
+              disabledReason={cs && isDisabled(cs)
+                ? (disabledReasonText[cs.execution.disabledReason] ?? cs.execution.disabledReason)
+                : undefined}
+            >
+              {#if cs?.document?.blocks?.length}
+                <div class="blocks">
+                  {#each cs.document.blocks as block, i (i)}
+                    <BlockRenderer {block} />
+                  {/each}
+                </div>
+              {:else if cs && isPending(cs)}
+                <div class="pending">
+                  <Skeleton width="56px" />
+                  <Skeleton width="80px" />
+                </div>
+              {/if}
+            </Card>
+          {/each}
+        </Grid>
+      </Section>
+    {/each}
+  {/if}
 
   <footer>
     {#if build}
@@ -233,10 +150,6 @@
     font-weight: 600;
     letter-spacing: -0.02em;
   }
-  .sub {
-    color: var(--v-muted);
-    font-size: 13px;
-  }
   .spacer {
     flex: 1;
   }
@@ -252,6 +165,24 @@
   }
   button:hover {
     color: var(--v-text);
+  }
+
+  .error-banner {
+    margin: 0 0 var(--v-s-5);
+    padding: var(--v-s-3) var(--v-s-4);
+    border: 1px solid var(--v-border);
+    border-radius: var(--v-r-sm);
+    background: var(--v-surface-2);
+    color: var(--v-muted);
+    font-size: 13px;
+  }
+
+  .blocks {
+    display: flex;
+    flex-direction: column;
+    gap: var(--v-s-3);
+    height: 100%;
+    min-height: 0;
   }
 
   .pending {

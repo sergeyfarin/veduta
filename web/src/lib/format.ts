@@ -57,7 +57,7 @@ const RELATIVE_UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
 ];
 const relativeFormat = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
 
-function formatRelativeTime(iso: string): string {
+export function formatRelativeTime(iso: string): string {
   const then = Date.parse(iso);
   if (Number.isNaN(then)) return EMPTY;
   const diffSeconds = (then - Date.now()) / 1000;

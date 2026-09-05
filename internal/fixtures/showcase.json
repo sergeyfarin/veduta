@@ -1,0 +1,311 @@
+{
+  "dashboard": {
+    "sections": [
+      {
+        "title": "Home",
+        "cards": [
+          { "id": "jellyfin-posters", "title": "Jellyfin", "icon": "JF", "href": "https://jellyfin.lan", "span": { "columns": 2, "rows": 2 } },
+          { "id": "coding-server", "title": "coding-server", "icon": "CS", "span": { "rows": 2 } },
+          { "id": "proxmox", "title": "Proxmox", "icon": "PX", "href": "https://proxmox.lan", "span": { "rows": 2 } },
+          { "id": "frigate", "title": "Frigate", "icon": "FR", "span": { "rows": 2 } },
+          { "id": "uptime-kuma", "title": "Uptime Kuma", "icon": "UP", "span": { "rows": 2 } },
+          { "id": "immich-approval", "title": "Immich", "icon": "IM", "span": { "rows": 2 } },
+          { "id": "adguard", "title": "AdGuard", "icon": "AG", "href": "https://adguard.lan", "span": { "rows": 2 } },
+          { "id": "docker", "title": "Docker", "icon": "DK", "span": { "columns": 2, "rows": 2 } },
+          { "id": "hosts", "title": "Hosts", "icon": "HS", "span": { "rows": 2 } },
+          { "id": "notes", "title": "Notes", "icon": "NT", "span": { "columns": 2, "rows": 2 } },
+          { "id": "immich-photos", "title": "Immich", "icon": "IM", "href": "https://immich.lan", "span": { "columns": 2, "rows": 2 } },
+          { "id": "disks", "title": "Disks", "icon": "DK", "span": { "columns": 2, "rows": 2 } },
+          { "id": "jellyfin-actions", "title": "Jellyfin", "icon": "JF", "href": "https://jellyfin.lan", "span": { "rows": 2 } }
+        ]
+      }
+    ]
+  },
+  "cards": [
+    {
+      "cardId": "jellyfin-posters",
+      "document": {
+        "schemaVersion": 1,
+        "title": "Jellyfin",
+        "link": "https://jellyfin.lan",
+        "blocks": [
+          {
+            "type": "poster-grid",
+            "columns": 5,
+            "items": [
+              { "id": "a1", "title": "Dune", "subtitle": "2021", "image": { "ref": "v1.poster.dune", "aspect": "2:3" } },
+              { "id": "a2", "title": "Arrival", "subtitle": "2016", "image": { "ref": "v1.poster.arrival", "aspect": "2:3" } },
+              { "id": "a3", "title": "Blade Runner 2049", "image": { "ref": "v1.poster.bladerunner", "aspect": "2:3" } },
+              { "id": "a4", "title": "Severance", "subtitle": "S2", "image": { "ref": "v1.poster.severance", "aspect": "2:3" } },
+              { "id": "a5", "title": "Andor", "subtitle": "S2", "image": { "ref": "v1.poster.andor", "aspect": "2:3" } }
+            ]
+          }
+        ]
+      },
+      "execution": {
+        "state": "ok",
+        "generatedAt": "2026-09-04T21:38:00Z",
+        "ttlSeconds": 300,
+        "expiresAt": "2026-09-04T21:43:00Z",
+        "durationMs": 210,
+        "source": { "integration": "jellyfin", "integrationVersion": "1.0.0", "runtime": "builtin", "operation": "recent" }
+      }
+    },
+    {
+      "cardId": "coding-server",
+      "document": {
+        "schemaVersion": 1,
+        "title": "coding-server",
+        "status": { "level": "ok", "text": "34d" },
+        "blocks": [
+          {
+            "type": "progress",
+            "items": [
+              { "label": "CPU", "progress": 0.12 },
+              { "label": "Memory", "progress": 0.61 },
+              { "label": "Root", "progress": 0.92, "level": "error" }
+            ]
+          }
+        ]
+      },
+      "execution": {
+        "state": "ok",
+        "generatedAt": "2026-09-04T21:38:00Z",
+        "ttlSeconds": 60,
+        "expiresAt": "2026-09-04T21:39:00Z",
+        "durationMs": 34,
+        "source": { "integration": "host-metrics", "integrationVersion": "1.0.0", "runtime": "builtin", "operation": "usage" }
+      }
+    },
+    {
+      "cardId": "proxmox",
+      "document": {
+        "schemaVersion": 1,
+        "title": "Proxmox",
+        "link": "https://proxmox.lan",
+        "blocks": [
+          {
+            "type": "metrics",
+            "items": [
+              { "label": "VMs", "value": 7, "format": "count" },
+              { "label": "CPU", "value": 0.23, "format": "percent" },
+              { "label": "Uptime", "value": 8294400, "format": "duration" }
+            ]
+          }
+        ]
+      },
+      "execution": {
+        "state": "stale",
+        "generatedAt": "2026-09-04T21:30:02Z",
+        "staleSince": "2026-09-04T21:35:02Z",
+        "consecutiveFailures": 2,
+        "nextRunAt": "2026-09-04T21:44:00Z",
+        "source": { "integration": "proxmox", "integrationVersion": "1.0.0", "runtime": "builtin", "operation": "summary" }
+      }
+    },
+    {
+      "cardId": "frigate",
+      "document": null,
+      "execution": {
+        "state": "error",
+        "source": { "integration": "frigate", "integrationVersion": "1.0.0", "runtime": "builtin", "operation": "status" },
+        "error": { "code": "upstream", "message": "502 Bad Gateway", "retryable": true, "at": "2026-09-04T21:41:20Z" },
+        "nextRunAt": "2026-09-04T21:42:40Z",
+        "circuitOpenUntil": "2026-09-04T21:42:40Z"
+      }
+    },
+    {
+      "cardId": "uptime-kuma",
+      "document": null,
+      "execution": { "state": "pending" }
+    },
+    {
+      "cardId": "immich-approval",
+      "document": null,
+      "execution": { "state": "disabled", "disabledReason": "unapproved" }
+    },
+    {
+      "cardId": "adguard",
+      "document": {
+        "schemaVersion": 1,
+        "title": "AdGuard",
+        "link": "https://adguard.lan",
+        "blocks": [
+          {
+            "type": "key-value",
+            "items": [
+              { "label": "Queries today", "value": 184902, "format": "count" },
+              { "label": "Blocked", "value": 0.314, "format": "percent" }
+            ]
+          }
+        ]
+      },
+      "execution": {
+        "state": "ok",
+        "generatedAt": "2026-09-04T21:38:00Z",
+        "ttlSeconds": 300,
+        "expiresAt": "2026-09-04T21:43:00Z",
+        "durationMs": 88,
+        "source": { "integration": "adguard", "integrationVersion": "1.0.0", "runtime": "builtin", "operation": "stats" }
+      }
+    },
+    {
+      "cardId": "docker",
+      "document": {
+        "schemaVersion": 1,
+        "title": "Docker",
+        "status": { "level": "ok", "text": "14 running" },
+        "blocks": [
+          {
+            "type": "list",
+            "items": [
+              { "title": "immich-server", "value": "2.1 GB" },
+              { "title": "jellyfin", "value": "1.4 GB" },
+              { "title": "frigate", "level": "warn", "value": "restarting" },
+              { "title": "adguard-home", "value": "86 MB" }
+            ]
+          }
+        ]
+      },
+      "execution": {
+        "state": "ok",
+        "generatedAt": "2026-09-04T21:38:00Z",
+        "ttlSeconds": 60,
+        "expiresAt": "2026-09-04T21:39:00Z",
+        "durationMs": 56,
+        "source": { "integration": "docker", "integrationVersion": "1.0.0", "runtime": "builtin", "operation": "containers" }
+      }
+    },
+    {
+      "cardId": "hosts",
+      "document": {
+        "schemaVersion": 1,
+        "title": "Hosts",
+        "blocks": [
+          {
+            "type": "status",
+            "items": [
+              { "label": "coding-server", "level": "ok" },
+              { "label": "nas", "level": "ok" },
+              { "label": "router", "level": "warn", "text": "high latency" }
+            ]
+          }
+        ]
+      },
+      "execution": {
+        "state": "ok",
+        "generatedAt": "2026-09-04T21:38:00Z",
+        "ttlSeconds": 60,
+        "expiresAt": "2026-09-04T21:39:00Z",
+        "durationMs": 145,
+        "source": { "integration": "ping", "integrationVersion": "1.0.0", "runtime": "builtin", "operation": "sweep" }
+      }
+    },
+    {
+      "cardId": "notes",
+      "document": {
+        "schemaVersion": 1,
+        "title": "Notes",
+        "blocks": [
+          {
+            "type": "markdown",
+            "content": "**Maintenance window** this weekend for the *Proxmox* host - see the [runbook](https://example.com/runbook) beforehand.\n\n- Snapshot every VM first\n- Confirm backups landed on the NAS"
+          }
+        ]
+      },
+      "execution": {
+        "state": "ok",
+        "generatedAt": "2026-09-04T21:38:00Z",
+        "ttlSeconds": 3600,
+        "expiresAt": "2026-09-04T22:38:00Z",
+        "durationMs": 3,
+        "source": { "integration": "notes", "integrationVersion": "1.0.0", "runtime": "declarative", "operation": "render" }
+      }
+    },
+    {
+      "cardId": "immich-photos",
+      "document": {
+        "schemaVersion": 1,
+        "title": "Immich",
+        "link": "https://immich.lan",
+        "blocks": [
+          {
+            "type": "image-grid",
+            "columns": 6,
+            "items": [
+              { "id": "p1", "image": { "ref": "v1.photo.p1" } },
+              { "id": "p2", "image": { "ref": "v1.photo.p2" } },
+              { "id": "p3", "image": { "ref": "v1.photo.p3" } },
+              { "id": "p4", "image": { "ref": "v1.photo.p4" } },
+              { "id": "p5", "image": { "ref": "v1.photo.p5" } },
+              { "id": "p6", "image": { "ref": "v1.photo.p6" } }
+            ]
+          }
+        ]
+      },
+      "execution": {
+        "state": "ok",
+        "generatedAt": "2026-09-04T21:38:00Z",
+        "ttlSeconds": 300,
+        "expiresAt": "2026-09-04T21:43:00Z",
+        "durationMs": 302,
+        "source": { "integration": "immich", "integrationVersion": "1.0.0", "runtime": "builtin", "operation": "recent" }
+      }
+    },
+    {
+      "cardId": "disks",
+      "document": {
+        "schemaVersion": 1,
+        "title": "Disks",
+        "blocks": [
+          {
+            "type": "table",
+            "columns": [
+              { "key": "mount", "label": "Mount" },
+              { "key": "used", "label": "Used", "format": "bytes", "align": "end" },
+              { "key": "percent", "label": "Full", "format": "percent", "align": "end" }
+            ],
+            "rows": [
+              { "mount": "/", "used": 214748364800, "percent": 0.92 },
+              { "mount": "/data", "used": 4200000000000, "percent": 0.61 },
+              { "mount": "/backup", "used": 900000000000, "percent": 0.31 }
+            ]
+          }
+        ]
+      },
+      "execution": {
+        "state": "ok",
+        "generatedAt": "2026-09-04T21:38:00Z",
+        "ttlSeconds": 300,
+        "expiresAt": "2026-09-04T21:43:00Z",
+        "durationMs": 19,
+        "source": { "integration": "host-metrics", "integrationVersion": "1.0.0", "runtime": "builtin", "operation": "disks" }
+      }
+    },
+    {
+      "cardId": "jellyfin-actions",
+      "document": {
+        "schemaVersion": 1,
+        "title": "Jellyfin",
+        "link": "https://jellyfin.lan",
+        "blocks": [
+          {
+            "type": "actions",
+            "actions": [
+              { "id": "restart", "label": "Restart", "icon": "↻" },
+              { "id": "scan", "label": "Scan library" }
+            ]
+          }
+        ]
+      },
+      "execution": {
+        "state": "ok",
+        "generatedAt": "2026-09-04T21:38:00Z",
+        "ttlSeconds": 300,
+        "expiresAt": "2026-09-04T21:43:00Z",
+        "durationMs": 12,
+        "source": { "integration": "jellyfin", "integrationVersion": "1.0.0", "runtime": "builtin", "operation": "actions" }
+      }
+    }
+  ]
+}

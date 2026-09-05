@@ -37,5 +37,6 @@ Build-time only; nothing here is shipped inside the Go binary except the compile
 | `@testing-library/jest-dom` | MIT |
 | `@tsconfig/svelte` | MIT |
 | `concurrently` | MIT |
+| `@playwright/test` | Apache-2.0 |
 
 A generated `THIRD-PARTY-NOTICES.md` covering the shipped frontend bundle is a release task (L4).

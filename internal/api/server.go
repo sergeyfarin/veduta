@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Package api serves the HTTP surface. Milestone A3: the foundation only - health, build
-// identity, timeouts, structured logging, panic recovery and graceful shutdown. The dashboard
-// endpoints arrive with the configuration and card machinery in Phases C to F.
+// Package api serves the HTTP surface. Milestone A3 supplied the foundation - health, build
+// identity, timeouts, structured logging, panic recovery and graceful shutdown. Milestone B5
+// adds GET /dashboard, /cards and /assets/{token}, but only behind the --fixtures dev flag
+// (Config.Fixtures): they serve the checked-in showcase, not real configuration or integrations,
+// which arrive in Phases C to F. Those phases replace the data source behind the same paths;
+// they do not change this file's route table.
 package api
 
 import (
@@ -16,6 +19,7 @@ import (
 	"net/http"
 	"time"
 
+	"veduta.dev/veduta/internal/fixtures"
 	"veduta.dev/veduta/internal/version"
 	"veduta.dev/veduta/web"
 )
@@ -36,6 +40,11 @@ type Config struct {
 	// binary; tests set it so their results do not depend on whether anyone ran `pnpm build`.
 	Assets        fs.FS
 	AssetsPresent bool
+
+	// Fixtures, when non-nil, serves the checked-in showcase dashboard from GET /dashboard,
+	// /cards and /assets/{token} - a dev-only stand-in for configuration and the scheduler, and
+	// what the visual regression suite (milestone B5) runs against. Never set in production.
+	Fixtures *fixtures.Bundle
 }
 
 // Server wraps the HTTP server and its lifecycle.
@@ -117,6 +126,10 @@ func (s *Server) routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/v1/health", s.handleHealth)
 	mux.HandleFunc("GET /api/v1/version", s.handleVersion)
+
+	if s.cfg.Fixtures != nil {
+		s.routeFixtures(mux)
+	}
 
 	assets, present := s.cfg.Assets, s.cfg.AssetsPresent
 	if assets == nil {

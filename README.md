@@ -13,11 +13,12 @@ describes what it wants; the core decides whether it is allowed, and holds every
 ## Status
 
 Design complete and frozen. Implementation under way: Phase A (repository bootstrap, embedded
-SPA) and B1–B4 (design tokens and card shell; the Widget Document / CardState envelope with
-Go/TypeScript types generated from one schema; and renderers for all nine block types -
-status, metrics, key-value, progress, list, text/markdown, image, image-grid, poster-grid,
-table, actions) are done and green in CI; spikes S2 (upstream API reality check) and S4 (visual
-prototype) are done. Next up: B5 (fixture dashboard and visual regression baseline). See
+SPA) and B1–B5 (design tokens and card shell; the Widget Document / CardState envelope with
+Go/TypeScript types generated from one schema; renderers for all nine block types - status,
+metrics, key-value, progress, list, text/markdown, image, image-grid, poster-grid, table,
+actions; and a fixture dashboard with a Playwright visual regression baseline) are done and
+green in CI; spikes S2 (upstream API reality check) and S4 (visual prototype) are done. Next up:
+Phase C (configuration - schema, loader, secrets, hot reload). See
 [docs/02-implementation-plan.md](docs/02-implementation-plan.md) for the full milestone table and
 what's marked **DONE**.
 
@@ -33,6 +34,9 @@ pnpm dev -- --host  # same, plus reachable from another device on your LAN (see 
 pnpm check      # go vet, go test (contract suite included), svelte-check
 pnpm build      # SPA into web/build, then the binary
 pnpm run update # every dependency, npm and Go, to latest
+
+./veduta serve --fixtures         # serve the checked-in showcase dashboard, no config needed
+pnpm --filter veduta-web test:e2e # visual regression baseline against it (Playwright, pinned Chromium)
 ```
 
 Frontend dependencies are pinned to exact versions — `.npmrc` sets `save-exact`, so `pnpm add`
@@ -68,10 +72,12 @@ This repository currently contains:
 | [internal/widgets/](internal/widgets/) | The Widget Document: typed Go structs, discriminated block union, `Validate` |
 | [internal/state/](internal/state/) | The CardState envelope; five constructors are the only way to build one |
 | [web/scripts/gen-types.mjs](web/scripts/gen-types.mjs) | Generates `web/src/lib/types/*.ts` from the schemas — `pnpm gen-types` |
-| [web/src/lib/blocks/](web/src/lib/blocks/) | Six Widget Document block renderers, a registry, and the unknown-type placeholder |
+| [web/src/lib/blocks/](web/src/lib/blocks/) | All nine Widget Document block renderers, a registry, and the unknown-type placeholder |
 | [web/src/lib/format.ts](web/src/lib/format.ts) | The one place a `Scalar` value is turned into display text, per its `Format` hint |
 | [web/src/lib/markdown.ts](web/src/lib/markdown.ts) | Restricted-subset markdown parser — never produces an HTML string, only an AST |
 | [web/src/lib/assets.ts](web/src/lib/assets.ts) | The one place an `Image.ref` becomes a fetchable URL |
+| [internal/fixtures/](internal/fixtures/) | The checked-in showcase dashboard `--fixtures` serves: layout, every CardState, local images |
+| [web/playwright.config.ts](web/playwright.config.ts) / [web/tests/visual.spec.ts](web/tests/visual.spec.ts) | Visual regression baseline against `--fixtures`: frozen clock, one pinned browser |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | DCO sign-off, the licence split, what a change needs |
 | [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md) | Every dependency and its licence, enforced by a test |
 | [LICENSING.md](LICENSING.md) | Multi-license layout, plugin exception, AGPL §13 obligations |

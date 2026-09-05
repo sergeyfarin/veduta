@@ -23,6 +23,7 @@ import (
 
 	"veduta.dev/veduta/internal/api"
 	"veduta.dev/veduta/internal/canonical"
+	"veduta.dev/veduta/internal/fixtures"
 	"veduta.dev/veduta/internal/version"
 )
 
@@ -80,6 +81,8 @@ func serve(args []string) error {
 	override := fs.Bool("i-know-what-im-doing", false,
 		"allow a non-loopback bind before authentication exists")
 	logFormat := fs.String("log-format", "text", "log format: text or json")
+	serveFixtures := fs.Bool("fixtures", false,
+		"serve the checked-in showcase dashboard instead of real configuration (dev only)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -92,11 +95,22 @@ func serve(args []string) error {
 	}
 	logger := slog.New(handler)
 
-	srv, err := api.New(api.Config{
+	cfg := api.Config{
 		Listen:                 *listen,
 		Logger:                 logger,
 		AllowPublicWithoutAuth: *override,
-	})
+	}
+	if *serveFixtures {
+		bundle, err := fixtures.Load()
+		if err != nil {
+			return fmt.Errorf("--fixtures: %w", err)
+		}
+		cfg.Fixtures = &bundle
+		logger.Warn("serving the checked-in showcase dashboard, not real configuration",
+			"hint", "this is --fixtures - remove it for a real deployment")
+	}
+
+	srv, err := api.New(cfg)
 	if err != nil {
 		return err
 	}

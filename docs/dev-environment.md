@@ -20,11 +20,13 @@ per-project-server-and-data-dir isolation, the `PLAYWRIGHT_PROJECT` env switch f
 engine locally vs. the full matrix in CI, and building the frontend before the suite runs rather
 than testing whatever was last on disk. Don't re-derive those from scratch; adapt them.
 
-**Veduta itself does not depend on Playwright yet** — that's still milestone B5's job, deliberately
-scoped there in the plan (visual regression needs a frozen fixture dashboard and a pinned browser
-version, which doesn't exist before B3/B4 land). Using the sibling project's already-cached engine
-for a one-off manual check, versus adding Playwright as this repo's own dependency, are different
-things; only the latter is a milestone decision.
+**Update (B5): Veduta now depends on Playwright itself** (`@playwright/test` 1.62.1, pinned to
+match the sibling project's already-cached engine, so nothing new had to download here) —
+`web/playwright.config.ts` and `web/tests/visual.spec.ts` are the real visual regression suite,
+run with `pnpm --filter veduta-web test:e2e` against `veduta serve --fixtures`. The borrowed,
+sibling-cached engine described above is still the right tool for a one-off ad hoc check outside
+the committed suite (a quick screenshot while iterating on a component before writing or updating
+a baseline) — the difference is now which one you reach for, not whether Playwright exists here.
 
 ## What this caught
 
