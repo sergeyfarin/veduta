@@ -56,12 +56,13 @@ func isFlag(s string) bool { return len(s) > 0 && s[0] == '-' }
 // approval is bound to. Having it in the CLI means an administrator can see exactly what they
 // are approving, and that the lock file can be regenerated without guessing.
 func manifestCmd(args []string) error {
+	usage := errors.New("usage: veduta manifest digest <file> [file...]")
 	if len(args) == 0 || args[0] != "digest" {
-		return errors.New("usage: veduta manifest digest <file>...")
+		return usage
 	}
 	files := args[1:]
 	if len(files) == 0 {
-		return errors.New("usage: veduta manifest digest <file>...")
+		return usage
 	}
 	for _, f := range files {
 		d, err := canonical.DigestFile(f)
