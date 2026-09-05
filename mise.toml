@@ -7,7 +7,7 @@
 go = "1.27"
 node = "24"
 pnpm = "11"
-golangci-lint = "2.6.2"
+golangci-lint = "2.13.2"  # first release that understands Go 1.27 export data
 
 [env]
 CGO_ENABLED = "0"

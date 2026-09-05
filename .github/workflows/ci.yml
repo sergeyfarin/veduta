@@ -33,13 +33,13 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version: '1.27'
-      # install-mode: goinstall builds the linter with the Go toolchain above. The prebuilt
-      # binaries are compiled with an older Go and refuse a go.mod that targets a newer one:
-      # "the Go language version (go1.25) used to build golangci-lint is lower than the
-      # targeted Go version (1.27)".
+      # v2.13.2 is the first release that understands Go 1.27: older ones fail either on the
+      # language-version check (prebuilt binaries are compiled with an older Go) or, built from
+      # source, on the standard library's export data ("export data version 4 is greater than
+      # maximum supported version 2"). install-mode: goinstall builds it with the toolchain above.
       - uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.6.2
+          version: v2.13.2
           install-mode: goinstall
 
   web:
