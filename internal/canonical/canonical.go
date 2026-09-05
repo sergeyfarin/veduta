@@ -1,10 +1,19 @@
-package main
+// Package canonical implements the manifest digest: a strict decoder plus RFC 8785 (JSON
+// Canonicalization Scheme) over a restricted subset.
+//
+// "Sorted-key JSON" was never a specification - implementations disagree on Unicode escaping,
+// on <>& escaping, and on float formatting. Two additional rules remove the rest of the
+// ambiguity: manifests are float-free and confined to JSON safe integers, and set-like arrays
+// are normalised at EXACT paths only (normalising by property name let arbitrary user data
+// under `params` collide with real authority fields).
+package canonical
 
 import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"sort"
@@ -108,8 +117,18 @@ func normalise(v any, path []string) (any, error) {
 		}
 		return i, nil
 	case float64:
-		return nil, fmt.Errorf("/%s: floating-point value; manifests must use integers only",
-			strings.Join(path, "/"))
+		// A decoder that yields float64 for every number (encoding/json without UseNumber,
+		// or a YAML document normalised for schema validation) must still be able to carry
+		// integers. Non-integral values are rejected exactly as json.Number ones are.
+		if t != math.Trunc(t) {
+			return nil, fmt.Errorf("/%s: floating-point value %v; manifests must use integers only",
+				strings.Join(path, "/"), t)
+		}
+		if t < minSafeInt || t > maxSafeInt {
+			return nil, fmt.Errorf("/%s: integer %v outside the JSON safe range ±(2^53-1)",
+				strings.Join(path, "/"), t)
+		}
+		return int64(t), nil
 	case int:
 		if int64(t) < minSafeInt || int64(t) > maxSafeInt {
 			return nil, fmt.Errorf("/%s: integer %d outside the JSON safe range ±(2^53-1)",
@@ -284,7 +303,9 @@ func yamlNode(n *yaml.Node, b *yamlBudget) (any, error) {
 	return nil, fmt.Errorf("unsupported YAML node kind %d", n.Kind)
 }
 
-func loadDoc(path string) (any, error) {
+// Load decodes exactly one JSON or YAML document with the strictness the loader requires:
+// no trailing content, no duplicate mapping keys, bounded alias expansion, no floats.
+func Load(path string) (any, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -313,11 +334,17 @@ func loadDoc(path string) (any, error) {
 	return doc, nil
 }
 
-func digestFile(path string) (string, error) {
-	doc, err := loadDoc(path)
+// DigestFile loads a manifest from disk and returns its canonical digest.
+func DigestFile(path string) (string, error) {
+	doc, err := Load(path)
 	if err != nil {
 		return "", err
 	}
+	return Digest(doc)
+}
+
+// Digest returns the canonical digest of an already-decoded document.
+func Digest(doc any) (string, error) {
 	n, err := normalise(doc, nil)
 	if err != nil {
 		return "", err

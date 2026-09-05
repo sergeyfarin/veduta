@@ -1,5 +1,5 @@
 # Negative fixture: the semantic layer must report this.
-expect: "required slot 'server' is not bound"
+expect: "required slot \"server\" is not bound"
 config:
   sections:
     - title: Media

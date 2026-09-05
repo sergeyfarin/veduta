@@ -1,9 +1,7 @@
 __pycache__/
 *.pyc
 
-# Go build artefacts (scripts/* are runnable via `go run`)
-scripts/gocheck/gocheck
-scripts/re2check/re2check
+# Build artefacts
 /veduta
 /dist
 

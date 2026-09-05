@@ -1,5 +1,5 @@
 # Negative fixture: the semantic layer must report this.
-expect: "wants kind 'http' but connection"
+expect: "wants kind \"http\" but connection"
 config:
   sections:
     - title: Media

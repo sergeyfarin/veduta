@@ -1,5 +1,5 @@
 # Negative fixture: the semantic layer must report this.
-expect: "emits signals not declared by THIS operation"
+expect: "not declared by THIS operation"
 manifests:
   glances:
     spec:

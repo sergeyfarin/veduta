@@ -6,24 +6,8 @@ on:
   pull_request:
 
 jobs:
-  contracts:
-    name: Contract suite
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-go@v6
-        with:
-          go-version: '1.27'
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.12'
-      - run: pip install jsonschema pyyaml
-      # Four layers: structural schemas, Go RE2 pattern portability, cross-language canonical
-      # digest, and the semantic checks with their negative fixtures.
-      - run: python3 scripts/validate-schemas.py
-
   go:
-    name: Go build and test
+    name: Go build, contracts and tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -31,6 +15,9 @@ jobs:
         with:
           go-version: '1.27'
       - run: go vet ./...
+      # internal/contracts is the contract suite: structural schema validation over the
+      # adversarial corpus, RE2 pattern portability, canonical digests over golden fixtures,
+      # and the cross-document semantic checks with their negative fixtures.
       - run: go test ./...
       - run: test -z "$(gofmt -l cmd internal)"
 

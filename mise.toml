@@ -1,29 +1,27 @@
-# Pinned toolchain. `mise install` sets everything up; `mise run check` runs the contract suite.
+# Pinned toolchain. `mise install` sets everything up; `mise run check` runs what CI runs.
 [tools]
 go = "1.27"
 node = "24"
 pnpm = "11"
-python = "3.12"
 
 [env]
-# Keep module and build caches inside the repo checkout's ignore list, not the home directory.
 CGO_ENABLED = "0"
 
 [tasks.install]
-description = "Install toolchain-managed dependencies"
+description = "Install dependencies"
 run = ["go mod download", "pnpm --dir web install"]
 
 [tasks.contracts]
-description = "Run the four-layer contract suite (schemas, RE2 portability, canonical digest, semantics)"
-run = "python3 scripts/validate-schemas.py"
+description = "The contract suite: schemas, RE2 pattern portability, canonical digests, cross-document semantics"
+run = "go test ./internal/contracts/..."
 
 [tasks.test]
-description = "Go tests"
+description = "All Go tests"
 run = "go test ./..."
 
 [tasks.lint]
 description = "Vet and format check"
-run = ["go vet ./...", "test -z \"$(gofmt -l cmd internal 2>/dev/null)\""]
+run = ["go vet ./...", "test -z \"$(gofmt -l cmd internal)\""]
 
 [tasks.web]
 description = "Frontend dev server (proxies /api to the Go server)"
@@ -35,4 +33,4 @@ run = "pnpm --dir web build"
 
 [tasks.check]
 description = "Everything CI runs"
-depends = ["contracts", "lint", "test"]
+depends = ["lint", "test"]

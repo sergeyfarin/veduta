@@ -13,7 +13,7 @@ describes what it wants; the core decides whether it is allowed, and holds every
 ## Status
 
 Design complete and frozen; implementation starting at milestone A1. The contract suite in
-`scripts/` is the CI gate from the first commit — `mise run contracts`.
+`internal/contracts` is the CI gate from the first commit — `mise run contracts`.
 
 Toolchain is pinned in [mise.toml](mise.toml): Go 1.27, Node 24, pnpm 11. `mise install && mise run check`.
 
@@ -32,8 +32,8 @@ This repository currently contains:
 | [testdata/schema-cases.json](testdata/schema-cases.json) | 79-case adversarial schema corpus |
 | [testdata/semantic-cases/](testdata/semantic-cases/) | 29 fixtures guarding the cross-document checks (a deleted check fails the build) |
 | [testdata/canonical/](testdata/canonical/) | Golden RFC 8785 digests with collision invariants, reproduced by Go and Python |
-| [scripts/validate-schemas.py](scripts/validate-schemas.py) | Runs four layers: structural, Go RE2 portability, canonical digest, semantic |
-| [scripts/gocheck/](scripts/gocheck/) | Go helpers the suite delegates to: strict YAML + RFC 8785 digest, `mime.ParseMediaType`, SemVer 2.0.0 |
+| [internal/contracts/](internal/contracts/) | The contract suite: structural, RE2 portability, canonical digest and semantic layers |
+| [internal/canonical/](internal/canonical/) | Strict decoder and RFC 8785 canonical manifest digest |
 | [mise.toml](mise.toml) | Pinned toolchain and task runner |
 | [web/](web/) | Svelte 5 + Vite + TypeScript SPA skeleton (pnpm) |
 | [LICENSING.md](LICENSING.md) | Multi-license layout, plugin exception, AGPL §13 obligations |

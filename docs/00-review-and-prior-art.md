@@ -417,7 +417,7 @@ semantic check is mutation-proven.
 | F3 | Route identity ignored `queryKeys`, `contentType`, `maxBodyKB` | **Confirmed** — a manifest route restricted to `queryKeys: [safe]`, JSON and 4 KiB compared equal to a lock route with none of them | Canonical identity is the full tuple with normalisation rules written into the contract: sorted unique query keys, lowercased type/subtype with charset kept and other parameters dropped, effective `maxBodyKB`. An **omitted** constraint is wider than an explicit one and shows in the diff as a widening (D25) |
 | F4 | Semantic validation had blind spots and the docstring overstated it | **Confirmed, every item** — signals were collected globally across operations, rules were never parsed at all, required slots and slot kinds were unchecked, duplicates undetected, the digest never recomputed | All six implemented, and each mutation-tested. The example lock now carries the **real** canonical digest of the Immich manifest, and the digest is defined over the parsed manifest re-serialised with sorted keys, so reformatting or comment edits do not invalidate an approval |
 | F5 | Random revisions need an observable rotation trigger | **Confirmed** — "whenever the resolved secret changes" was stronger than the implementation could observe | Public revision stays random; change detection is a **private, instance-keyed HMAC** over config ‖ resolved secrets, stored in `connection_state` and never exposed. `file:` secrets are watched directly; `env:` secrets are documented as restart-only and caught by the startup comparison; delete-and-recreate always rotates (D26) |
-| F6 | Regex is not a parser | **Confirmed** — `2026-99-99T99:99:99+99:99` passed, IPv6 homelab URLs were rejected, port 99999 accepted | Patterns are now explicitly structural pre-filters; semantics are enforced with real parsers (`time.Parse(RFC3339Nano)`, `net/url`, semver) in the loader and mirrored in the validator's layer 3. The URL pattern accepts bracketed IPv6. The RE2 layer now shells out to a checked-in **Go** program (`scripts/re2check`), mutation-tested to fail on a lookahead (D22 revised) |
+| F6 | Regex is not a parser | **Confirmed** — `2026-99-99T99:99:99+99:99` passed, IPv6 homelab URLs were rejected, port 99999 accepted | Patterns are now explicitly structural pre-filters; semantics are enforced with real parsers (`time.Parse(RFC3339Nano)`, `net/url`, semver) in the loader and mirrored in the validator's layer 3. The URL pattern accepts bracketed IPv6. The RE2 layer now shells out to a checked-in **Go** program (`internal/contracts`), mutation-tested to fail on a lookahead (D22 revised) |
 | F7 | Forward-auth approval was described but not configurable | **Confirmed** | `auth.forward.privilegedOperations: cli-only \| admin-group` with `adminGroups`, conditionally required. And the claim is corrected: a group header is **authorisation, not proof of current human presence**, which is why `cli-only` is the default (D27) |
 
 ### Smaller corrections, all applied
@@ -459,7 +459,7 @@ quietly reducing coverage.
 | G1 | The declarative budget starts too late; `exprNodes` is per expression | **Confirmed.** The budget guarded execution while parsing and validation ran first, and hundreds of maximum-sized expressions were unbounded in aggregate | Pre-parse **core** limits (manifest bytes, YAML depth/nodes/aliases and alias expansion, duplicate-key rejection, module file size) enforced before schema validation — core constants, because an untrusted document cannot declare its own ceiling. Aggregate ceilings at load: expression nodes per operation and per manifest, template nodes and depth, literal-string bytes. `sortBy` charges `n·log n` (D28, D29) |
 | G2 | Lock limits omitted every new field, and the widening check treated an absent manifest limit as "anything" | **Confirmed, both** — a lock recording `iterations` was rejected as an unknown property, and `req is not None` let a lock record the schema maximum where the manifest relied on a default | Limits are defined **once** in `plugin-manifest#/$defs/limits` and `$ref`d by the lock. Every comparison uses value-or-default, and the lock records `effectiveLimits` = `min(core, manifest ?? default, approved ?? default)`, so a core upgrade that changes a default forces re-approval instead of silently moving authority (D30) |
 | G3 | The semantic validator still overstated its coverage | **Confirmed, every item.** Rules were regex-scanned on raw text, the real `disk-full` rule was skipped and then reported as resolved, the Jellyfin lock entry counted as a passing skip, pipeline requests were never checked against routes, and duplicate ids went undetected | Rule parsing strips string literals and **fails closed**: every `signal()`/`state()` occurrence must match a literal-argument form or it is an error, so a constructed reference cannot slip through unchecked. `plugins/glances` and `plugins/jellyfin` are now real contract fixtures, and a lock entry without a manifest is an **error** — there are no skips left. Pipeline requests must be covered by a declared route; asset nodes must have a `use: asset` route; duplicate integration, card, rule, slot, operation, signal and route ids are all detected. Nineteen negative fixtures run through the same code as the real examples |
-| G4 | The canonical digest was Python's `sort_keys` output, not a portable specification | **Confirmed** | **RFC 8785 (JCS)**, implemented in `scripts/jcs.py` and `scripts/canonjson/main.go`, verified byte-for-byte on golden fixtures with Unicode, `<>&`, tabs, reordered keys and reordered set-like arrays. Two explicit decisions: manifests are **float-free** (so ECMAScript number formatting never arises), and set-like arrays (`capabilities`, `queryKeys`) are sorted and de-duplicated, so reordering is not a change of authority. Defaults are **not** folded in — the digest covers what the author wrote, and `effectiveLimits` covers the rest (D32) |
+| G4 | The canonical digest was Python's `sort_keys` output, not a portable specification | **Confirmed** | **RFC 8785 (JCS)**, implemented in `internal/canonical` and `scripts/canonjson/main.go`, verified byte-for-byte on golden fixtures with Unicode, `<>&`, tabs, reordered keys and reordered set-like arrays. Two explicit decisions: manifests are **float-free** (so ECMAScript number formatting never arises), and set-like arrays (`capabilities`, `queryKeys`) are sorted and de-duplicated, so reordering is not a change of authority. Defaults are **not** folded in — the digest covers what the author wrote, and `effectiveLimits` covers the rest (D32) |
 | G5 | `circuitOpenUntil` without `nextRunAt` was accepted | **Confirmed** | `dependentRequired` added, and the contract states they are the same event seen from the breaker and from the scheduler, so they must be equal |
 | G6 | `baseUrl: http://user:pass@host` bypassed the secret model | **Confirmed, and worse than it looks** — it also makes `auth: none` appear secret-free | Connection base URLs reject userinfo, query and fragment, structurally and in the loader. Webhook URLs are the deliberate exception you identified: tokens in the path are normal there, so a channel URL is a `secrets.Value` logged only as scheme://host plus channel id (D33) |
 | G7 | Forward-auth `admin-group` accepted an empty policy | **Confirmed** | `minLength: 1` on header names with the HTTP token grammar, `minItems: 1` and `uniqueItems` on `adminGroups` |
@@ -515,7 +515,7 @@ own homework.
 
 ### What this round changed about the suite itself
 
-`scripts/gocheck` replaces `scripts/canonjson` and is now the Go half of the contract checks:
+`internal/contracts` replaces `scripts/canonjson` and is now the Go half of the contract checks:
 strict-YAML + RFC 8785 digest, `mime.ParseMediaType`, and SemVer 2.0.0. The Python semantic layer
 **fails closed** without it rather than falling back to approximations — the failure mode that
 produced H6 and H7 in the first place.
@@ -561,3 +561,47 @@ computed intersection.
 Forty-six decisions, thirty-three frozen. The gates the review named are recorded in the plan: K1 and
 K3 before D2, K2 before anything beyond loopback, and K4/K5/K6 before F1/F2/F4/J2. Implementation
 starts at A1.
+
+
+---
+
+## 13. Round 8 — the contract suite moves into Go
+
+Not a review finding; a question worth recording, because the answer changed the repository
+layout. Asked why the project needed Python at all, the honest answer was: it didn't any more.
+
+**Why it existed.** The contract suite was written in Python during design review, when the
+repository held nothing but documents and there was no Go module. Python plus `jsonschema` was the
+fastest way to make the review's claims falsifiable rather than merely asserted. That justification
+expired the moment `go.mod` landed.
+
+**Why it had become actively wrong.** The stated purpose of the semantic layer is to mirror what the
+Go loader will do. A Python mirror drifts — findings H6 (media-type normalisation) and H7 (SemVer
+validity) *were* that drift, and the fix was to shell out to a Go helper. The suite had already
+conceded that Python was the wrong host and was calling Go for everything that mattered, while
+costing a third language, a third toolchain in CI, and 798 lines of shim.
+
+**What was kept.** The two independent RFC 8785 implementations did real work: a single
+implementation cannot detect its own ambiguity, and cross-checking Go against Python is what proved
+the canonicalisation spec unambiguous. That value is banked permanently in
+`testdata/canonical/expected-digests.json` — the golden digests were produced by both, and they
+still pin the specification now that only one implementation remains.
+
+**What the port is.** `scripts/*.py`, `scripts/gocheck` and `scripts/re2check` are gone. The four
+layers are now Go tests in `internal/contracts`, and the checks themselves are ordinary code in
+`internal/contracts/semantic.go` and `internal/canonical` — which is where milestones C1, D2b and D3
+needed them anyway, so this was milestone work brought forward rather than rework. Every data file
+is unchanged: the same 79-case corpus, the same 29 semantic fixtures, the same golden digests.
+
+**Two bugs the port surfaced**, both in the Python original:
+
+- `effectiveLimit` initialised its accumulator to the *default* and then took the minimum against
+  everything, so an explicit manifest limit higher than the default was silently floored. Python and
+  Go disagreed on `immich.timeoutMs` (5000 versus 3000), which is how it was caught. The formula is
+  now written once and stated in a comment: `min(core maximum, manifest value-or-default, approved
+  value-or-default)`.
+- An invalid `contentType` was reported only when a pipeline step happened to exercise the route.
+  Routes are now validated where they are declared.
+
+The meta-tests still bite: deleting the `effectiveLimits` checks, disabling the query-key coverage
+check, or widening the digest normalisation path list each turn the build red.

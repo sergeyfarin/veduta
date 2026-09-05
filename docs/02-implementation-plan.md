@@ -21,14 +21,14 @@ each one invalidates every golden test and every integration if it changes later
 
 Deliverable: the five schemas in `schemas/`, the worked Immich manifest, the lock example, and a
 65-case adversarial corpus — all of which exist in this repository and pass
-`scripts/validate-schemas.py` today. That script runs three layers, and CI runs all three:
+`go test ./internal/contracts/...` today. That script runs three layers, and CI runs all three:
 
 | Layer | What it proves |
 | --- | --- |
 | structural | every schema is valid; every fixture and adversarial case lands on its expected side |
-| portability | every `pattern` is compiled by **Go's own `regexp`** via `scripts/re2check` — not a Python heuristic. The first draft's route pattern used `(?!.*\.\.)`, which `regexp.Compile` rejects outright, so the Go validator would have refused the schema at boot |
-| canonical | `scripts/jcs.py` and `scripts/gocheck` must agree byte for byte on golden fixtures **and on the real YAML manifests through Go's strict decoder** (duplicate keys rejected, floats rejected, YAML scalar typing preserved). Normalisation is path-aware, with `must_match`/`must_differ` invariants proving arbitrary user data named `capabilities` does not collide |
-| helpers | media-type normalisation and SemVer validity are delegated to `scripts/gocheck` (`mime.ParseMediaType`, real SemVer 2.0.0), not approximated in Python; the semantic layer fails closed without them |
+| portability | every `pattern` is compiled by **Go's own `regexp`** via `internal/contracts` — not a Python heuristic. The first draft's route pattern used `(?!.*\.\.)`, which `regexp.Compile` rejects outright, so the Go validator would have refused the schema at boot |
+| canonical | `internal/canonical` must agree byte for byte on golden fixtures **and on the real YAML manifests through Go's strict decoder** (duplicate keys rejected, floats rejected, YAML scalar typing preserved). Normalisation is path-aware, with `must_match`/`must_differ` invariants proving arbitrary user data named `capabilities` does not collide |
+| helpers | media-type normalisation and SemVer validity are delegated to `internal/contracts` (`mime.ParseMediaType`, real SemVer 2.0.0), not approximated in Python; the semantic layer fails closed without them |
 | semantic | what neither schema nor pattern can express, using the parsers the Go loader will use: real RFC3339/URL/semver values; lock routes ⊆ manifest routes **on full route identity**; recomputed canonical manifest digests; **per-operation** signal declarations; required slots bound and slot kinds matching connection kinds; duplicate ids; and every rule's card, signal and channel reference resolved against that card's selected operation |
 
 **Anything that must be enforced is a `pattern`, never a `format`** — `date-time` and `uri` are
