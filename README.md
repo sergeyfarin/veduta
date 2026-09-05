@@ -19,10 +19,12 @@ metrics, key-value, progress, list, text/markdown, image, image-grid, poster-gri
 actions; and a fixture dashboard with a Playwright visual regression baseline), C1 (the config
 loader: `veduta.yaml` + `conf.d/*.yaml` merged, schema-validated and semantically checked, every
 error carrying `file:line:col`), C2 (secrets: `env:`/`file:` providers, a redacting `Value`
-type, a log scrubber active by default), C3 (atomic live reload with status), and D1 (the
+type, a log scrubber active by default), C3 (atomic live reload with status), D1 (the
 connection registry and HTTP client: auth injection, an IP-pinning dialer against DNS rebinding,
-redirect/size/rate limits) are done and green in CI; spikes S2 (upstream API reality check) and
-S4 (visual prototype) are done. Next up: D1b (route canonicalisation and matching). See
+redirect/size/rate limits), and D1b (the one route-canonicalisation and glob-matching routine
+every authority check will share, fuzz-tested) are done and green in CI; spikes S2 (upstream API
+reality check) and S4 (visual prototype) are done. Next up: D2 (capability broker with route
+grants). See
 [docs/02-implementation-plan.md](docs/02-implementation-plan.md) for the full
 milestone table and what's marked **DONE**, and [docs/03-backlog.md](docs/03-backlog.md) for
 open gaps found along the way (currently: a config/schema asymmetry, a still-undone expression-
@@ -92,6 +94,7 @@ This repository currently contains:
 | [internal/config/](internal/config/) | `veduta.yaml` + `conf.d/*.yaml` loader: merge, schema and semantic validation, `file:line:col` on every error |
 | [internal/secrets/](internal/secrets/) | `${secret:NAME}` resolution: `env:`/`file:` providers, a redacting `Value` type, the log scrubber |
 | [internal/connections/](internal/connections/) | The credential boundary: per-connection HTTP client, auth injection, IP-pinning dialer, rate/redirect/size limits |
+| [internal/connections/routepath/](internal/connections/routepath/) | The one route-canonicalisation and glob-matching routine every authority check shares — fuzz-tested |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | DCO sign-off, the licence split, what a change needs |
 | [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md) | Every dependency and its licence, enforced by a test |
 | [LICENSING.md](LICENSING.md) | Multi-license layout, plugin exception, AGPL §13 obligations |

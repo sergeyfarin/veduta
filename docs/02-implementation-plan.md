@@ -675,17 +675,59 @@ in `serve` with no real consumer would be wiring for its own sake. `internal/con
 complete, independently tested package waiting on D2 to call it, the same way C1's loader waited
 on C3 to wire it into `serve`.
 
-**D1b · Route canonicalisation and matching** · 1 d · deps: D1, Part 0
-Objective: the one routine every authority check shares.
-Creates: `internal/connections/routepath/` — `Canonicalise(raw) (string, error)` and
-`Match(pattern, path) bool`, used by manifest load, lock load, `http.request`, asset mint, asset
-serve and connection `allowedPaths`.
-Tests: `%2e%2e`, `%2E%2E`, `%2f`, `%5c`, literal backslash, control characters, malformed escapes,
-`//`, `.` and `..` segments each rejected; `Canonicalise` is idempotent (property test); decoding
-never changes segment count; `*` never crosses `/`; `**` is not accepted anywhere; **a fuzz target
-asserting that no input is accepted by `Match` after canonicalisation but rejected before it, or
-vice versa**; a test asserting all six call sites (manifest load, lock load, `http.request`, asset mint, asset serve, connection `allowedPaths`) route through this package (import check).
-AC: no other package in the tree performs path comparison or unescaping.
+**D1b · Route canonicalisation and matching** · 1 d · deps: D1, Part 0 · **DONE**
+Creates: `internal/connections/routepath/{canonicalise,match}.go` implementing
+docs/01-architecture.md's normative algorithm exactly - every reject rule, then "decode the
+remaining unreserved escapes exactly once, lowercase the percent-hex digits, re-encode to a
+single normal form."
+
+One real gap found and fixed while writing the first example-based test: the bare root `"/"`
+was being rejected as an empty segment (`strings.Split("", "/")` yields `[""]`, one element, not
+zero) - fixed with an explicit `raw == "/"` case returning `"/"` directly, zero segments, before
+the general splitting path runs at all.
+
+`Match` is ordinary `*`-only glob matching per segment (split pattern on every `*`, anchor the
+first literal part to the segment's start and the last to its end, require any middle parts to
+appear between them in order) - handles any number of `*` in one segment correctly, including
+the schema's own allowance for more than one, which no first-party manifest uses today but the
+pattern syntax permits.
+
+The fuzz target (Go's native `testing.F`, not a hand-rolled corpus) runs two properties together
+against arbitrary input, not just the hand-picked adversarial cases: idempotence
+(`Canonicalise(Canonicalise(x)) == Canonicalise(x)`), and - the property that actually is "check
+vs use can't disagree" - every canonical form matches itself under `Match` read as a literal
+pattern. 4.2 million fuzz executions (20s, `-fuzz`) found nothing; both properties also hold
+against the hand-picked adversarial corpus (`%2e%2e`, `%2E%2E`, `%2f`, `%5c`, backslash, control
+characters, malformed escapes, `//`, `.`/`..` segments - every case the milestone names).
+
+**Refactored `internal/connections`'s `joinPath` to call this package**, closing the AC directly
+rather than leaving it as a documented future intention: D1's original `joinPath` used
+`path.Join` plus a prefix check, which is exactly the pattern this milestone exists to replace -
+`path.Join("/a", "../../etc")` cleans silently to `/etc` with no error of its own. The new
+version canonicalises the connection's base path and the request path *independently* (each
+rejects its own `..`/encoded-separator/control-character content on its own terms), then simply
+concatenates the two canonical strings - because neither can contain `..` any more, there is
+nothing left for a join step to clean away a traversal from, unlike the old approach. Every
+existing `joinPath` test in `internal/connections` passed unchanged against the new
+implementation with no test edits needed - the refactor preserved observable behaviour exactly
+while removing the class of bug that motivated D1b in the first place.
+
+`TestRoutepathBoundary` (`internal/contracts`, alongside the other repo-wide invariant tests -
+the Reveal boundary from C2, SPDX headers, licensing) is the "import check" AC: a source-text
+scan for `path.Join`/`path.Clean`/`filepath.Join`/`filepath.Clean`/`url.PathUnescape`/
+`url.PathEscape` calls anywhere under `cmd/` and `internal/` outside the routepath package
+itself, against an explicit allowlist recording *why* each current hit is not a routepath
+violation (the SPA's own static-file traversal guard, and several purely local-filesystem paths
+in config/secrets loading - genuinely different from a connection's upstream route authority).
+Mutation-tested: a fake violation added to `internal/api` was confirmed to fail the test before
+being removed. The allowlist itself is checked too - an entry for a file that no longer makes the
+matched call fails loudly rather than silently going stale.
+
+Five of the six call sites the milestone names (manifest load, lock load, asset mint, asset
+serve, connection `allowedPaths`) do not exist as real code yet - they arrive in D2b and E1. The
+one that exists today (`http.request`, `internal/connections`'s `joinPath`) is refactored and
+tested; `TestRoutepathBoundary` is the standing guard that keeps the other five honest once they
+are written, rather than something to re-derive per milestone.
 
 **D2 · Capability broker with route grants** · 1.5 d · deps: D1, D1b, Part 0
 Creates: `internal/capabilities/` — `Grant` (incl. `Routes`), `Broker`, route matcher (glob only:

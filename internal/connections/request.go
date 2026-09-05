@@ -4,10 +4,12 @@ package connections
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
-	"path"
 	"strings"
+
+	"veduta.dev/veduta/internal/connections/routepath"
 )
 
 // Request is what a caller (builtin runtime, declarative runtime, WASM host, asset proxy) asks a
@@ -30,29 +32,27 @@ type Response struct {
 }
 
 // ErrPathTraversal is returned for a Path this package refuses to join onto a BaseURL.
-var ErrPathTraversal = errors.New("connections: path is absolute, scheme-bearing, or escapes the connection's base URL")
+var ErrPathTraversal = errors.New("connections: path is absolute, scheme-bearing, or unsafe")
 
-// joinPath resolves p against base, refusing anything that could leave base's authority: an
-// absolute URL or scheme-bearing path (http://, //host, and similar), or a path that traverses
-// above base's own path via "..". This is deliberately conservative and self-contained for D1;
-// milestone D1b centralises the general-purpose version of this exact concern
-// (internal/connections/routepath) and this function is refactored to call into it then - see
-// docs/02-implementation-plan.md's D1b entry ("no other package in the tree performs path
-// comparison or unescaping").
+// joinPath resolves p against base. Two independent things make this safe: p must not be an
+// absolute URL or scheme-bearing path (http://, //host - a request "path" that is secretly a
+// full URL to somewhere else), and once that is ruled out, p's actual path component is run
+// through routepath.Canonicalise - milestone D1b's one shared route-canonicalisation routine,
+// used here instead of an ad-hoc check (docs/02-implementation-plan.md's D1b AC: "no other
+// package in the tree performs path comparison or unescaping"). Canonicalise rejects any ".."
+// or encoded separator on its own, in isolation, for both base's path and p - so the two
+// canonical strings can simply be concatenated afterwards with no further cleaning step and no
+// way for the result to escape base: there is nothing left in either operand that a join could
+// clean away a traversal from, unlike path.Join, which silently resolves "/a" + "../../etc" to
+// "/etc" with no error of its own.
 func joinPath(base *url.URL, p string) (*url.URL, error) {
 	if p == "" {
 		out := *base
 		return &out, nil
 	}
-	if strings.Contains(p, "://") {
+	if strings.Contains(p, "://") || strings.HasPrefix(p, "//") {
 		return nil, ErrPathTraversal
 	}
-	if strings.HasPrefix(p, "//") {
-		return nil, ErrPathTraversal
-	}
-	// url.Parse would happily accept an absolute path with a scheme via Opaque forms too - reject
-	// anything that parses with a non-empty Scheme or Host outright, rather than trusting the
-	// prefix checks above alone.
 	parsed, err := url.Parse(p)
 	if err != nil {
 		return nil, err
@@ -61,19 +61,29 @@ func joinPath(base *url.URL, p string) (*url.URL, error) {
 		return nil, ErrPathTraversal
 	}
 
+	reqPath := parsed.Path
+	if reqPath == "" {
+		reqPath = "/"
+	}
+	canonicalReq, err := routepath.Canonicalise(reqPath)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrPathTraversal, err)
+	}
+
 	basePath := base.Path
 	if basePath == "" {
 		basePath = "/"
 	}
-	joined := path.Join(basePath, parsed.Path)
-	// path.Join cleans "..", but joining "/a" with "../../etc" cleans to "/etc" silently -
-	// exactly the traversal this guards against. A joined result that does not stay under
-	// basePath (or equal it) escaped.
-	if joined != basePath && !strings.HasPrefix(joined, strings.TrimSuffix(basePath, "/")+"/") {
-		return nil, ErrPathTraversal
+	canonicalBase, err := routepath.Canonicalise(basePath)
+	if err != nil {
+		// The connection's own configured base path is not canonical - a config problem, not
+		// something this specific request did.
+		return nil, fmt.Errorf("connections: connection's own base path %q is not canonical: %w", basePath, err)
 	}
-	if parsed.Path != "" && strings.HasSuffix(parsed.Path, "/") && !strings.HasSuffix(joined, "/") {
-		joined += "/"
+
+	joined := canonicalBase
+	if canonicalReq != "/" {
+		joined = strings.TrimSuffix(canonicalBase, "/") + canonicalReq
 	}
 
 	out := *base
