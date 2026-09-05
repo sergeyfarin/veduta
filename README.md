@@ -27,6 +27,7 @@ Toolchain is pinned in [mise.toml](mise.toml): Go 1.27, Node 24, pnpm 11.
 ```bash
 mise install && pnpm install
 pnpm dev        # Go API on 127.0.0.1:8099 and Vite on :5173, /api proxied to the API
+pnpm dev -- --host  # same, plus reachable from another device on your LAN (see web/README.md)
 pnpm check      # go vet, go test (contract suite included), svelte-check
 pnpm build      # SPA into web/build, then the binary
 pnpm run update # every dependency, npm and Go, to latest
