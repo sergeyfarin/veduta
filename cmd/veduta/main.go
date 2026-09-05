@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Command veduta serves the dashboard.
 //
 //	veduta serve [--listen host:port]   run the HTTP server

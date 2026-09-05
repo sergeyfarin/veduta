@@ -6,7 +6,9 @@ import { svelte } from '@sveltejs/vite-plugin-svelte';
 export default defineConfig({
   plugins: [svelte()],
   build: {
-    outDir: 'build',
+    // One level below the embed root: //go:embed needs a committed file to match on a clean
+    // clone, and Vite empties its outDir on every build - including dotfiles.
+    outDir: 'build/app',
     emptyOutDir: true,
     target: 'es2022'
   },

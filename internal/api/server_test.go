@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 package api_test
 
 import (
@@ -6,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"testing/fstest"
 
 	"veduta.dev/veduta/internal/api"
 )
@@ -41,7 +44,7 @@ func TestRefusesPublicBindWithoutAuth(t *testing.T) {
 }
 
 func TestHealthAndVersion(t *testing.T) {
-	s, err := api.New(api.Config{Listen: "127.0.0.1:0"})
+	s, err := api.New(api.Config{Listen: "127.0.0.1:0", Assets: fstest.MapFS{}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,7 +80,7 @@ func TestHealthAndVersion(t *testing.T) {
 }
 
 func TestUnknownRouteIs404(t *testing.T) {
-	s, _ := api.New(api.Config{Listen: "127.0.0.1:0"})
+	s, _ := api.New(api.Config{Listen: "127.0.0.1:0", Assets: fstest.MapFS{}})
 	rec := httptest.NewRecorder()
 	s.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/nope", nil))
 	if rec.Code != http.StatusNotFound {

@@ -1,6 +1,6 @@
 # web
 
-The dashboard SPA: Svelte 5 (runes) + Vite + TypeScript, built to `build/` and embedded in the Go
+The dashboard SPA: Svelte 5 (runes) + Vite + TypeScript, built to `build/app/` and embedded in the Go
 binary. Deliberately **not** SvelteKit — Go serves and embeds everything, so a router, prerenderer
 and adapter layer would buy nothing (docs/01-architecture.md §13).
 
@@ -8,7 +8,7 @@ Run it from the repository root, not here:
 
 ```
 pnpm dev      # Go API on 127.0.0.1:8099 and Vite on :5173, /api proxied
-pnpm build    # SPA into web/build, then the Go binary
+pnpm build    # SPA into web/build/app, then the Go binary
 pnpm check    # go vet, go test, svelte-check
 ```
 

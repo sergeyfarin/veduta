@@ -51,7 +51,9 @@ This repository currently contains:
 | [internal/canonical/](internal/canonical/) | Strict decoder and RFC 8785 canonical manifest digest |
 | [mise.toml](mise.toml) | Pinned toolchain and task runner |
 | [web/](web/) | Svelte 5 + Vite + TypeScript SPA skeleton (pnpm workspace) |
-| [internal/api/](internal/api/) | HTTP foundation: health, build identity, the loopback gate |
+| [internal/api/](internal/api/) | HTTP foundation: health, build identity, embedded SPA, the loopback gate |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | DCO sign-off, the licence split, what a change needs |
+| [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md) | Every dependency and its licence, enforced by a test |
 | [LICENSING.md](LICENSING.md) | Multi-license layout, plugin exception, AGPL §13 obligations |
 
 ## Product principles

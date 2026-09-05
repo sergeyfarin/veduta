@@ -7,7 +7,10 @@ __pycache__/
 
 # Node
 node_modules/
-web/build/
+# The build output is generated, but one placeholder is committed so `go build` works on a
+# clean clone: //go:embed needs at least one matching file.
+web/build/*
+!web/build/.gitkeep
 
 # Local state
 /data

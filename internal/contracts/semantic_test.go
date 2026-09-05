@@ -1,7 +1,8 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 package contracts_test
 
 import (
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -55,14 +56,6 @@ func TestRealExamplesAreClean(t *testing.T) {
 	for _, issue := range contracts.CardStateIssues("cardstate fixture", cardState.(map[string]any)) {
 		t.Errorf("%s", issue)
 	}
-}
-
-type semanticCase struct {
-	Expect     string                    `yaml:"expect"`
-	Manifests  map[string]map[string]any `yaml:"manifests"`
-	Lock       map[string]any            `yaml:"lock"`
-	Config     map[string]any            `yaml:"config"`
-	CardStates []map[string]any          `yaml:"cardstates"`
 }
 
 // TestSemanticFixtures runs every checked-in fixture through the SAME code that validates the
@@ -191,5 +184,3 @@ func asSliceMap(v any) []map[string]any {
 	}
 	return out
 }
-
-var _ = os.Getenv

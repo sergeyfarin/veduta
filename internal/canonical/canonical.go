@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package canonical implements the manifest digest: a strict decoder plus RFC 8785 (JSON
 // Canonicalization Scheme) over a restricted subset.
 //
@@ -11,6 +13,7 @@ package canonical
 import (
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -161,7 +164,7 @@ func escape(s string) string {
 			b.WriteString(`\t`)
 		default:
 			if r < 0x20 {
-				b.WriteString(fmt.Sprintf(`\u%04x`, r))
+				fmt.Fprintf(&b, `\u%04x`, r)
 			} else {
 				b.WriteRune(r)
 			}
@@ -306,7 +309,8 @@ func yamlNode(n *yaml.Node, b *yamlBudget) (any, error) {
 // Load decodes exactly one JSON or YAML document with the strictness the loader requires:
 // no trailing content, no duplicate mapping keys, bounded alias expansion, no floats.
 func Load(path string) (any, error) {
-	raw, err := os.ReadFile(path)
+	// The path is a manifest chosen by the operator, not by a request; reading it is the point.
+	raw, err := os.ReadFile(path) //nolint:gosec // G304: caller-supplied manifest path
 	if err != nil {
 		return nil, err
 	}
@@ -317,7 +321,7 @@ func Load(path string) (any, error) {
 			return nil, err
 		}
 		var extra yaml.Node
-		if err := dec.Decode(&extra); err != io.EOF {
+		if err := dec.Decode(&extra); !errors.Is(err, io.EOF) {
 			return nil, fmt.Errorf("expected exactly one YAML document")
 		}
 		return yamlToAny(&n)
@@ -328,7 +332,7 @@ func Load(path string) (any, error) {
 	if err := dec.Decode(&doc); err != nil {
 		return nil, err
 	}
-	if _, err := dec.Token(); err != io.EOF {
+	if _, err := dec.Token(); !errors.Is(err, io.EOF) {
 		return nil, fmt.Errorf("trailing content after the first JSON document")
 	}
 	return doc, nil

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package version carries build identity, including the AGPL section 13 source URL for the
 // exact commit this binary was built from (see LICENSING.md).
 package version

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package contracts' tests are the project's contract suite. They replace the Python checker
 // that existed before there was a Go module, and they run four layers:
 //

@@ -7,6 +7,7 @@
 go = "1.27"
 node = "24"
 pnpm = "11"
+golangci-lint = "2.6.2"
 
 [env]
 CGO_ENABLED = "0"
@@ -28,12 +29,28 @@ description = "All Go tests"
 run = "go test ./..."
 
 [tasks.lint]
-description = "Vet, format check and frontend typecheck"
-run = ["go vet ./...", "test -z \"$(gofmt -l cmd internal)\"", "pnpm --filter veduta-web check"]
+description = "Vet, lint, format check and frontend typecheck"
+run = [
+  "go vet ./...",
+  "golangci-lint run ./...",
+  "test -z \"$(gofmt -l cmd internal web)\"",
+  "pnpm --filter veduta-web check",
+]
 
 [tasks.build]
 description = "Build the SPA and the binary"
 run = "pnpm build"
+
+[tasks.release-build]
+description = "Cross-compile every release target (the SPA must be built first)"
+run = """
+set -e
+for target in linux/amd64 linux/arm64 linux/arm darwin/arm64; do
+  GOOS=${target%/*} GOARCH=${target#*/} GOARM=7 CGO_ENABLED=0 \
+    go build -trimpath -ldflags "-s -w" -o "dist/veduta-${target%/*}-${target#*/}" ./cmd/veduta
+done
+ls -lh dist/
+"""
 
 [tasks.update]
 description = "Update every dependency to its latest version (a reviewable commit, never automatic)"

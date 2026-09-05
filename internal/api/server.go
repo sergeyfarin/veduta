@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package api serves the HTTP surface. Milestone A3: the foundation only - health, build
 // identity, timeouts, structured logging, panic recovery and graceful shutdown. The dashboard
 // endpoints arrive with the configuration and card machinery in Phases C to F.
@@ -8,12 +10,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"net"
 	"net/http"
 	"time"
 
 	"veduta.dev/veduta/internal/version"
+	"veduta.dev/veduta/web"
 )
 
 // Config is everything the server needs to start.
@@ -27,6 +31,11 @@ type Config struct {
 	AuthConfigured bool
 	// AllowPublicWithoutAuth is the operator's explicit override for that refusal.
 	AllowPublicWithoutAuth bool
+
+	// Assets overrides the embedded frontend. Left nil it uses the build compiled into the
+	// binary; tests set it so their results do not depend on whether anyone ran `pnpm build`.
+	Assets        fs.FS
+	AssetsPresent bool
 }
 
 // Server wraps the HTTP server and its lifecycle.
@@ -87,7 +96,9 @@ func isPublicAddr(addr string) (bool, error) {
 		// A hostname: resolve conservatively and treat anything non-loopback as public.
 		ips, err := net.LookupIP(host)
 		if err != nil {
-			return true, nil
+			// Fail closed: a name that will not resolve now might resolve to a public address
+			// later, and this gate exists precisely to be conservative.
+			return true, nil //nolint:nilerr // deliberate: unresolvable means "treat as public"
 		}
 		for _, candidate := range ips {
 			if !candidate.IsLoopback() {
@@ -106,6 +117,17 @@ func (s *Server) routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/v1/health", s.handleHealth)
 	mux.HandleFunc("GET /api/v1/version", s.handleVersion)
+
+	assets, present := s.cfg.Assets, s.cfg.AssetsPresent
+	if assets == nil {
+		assets, present = web.Assets()
+	}
+	if !present {
+		s.log.Warn("no frontend build embedded; serving the API only",
+			"hint", "run `pnpm build` and rebuild the binary")
+	}
+	mux.Handle("/", s.staticHandler(assets, present))
+
 	return s.recoverPanics(mux)
 }
 

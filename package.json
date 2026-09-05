@@ -8,11 +8,12 @@
   },
   "scripts": {
     "dev": "concurrently --names api,web --prefix-colors blue,magenta --kill-others-on-fail \"go run ./cmd/veduta serve\" \"pnpm --filter veduta-web dev\"",
-    "build": "pnpm --filter veduta-web build && go build -o veduta ./cmd/veduta",
+    "build": "pnpm --filter veduta-web build && go build -trimpath -ldflags \"-s -w -X veduta.dev/veduta/internal/version.Version=$(git describe --tags --always --dirty 2>/dev/null || echo 0.0.0-dev) -X veduta.dev/veduta/internal/version.Commit=$(git rev-parse --short HEAD 2>/dev/null || echo unknown)\" -o veduta ./cmd/veduta",
     "check": "go vet ./... && go test ./... && pnpm --filter veduta-web check",
     "test": "go test ./...",
     "contracts": "go test ./internal/contracts/...",
-    "update": "pnpm --recursive update --latest && go get -u ./... && go mod tidy"
+    "update": "pnpm --recursive update --latest && go get -u ./... && go mod tidy",
+    "lint": "go vet ./... && golangci-lint run ./... && pnpm --filter veduta-web check"
   },
   "devDependencies": {
     "concurrently": "10.0.5"

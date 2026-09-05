@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Package contracts holds the cross-document checks that neither JSON Schema nor a regular
 // expression can express, plus the small helpers those checks delegate to.
 //
@@ -102,7 +104,9 @@ func isAllDigits(s string) bool {
 
 func alphanumericIdent(s string) bool {
 	for _, c := range s {
-		if !(c >= '0' && c <= '9') && !(c >= 'a' && c <= 'z') && !(c >= 'A' && c <= 'Z') && c != '-' {
+		digit := c >= '0' && c <= '9'
+		letter := (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+		if !digit && !letter && c != '-' {
 			return false
 		}
 	}

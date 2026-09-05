@@ -113,24 +113,34 @@ Legend: **⇉** can run in parallel with its siblings · **→** strictly serial
 
 ### Phase A — Skeleton (2 d)
 
-**A1 · Repository bootstrap** · 0.5 d · deps: none
+**A1 · Repository bootstrap** · 0.5 d · deps: none · **DONE**
 Objective: a repo that builds, lints and tests in CI on day one.
-Creates: `go.mod` (Go 1.24+), `Makefile`, `.golangci.yml`, `.github/workflows/ci.yml`,
+Creates: `go.mod` (Go 1.27), task runner (mise + pnpm scripts rather than a Makefile, since the
+dev loop spans both halves), `.golangci.yml`, `.github/workflows/ci.yml`,
 `cmd/veduta/main.go`, `internal/version/`, `LICENSE` (AGPL-3.0 + the §7 plugin exception), `sdk/LICENSE` and `schemas/LICENSE` (Apache-2.0), `LICENSING.md`, SPDX headers, `CONTRIBUTING.md` with DCO, `.editorconfig`.
 Tests: `make check` runs `go vet`, `golangci-lint`, `go test ./...`, `gofmt -l` (must be empty).
-Also in CI: `reuse lint` and a dependency-license check that fails on GPLv2-only/SSPL/BUSL/unlicensed.
+Licensing is enforced by tests rather than an external tool: `TestSourceFilesCarrySPDXHeaders`
+checks every Go file's header against the per-directory licence, and `TestDependenciesAreRecorded`
+fails when a module in `go.mod` is missing from `THIRD-PARTY-LICENSES.md` or when a recorded
+licence is GPL-2.0-only, SSPL, BUSL or unlicensed. Both are mutation-tested.
 AC: CI green on a clean clone; `go build ./cmd/veduta` produces a binary that prints its version;
 CI matrix builds `linux/amd64`, `linux/arm64`, `linux/arm/v7`, `darwin/arm64`.
 
-**A2 · Svelte SPA + embedding** · 1 d · deps: A1
+**A2 · Svelte SPA + embedding** · 1 d · deps: A1 · **DONE**
 Objective: `veduta` serves the frontend from the binary.
-Creates: `web/` (Svelte 5 + Vite + TS, no SvelteKit), `internal/api/static.go` with `embed.FS`,
-`web/vite.config.ts` with a dev proxy to `:8099`, `make dev` (Vite + `air`-style reload), `make build`.
+Creates: `web/` (Svelte 5 + Vite + TS, no SvelteKit), `web/embed.go` + `internal/api/static.go`
+with `embed.FS`, `web/vite.config.ts` with a dev proxy to `:8099`, and root `pnpm dev` / `pnpm build`
+covering both halves. `web/build/.gitkeep` is committed because `//go:embed` fails to compile with
+nothing to match; a binary built without the frontend answers 503 with the command to fix it rather
+than serving a blank page.
 Contracts: static handler serves `index.html` for unknown non-`/api` paths (SPA fallback), sets
 `Cache-Control: immutable` for hashed assets and `no-cache` for `index.html`.
-Tests: Go test asserting `GET /` returns HTML and `GET /assets/*.js` returns JS with the right
-content type; a `web` build test in CI.
-AC: `go build` after `npm run build` yields one binary that serves the app with no Node at runtime.
+Tests: `GET /` returns HTML with `Cache-Control: no-cache` and the strict CSP; `GET /assets/*.js`
+returns JavaScript with `immutable`; deep links fall back to the SPA; **`/api/*` is never shadowed
+by the fallback** (a typo in an endpoint must 404, not return HTML with a 200); path traversal
+cannot escape the embedded filesystem; a binary with no embedded build says so.
+AC met: a 6.7 MB `veduta` binary serves the SPA, its hashed assets and the API with no Node at
+runtime, and cross-compiles for linux/amd64, linux/arm64, linux/armv7 and darwin/arm64 in CI.
 
 **A3 · Server foundation** · 0.5 d · deps: A1 · ⇉ with A2 — **partially landed**: `internal/api`
 serves `/api/v1/health` and `/api/v1/version`, with timeouts, panic recovery, structured logging,
