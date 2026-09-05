@@ -56,6 +56,11 @@ jobs:
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
+      # web/src/lib/types/{widget,cardstate}.ts are generated from schemas/*.schema.json
+      # (milestone B2) - regenerating here and diffing catches drift between the checked-in
+      # files and their source of truth as a build failure, not something noticed later.
+      - run: pnpm gen-types
+      - run: git diff --exit-code -- web/src/lib/types
       - run: pnpm --filter veduta-web check
       - run: pnpm --filter veduta-web build
       - uses: actions/upload-artifact@v4

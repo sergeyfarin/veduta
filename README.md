@@ -13,9 +13,10 @@ describes what it wants; the core decides whether it is allowed, and holds every
 ## Status
 
 Design complete and frozen. Implementation under way: Phase A (repository bootstrap, embedded
-SPA) and milestone B1 (design tokens, card shell, all four execution states) are done and green
-in CI; spikes S2 (upstream API reality check) and S4 (visual prototype) are done. Next up:
-B2 (Widget Document / CardState schema types). See
+SPA), B1 (design tokens, card shell, all four execution states) and B2 (Widget Document,
+signals, the CardState envelope, and Go/TypeScript types generated from one schema) are done
+and green in CI; spikes S2 (upstream API reality check) and S4 (visual prototype) are done.
+Next up: B3 (block renderers). See
 [docs/02-implementation-plan.md](docs/02-implementation-plan.md) for the full milestone table and
 what's marked **DONE**.
 
@@ -63,6 +64,9 @@ This repository currently contains:
 | [mise.toml](mise.toml) | Pinned toolchain and task runner |
 | [web/](web/) | Svelte 5 + Vite + TypeScript SPA skeleton (pnpm workspace) |
 | [internal/api/](internal/api/) | HTTP foundation: health, build identity, embedded SPA, the loopback gate |
+| [internal/widgets/](internal/widgets/) | The Widget Document: typed Go structs, discriminated block union, `Validate` |
+| [internal/state/](internal/state/) | The CardState envelope; five constructors are the only way to build one |
+| [web/scripts/gen-types.mjs](web/scripts/gen-types.mjs) | Generates `web/src/lib/types/*.ts` from the schemas — `pnpm gen-types` |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | DCO sign-off, the licence split, what a change needs |
 | [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md) | Every dependency and its licence, enforced by a test |
 | [LICENSING.md](LICENSING.md) | Multi-license layout, plugin exception, AGPL §13 obligations |

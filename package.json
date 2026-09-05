@@ -13,7 +13,8 @@
     "test": "go test ./...",
     "contracts": "go test ./internal/contracts/...",
     "update": "pnpm --recursive update --latest && go get -u ./... && go mod tidy",
-    "lint": "go vet ./... && golangci-lint run ./... && pnpm --filter veduta-web check"
+    "lint": "go vet ./... && golangci-lint run ./... && pnpm --filter veduta-web check",
+    "gen-types": "pnpm --filter veduta-web gen-types"
   },
   "devDependencies": {
     "concurrently": "10.0.5"

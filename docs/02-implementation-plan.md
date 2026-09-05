@@ -205,19 +205,73 @@ tracks, no card overflowing the viewport at any width. This is the argument for 
 a milestone that touches CSS interaction between components, rather than trusting
 typecheck+build+token-tests alone - none of those three would have seen it.
 
-**B2 · Widget Document, signals, and the CardState envelope** · 1.5 d · deps: Part 0 · ⇉ with B1
-Creates: `internal/widgets/document.go` (typed structs, per-block-type item unions),
-`internal/widgets/validate.go` (schema + hard limits + markdown sanitisation),
-`internal/state/cardstate.go` (the envelope; `execution` is written only by the core),
-`web/src/lib/types/{widget,cardstate}.ts` **generated** from the schemas.
+**B2 · Widget Document, signals, and the CardState envelope** · 1.5 d · deps: Part 0 · ⇉ with B1 · **DONE**
+Creates: `internal/widgets/{document,blocks,validate}.go` (typed structs, a closed `Block`
+interface with nine concrete types and discriminated marshal/unmarshal), `schemas/embed.go` (the
+schemas ship inside the binary, like `web/embed.go`), `internal/state/cardstate.go` (the envelope:
+`Execution` has no constructor but the five named ones - `Pending`/`OK`/`Stale`/
+`StaleWithOpenCircuit`/`Error`/`ErrorWithOpenCircuit`/`Disabled` - each producing exactly one legal
+`(state, field)` combination from the schema's conditional validation, so an invalid combination
+cannot be assembled by calling code), `web/scripts/gen-types.mjs` and its output,
+`web/src/lib/types/{widget,cardstate}.ts` **generated**, wired into `pnpm gen-types` and a CI step
+that regenerates and runs `git diff --exit-code` against them.
+
 Contracts: `widgets.Validate(raw []byte) (Document, error)` — the single gate every runtime passes
 through; `state.CardState` — the single shape every API and SSE response returns.
-Tests: the adversarial corpus from Part 0 runs as a Go table test; limit violations (13 blocks, 13
-metrics, 65 KiB, 3 KiB markdown, raw HTML, `javascript:` link, `aspect: 0:0`, a metric item carrying
-an image) each rejected with a specific error; a document attempting to set `execution` fields is
-rejected; signals not declared in the manifest are rejected; fuzz `Validate` for panics.
-AC: Go and TS types are provably generated from one schema (CI fails if regeneration diffs); no
-code path lets an integration write any field under `execution`.
+
+Tests: the widget-schema slice of Part 0's adversarial corpus runs as a Go table test (16 cases,
+filtered by `schema=="widget"` from the shared `testdata/schema-cases.json` rather than a second
+copy); the golden fixture round-trips; hard limits beyond what JSON Schema itself can express -
+total document size and raw HTML inside markdown - are each mutation-tested (disabling the check
+makes its test fail); `Validate` is fuzzed for panics. On the envelope side: all seven constructors
+validated against **both** the real compiled JSON Schema (including its `allOf`/if-then branches)
+and a Go-level `CardState.Validate()` self-check; nine illegal combinations built as raw struct
+literals (bypassing every constructor) are each rejected by `Validate()`; a source-scanning test
+proves nothing in `internal/state`'s non-test source ever calls `Unmarshal`/`Decode` into an
+`Execution` - the ONLY route from untrusted bytes to program state is `widgets.Validate`, which
+returns a `widgets.Document`, never a `state.CardState` - and that scanner is itself
+mutation-tested (a planted call makes it fail).
+
+Real bugs the schema round-trip caught, worth recording because they are exactly the class of bug
+this milestone's cross-checking exists to catch:
+- `Document` had no `MarshalJSON`. It decoded fine (`UnmarshalJSON` reads and checks
+  `schemaVersion`), but re-encoding silently dropped the field, so every constructed `CardState`
+  failed schema validation - not because the envelope was wrong, but because its embedded document
+  was missing a required property on the way back out. Fixed and pinned with a dedicated
+  marshal-unmarshal-marshal round-trip test.
+- The first version of the 64 KiB document-size test built 200 small blocks and never actually
+  exercised the size gate: it tripped the schema's own unrelated 12-block `maxItems` limit first.
+  Rewritten as a single table block, schema-valid at every individual field (12 blocks, 100 rows,
+  8 columns, 512-char cells - each exactly at its own schema maximum) that is still ~410 KB in
+  total, isolating the byte-count check from the field-level limits already covered by the shared
+  corpus.
+- `json-schema-to-typescript` compiles the envelope's `allOf`/if-then branches into a TypeScript
+  **intersection** of all five state shapes, not a union keyed on the discriminant - which is not
+  merely inconvenient, it silently drops the entire point of the type (no narrowing of `document`
+  to non-null when `state === 'ok'`). `cardstate.ts`'s discriminated union is hand-assembled by
+  `gen-types.mjs` instead, reading the same `allOf` branches programmatically rather than
+  hardcoding independent knowledge of them - still generated, still caught by the CI diff, just
+  not routed through the library for this one schema. Confirmed necessary (not just cosmetic) with
+  an isolated TypeScript repro showing the exact same nested-discriminant narrowing failure
+  outside any generated code, and confirmed the fix works by exercising real narrowing through five
+  generated type-guard functions (`isOk`, `isStale`, ...) in a throwaway consumer file, both before
+  (fails to compile) and after (typechecks clean) the fix.
+- `json-schema-to-typescript`'s default handling of bounded arrays (`blocks` maxItems 12, table
+  `rows` maxItems 100, ...) compiles to a union of every fixed-length tuple up to the max -
+  technically faithful, unusable as a type. Set `ignoreMinAndMaxItems: true`; the length limits are
+  enforced by `widgets.Validate`, not by the TS type.
+
+Known, accepted limitation: the hand-assembled envelope union models field *removal*
+(`"x": false` in a branch) precisely but not field *narrowing-while-present* (`"error": {"type":
+"null"}` on the `ok` branch), so a couple of fields are slightly more permissive in TypeScript than
+the schema allows. Judged acceptable because the frontend only ever consumes a `CardState` the
+backend already built via the airtight Go constructors - it never constructs one itself - so the
+gap has no real exploit surface; revisit if that stops being true.
+
+AC met: Go and TS types are provably generated from one schema, and CI fails if regeneration
+diffs (verified both directions: a mutated schema produces a detected diff, restoring it produces
+none); no code path lets an integration write any field under `execution` (proven structurally by
+the source scanner, not merely by convention).
 
 **B3 · Block renderers I** · 1 d · deps: B1, B2
 Blocks: `status`, `metrics`, `key-value`, `progress`, `list`, `text`.
