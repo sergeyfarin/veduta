@@ -185,12 +185,25 @@ cascade), `web/src/lib/{Grid,Card,Section,Status,Skeleton}.svelte`, `web/src/lib
 content: `stale` dims and dates its retained document instead of blanking, `error` gives the reason
 and the retry, `pending` shows skeletons, `disabled` says what a human has to do.
 
-AC met, with one caveat. Contrast is enforced by `TestTokenContrast`, which parses `tokens.css` and
-computes WCAG 2.1 ratios for both palettes rather than trusting a browser to be present - it caught
+AC met. Contrast is enforced by `TestTokenContrast`, which parses `tokens.css` and computes
+WCAG 2.1 ratios for both palettes rather than trusting a browser to be present - it caught
 `--v-faint` at 4.44:1 on its first run. `TestComponentsUseTokensNotHardcodedColours` enforces the S4
-constraint that no component may use a colour literal. **The visual comparison against the S4
-prototype is still by eye** (`pnpm dev`); automating it is B5's job, and until then "reproduces the
-prototype" is a claim a human has to check.
+constraint that no component may use a colour literal.
+
+The visual comparison against the S4 prototype was done for real: `pnpm dev` plus a headless
+Playwright Chromium (borrowed ad hoc from a sibling project's cache on this VM, which has no
+display and no system browser - see `docs/dev-environment.md`), screenshotted in light, dark and
+at 380/700/1100/1440px. It caught a genuine bug rather than confirming a clean pass: at 380px the
+grid produced two uneven column tracks instead of one, because `Card.svelte` set `grid-column: span
+2` via **inline** style while `Grid.svelte`'s own mobile breakpoint collapsed to a single explicit
+column - a browser resolves that mismatch by inventing an implicit extra column, not by clamping
+the span. Fixed by moving the span out of inline style into the component's own scoped CSS (driven
+by `--span-cols`/`--span-rows` custom properties), which clamps per breakpoint using ordinary
+cascade. Verified after the fix with computed-style checks at all four widths, not just a
+screenshot that looked plausible: one track, two equal tracks, four equal tracks, four equal
+tracks, no card overflowing the viewport at any width. This is the argument for actually rendering
+a milestone that touches CSS interaction between components, rather than trusting
+typecheck+build+token-tests alone - none of those three would have seen it.
 
 **B2 · Widget Document, signals, and the CardState envelope** · 1.5 d · deps: Part 0 · ⇉ with B1
 Creates: `internal/widgets/document.go` (typed structs, per-block-type item unions),

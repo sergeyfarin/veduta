@@ -12,8 +12,15 @@ describes what it wants; the core decides whether it is allowed, and holds every
 
 ## Status
 
-Design complete and frozen; implementation starting at milestone A1. The contract suite in
-`internal/contracts` is the CI gate from the first commit — `mise run contracts`.
+Design complete and frozen. Implementation under way: Phase A (repository bootstrap, embedded
+SPA) and milestone B1 (design tokens, card shell, all four execution states) are done and green
+in CI; spikes S2 (upstream API reality check) and S4 (visual prototype) are done. Next up:
+B2 (Widget Document / CardState schema types). See
+[docs/02-implementation-plan.md](docs/02-implementation-plan.md) for the full milestone table and
+what's marked **DONE**.
+
+The contract suite in `internal/contracts` is the CI gate from the first commit —
+`mise run contracts`.
 
 Toolchain is pinned in [mise.toml](mise.toml): Go 1.27, Node 24, pnpm 11.
 
@@ -36,17 +43,20 @@ This repository currently contains:
 
 | Document | Contents |
 | --- | --- |
-| [docs/00-review-and-prior-art.md](docs/00-review-and-prior-art.md) | Competitive research, what not to reinvent, and 14 challenges to the original design |
+| [docs/00-review-and-prior-art.md](docs/00-review-and-prior-art.md) | Competitive research, reuse decisions, and eight rounds of adversarial review with verdicts |
 | [docs/01-architecture.md](docs/01-architecture.md) | Architecture, every contract (schemas, Go interfaces, REST, SQLite), threat model, decision log |
 | [docs/02-implementation-plan.md](docs/02-implementation-plan.md) | Spikes, dependency-ordered milestones, and an executable issue backlog |
+| [docs/spikes/](docs/spikes/) | S2 (upstream API findings) and S4 (visual prototype, HTML+CSS) write-ups |
+| [docs/dev-environment.md](docs/dev-environment.md) | Headless-VM notes: no system browser, how UI changes actually get verified |
+| [hack/capture-upstream-fixtures.sh](hack/capture-upstream-fixtures.sh) | Captures real Immich/Jellyfin responses as reviewed fixtures |
 | [schemas/](schemas/) | JSON Schemas: Widget Document, card-state envelope, plugin manifest, integration lock, configuration |
 | [examples/veduta.yaml](examples/veduta.yaml) | Target configuration file (validates against the config schema) |
-| [plugins/immich/manifest.yaml](plugins/immich/manifest.yaml) | A complete declarative integration — no code, no rebuild |
+| [plugins/](plugins/) | Three manifests: Immich and Glances (declarative), Jellyfin (WASM) — no code, no rebuild for the first two |
 | [examples/veduta.lock.yaml](examples/veduta.lock.yaml) | Approved capabilities and routes per integration |
 | [testdata/widgets/](testdata/widgets/) | Golden Widget Document and card-state fixtures |
 | [testdata/schema-cases.json](testdata/schema-cases.json) | 79-case adversarial schema corpus |
 | [testdata/semantic-cases/](testdata/semantic-cases/) | 29 fixtures guarding the cross-document checks (a deleted check fails the build) |
-| [testdata/canonical/](testdata/canonical/) | Golden RFC 8785 digests with collision invariants, reproduced by Go and Python |
+| [testdata/canonical/](testdata/canonical/) | Golden RFC 8785 digests with collision invariants (checked by Go; the suite is Go-only, see below) |
 | [internal/contracts/](internal/contracts/) | The contract suite: structural, RE2 portability, canonical digest and semantic layers |
 | [internal/canonical/](internal/canonical/) | Strict decoder and RFC 8785 canonical manifest digest |
 | [mise.toml](mise.toml) | Pinned toolchain and task runner |

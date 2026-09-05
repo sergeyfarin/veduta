@@ -74,9 +74,11 @@
   );
 
   const label = $derived(statusLabel ?? text ?? 'Online');
-  const style = $derived(
-    `grid-column: span ${span.columns ?? 1}; grid-row: span ${span.rows ?? 1};`
-  );
+  // Custom properties only - grid-column/grid-row are set in this component's own CSS, which
+  // clamps them per breakpoint below. Setting the grid properties directly via inline style
+  // would fight that clamp: an inline value always wins over a stylesheet rule of equal
+  // specificity, which is exactly the bug this replaced (see the comment on .card below).
+  const style = $derived(`--span-cols: ${span.columns ?? 1}; --span-rows: ${span.rows ?? 1};`);
 </script>
 
 <article class="card" class:stale={state === 'stale'} {style}>
@@ -132,6 +134,20 @@
     container-type: inline-size;
     min-height: 0;
     overflow: hidden;
+    grid-column: span var(--span-cols, 1);
+    grid-row: span var(--span-rows, 1);
+  }
+  /* Grid.svelte collapses its own explicit column count at these same breakpoints. A card
+   * spanning more columns than the grid explicitly defines does not get clamped by the
+   * browser - it gets an EXTRA implicit column invented to satisfy the span, which is exactly
+   * as broken as it sounds: at a 380px width, a span-2 card produced a real 282px column next
+   * to a 34px sliver holding half a neighbouring card, not a single full-width column. Each
+   * breakpoint here must clamp the span to what Grid actually offers at that width. */
+  @media (max-width: 1000px) {
+    .card { grid-column: span min(var(--span-cols, 1), 2); }
+  }
+  @media (max-width: 620px) {
+    .card { grid-column: span 1; }
   }
 
   header {
