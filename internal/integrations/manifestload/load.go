@@ -417,8 +417,15 @@ func (v *exprVisitor) Visit(p *ast.Node) { //nolint:revive // ast.Visitor requir
 	v.count++
 	switch n := (*p).(type) {
 	case *ast.IdentifierNode:
-		if n.Value == "$env" {
-			v.err = errors.New("$env is forbidden")
+		// "$env" exposes the whole environment; "__"-prefixed names are the declarative
+		// runtime's own internal wiring (the invocation context, the capability grant) threaded
+		// through the same env map expressions evaluate against, per necessity of expr's
+		// WithContext mechanism (which requires a named, addressable variable) - never data a
+		// manifest is allowed to introspect. Rejecting the whole prefix, not just today's known
+		// names, means a future internal identifier is closed off by construction rather than
+		// requiring this list to be extended in lockstep.
+		if n.Value == "$env" || strings.HasPrefix(n.Value, "__") {
+			v.err = fmt.Errorf("%q is forbidden", n.Value)
 		}
 	case *ast.BinaryNode:
 		if n.Operator == "matches" {

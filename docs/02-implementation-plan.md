@@ -909,24 +909,52 @@ caps, a load-time `exprNodes` check, and one shared `iterations` counter decreme
 `each`/`map`/`filter`/`sortBy` and template expansion; the explicit supported-function list (D47)
 that is the actual manifest DSL surface, versioned as a compatibility promise independent of
 `expr`'s own stdlib.
-Tests: fixture-driven — a manifest + recorded HTTP responses produce a byte-identical golden
-Widget Document; **adversarial: a billion-laughs manifest is refused before parsing completes; a
-manifest with duplicate mapping keys is rejected rather than silently overwritten; a manifest of
-hundreds of maximum-sized expressions is refused by the aggregate ceiling; a `sortBy` over a large
-array is charged n·log n and exhausts the budget; a 50 MB upstream response is refused at decode
-without allocating it; a nested `map`/`filter`/`sortBy` over a large array exhausts the iteration budget and fails the
-card rather than the process; an expression with 5 000 AST nodes is rejected at load; a pipeline that
-builds a huge intermediate list and then takes six elements is stopped on intermediate size, not
-final output; a benchmark asserts a hostile manifest cannot exceed its deadline by more than one
-evaluation step (checked inside the charged collection operations, not only between whole-expression
-evaluations)**; **expr's native `map`/`filter`/`sortBy`/`all`/`any`/`one`/`none`/`find` are
-unreachable — a manifest expression naming any of them resolves to the D3-owned charged
-implementation, proven by asserting the disabled name is absent from the compiled program's
-resolved builtins, not merely by behavioural inference**; **a pipeline request with no matching
-manifest route is a load error, not a runtime denial** (the declarative runtime must not be a way
-around D2's checks); an `{asset}` node against a non-asset route is a load error; expression errors
-report a YAML path; a manifest requesting an undeclared slot or missing the `http` capability is
-rejected at load; an operation emitting an undeclared signal fails validation.
+Tests: fixture-driven — the real, checked-in `plugins/glances/manifest.yaml` and
+`plugins/immich/manifest.yaml` run to a real Widget Document, both through a fake broker
+(`fixtureBroker`, exercising the runtime's own template/pipeline logic in isolation) and through
+the **real** `capabilities.Broker` + `connections.Registry` + a real `Grant` built from the
+manifest's own routes (`TestGlances_RealBrokerEndToEnd`) — the latter added on review, since the
+fake broker alone never proves D3's constructed `HTTPRequest` actually satisfies a real Grant's
+authorization; a companion test drops one route from `ApprovedRoutes` and confirms the pipeline
+step calling it is denied by the broker, not silently allowed. **Adversarial** (in
+`manifestload`'s own test suite, added on review — none of this existed at first commit despite
+the checks themselves being present in `load.go`): an oversized manifest, excessive YAML
+depth/node count, aliases (forbidden outright, not accounted), duplicate keys, an
+over-512-AST-node single expression, twelve expressions each under the per-expression cap that
+together exceed the 4096 per-operation aggregate ceiling, a literal string past the 64 KiB
+literal-byte ceiling, an undeclared slot, a pipeline request with no declared `http` capability, a
+static pipeline route with no matching manifest route, a static `{asset}` node with no matching
+`use: asset` route, an asset node with no `assets` capability, and an undeclared signal — all
+twelve are load errors, each with its own regression test. `sortBy` is charged `n·log₂n` and `map`
+call-boundary-charged by length, both proven directly against `compile`/`run`
+(`exprenv_test.go`); `TestEveryExprBuiltinIsExplicitlyClassified` enumerates
+`github.com/expr-lang/expr/builtin`'s actual registered names and asserts each has exactly one
+classification (predicate-charged / D3-replaced / explicitly allowlisted / denied) — an expr
+upgrade that adds a new builtin fails this test rather than silently exposing it.
+
+**A real, confirmed vulnerability found and fixed on review, before this milestone's commit was
+pushed:** `declarative`'s expr environment threads the invocation's `capabilities.Grant` and
+`context.Context` through the *same* `map[string]any` environment user expressions evaluate
+against, under the keys `__grant`/`__ctx` (necessary because `expr.WithContext` requires a named,
+addressable variable). `manifestload`'s AST validator rejected `$env` by exact name but did not
+know about these two runtime-internal keys, so a manifest expression `{expr: "__grant"}` compiled
+and evaluated cleanly - confirmed directly, not assumed, by compiling and running exactly that
+expression against a real budget and env before the fix, which returned the raw env value
+verbatim. Depending on placement this could render the full authority object (approved routes,
+capabilities, limits) into a rendered Widget Document, or let a manifest make control-flow
+decisions based on internal authorization state no plugin is supposed to be able to introspect.
+Fixed by rejecting any identifier with a `__` prefix in the same validation pass as `$env`, closing
+off every internal name the runtime uses (`__grant`, `__ctx`, `__d3_charge`) and any future one by
+construction rather than requiring the denylist to be extended by hand each time one is added;
+`TestLoad_RejectsInternalIdentifierAccess` is the regression test.
+
+**Not fixed, recorded instead (docs/03-backlog.md):** `manifestload.Limits` uses plain `int`
+fields, so an explicit `cacheEntries: 0` (schema minimum 0, a real distinct value from "unset" -
+the exact distinction `internal/integrations.Limits` was built with pointer fields in D2b to
+preserve) is indistinguishable from omission and gets silently widened back to the default by
+`WithDefaults`. Dormant today - D3 never calls `Broker.CacheGet`/`CachePut`, since the frozen
+four-node template grammar and pipeline step shape have no cache-triggering construct - but a real
+bug the moment caching is wired in.
 AC: an integration is added by dropping one YAML file in and approving it once, with no rebuild.
 
 **D4 · Generic HTTP/JSON card** · 0.5 d · deps: D3

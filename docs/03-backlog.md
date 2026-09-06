@@ -15,6 +15,21 @@ priority (which milestone should absorb it, or "before X" for a hard blocker).
 
 ## Open
 
+### `manifestload.Limits.CacheEntries` can't represent an explicit zero
+
+Found reviewing D3. `manifestload.Limits` (and the `rawManifest`/lock-derived construction in
+`internal/integrations/declarative/runtime.go`'s `Load`) uses plain `int` fields; `WithDefaults`
+treats `0` as "not set" for every field, including `cacheEntries`, whose schema minimum is `0` -
+the one limit field where an explicit zero ("no caching") is a real, legitimate, distinct value
+from omission. `internal/integrations.Limits` (D2b) was deliberately built with pointer fields to
+preserve exactly this distinction; `manifestload.Limits` reintroduces the bug D2b's design
+avoided. Dormant today: `internal/integrations/declarative` never calls `Broker.CacheGet`/
+`CachePut` at all, since neither the pipeline-step grammar nor the four-node template grammar has
+a cache-triggering construct - a manifest cannot presently ask for caching, so nothing observes
+the wrong default. Priority: whenever declarative caching is wired in (no milestone currently
+owns this) - fix by making `manifestload.Limits` pointer-fielded like D2b's, or by threading a
+"was this key present" bit alongside the plain `int` some other way.
+
 ### D2b's approval endpoint has no sudo-window gate and no audit trail yet
 
 `docs/02-implementation-plan.md`'s D2b entry calls for `POST /api/v1/auth/sudo`, a fresh

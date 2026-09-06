@@ -100,7 +100,9 @@ This repository currently contains:
 | [internal/connections/](internal/connections/) | The credential boundary: per-connection HTTP client, auth injection, IP-pinning dialer, rate/redirect/size limits |
 | [internal/connections/routepath/](internal/connections/routepath/) | The one route-canonicalisation and glob-matching routine every authority check shares — fuzz-tested |
 | [internal/capabilities/](internal/capabilities/) | The capability broker: three independent route policies, header/query allowlisting, per-invocation budgets, typed denials |
-| [internal/integrations/](internal/integrations/) | The lock file: canonical manifest digest, permission diff, two-step digest-bound approval — `veduta integration list\|diff\|approve` and `GET/POST /api/v1/integrations...` both call into it |
+| [internal/integrations/](internal/integrations/) | The lock file: canonical manifest digest, permission diff, two-step digest-bound approval — `veduta integration list\|diff\|approve` and `GET/POST /api/v1/integrations...` both call into it; also the frozen `Runtime`/`Instance` contract every runtime implements |
+| [internal/integrations/manifestload/](internal/integrations/manifestload/) | Parses and statically validates a declarative manifest: pre-parse byte/depth/node/alias limits, schema validation, the four-node template grammar, load-time slot/capability/route/signal checks |
+| [internal/integrations/declarative/](internal/integrations/declarative/) | The declarative runtime: an `expr` environment where native collection builtins keep their syntax but are call-boundary charged against a shared budget, the pipeline executor, output-document assembly through `widgets.Validate` |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | DCO sign-off, the licence split, what a change needs |
 | [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md) | Every dependency and its licence, enforced by a test |
 | [LICENSING.md](LICENSING.md) | Multi-license layout, plugin exception, AGPL §13 obligations |
