@@ -207,7 +207,7 @@ func (i *instance) Invoke(ctx context.Context, req integrations.InvokeRequest) (
 	var cancel context.CancelFunc
 	ctx, cancel = context.WithDeadline(ctx, deadline)
 	defer cancel()
-	b := &budget{deadline: deadline, iterations: i.manifest.Limits.Iterations, maxBytes: i.manifest.Limits.InputMB << 20, maxNodes: i.manifest.Limits.JSONNodes}
+	b := &budget{ctx: ctx, deadline: deadline, iterations: i.manifest.Limits.Iterations, maxBytes: i.manifest.Limits.InputMB << 20, maxNodes: i.manifest.Limits.JSONNodes}
 	env := map[string]any{"params": params, "now": time.Now().UTC(), "__grant": req.Grant}
 	for _, step := range op.Pipeline {
 		if e := b.check(); e != nil {

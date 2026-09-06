@@ -78,7 +78,7 @@ The original plan put this first *and* on the demo critical path while describin
 by security policy rather than by sandbox ergonomics, the broker interface no longer waits on it.
 S1a keeps the early warning; S1b moves next to the code it serves.
 
-### S2 — Upstream reality check: Immich + Jellyfin · 0.5 d · **blocks E3, G4** · **spec pass DONE, live pass outstanding**
+### S2 — Upstream reality check: Immich + Jellyfin · 0.5 d · **blocks E1, E3, G4** · **spec pass DONE, live pass outstanding**
 
 Findings and consequences: [docs/spikes/s2-upstream-reality-check.md](spikes/s2-upstream-reality-check.md).
 The specification pass found two defects that would have surfaced in E3 and G4: Immich's
@@ -86,7 +86,11 @@ The specification pass found two defects that would have surfaced in E3 and G4: 
 manifests are corrected. The live pass runs
 [`hack/capture-upstream-fixtures.sh`](../hack/capture-upstream-fixtures.sh) against real servers to
 answer what a specification cannot — chiefly the actual `Content-Type` of an Immich thumbnail,
-which decides whether the asset proxy can compare headers at all.
+which decides whether the asset proxy can compare headers at all. **E1 added to `blocks` in the
+D2b/D3/D4/D5 review (2026-09):** the asset proxy whose content-type guard this line describes is
+E1, not E3 - E1's own Tests line ("non-image content type refused") needs the live pass's finding
+to know whether that guard can compare headers or must sniff exclusively, so E1 depends on the
+live pass having run, not just on E3 (which was the only place this was previously wired).
 
 Original scope — against real servers, capture as `testdata/`: Immich `/api/server/statistics`, the metadata search
 payload, and the exact thumbnail endpoint + auth mechanism; Jellyfin's `X-Emby-Authorization`
@@ -1065,22 +1069,43 @@ full detail in each fix's own commit and test names, this is the summary:
   body (`api.Server.limitBody`, strict `json.Decoder` framing in `integrations.go`); hot reload
   updated only the config snapshot, not the `auth: none` safety check, which ran once at startup
   only (`cmd/veduta/main.go`'s `configLoader`,
-  `TestConfigLoader_RejectsAuthNoneOnHotReloadNotOnlyAtStartup`); two concurrent approvals could
+  `TestConfigLoader_RejectsAuthNoneOnHotReloadNotOnlyAtStartup`) - this fixes only the safety-check
+  half of what the review's finding named; the connection registry and its resolved secrets still
+  do not reload as part of the same generation (an already-tracked, separate D5 limitation, see
+  `docs/03-backlog.md`'s first Open entry - not newly introduced or newly fixed here); two concurrent approvals could
   race and lose an update, and `approvedBy` was client-supplied and unauthenticated
   (`api.Server.approveMu`, a fixed `unauthenticatedApprovedBy` sentinel,
   `TestIntegrationApprove_ConcurrentApprovalsOfDifferentIntegrationsDoNotLoseAnUpdate`,
   `TestIntegrationApprove_ClientCannotSupplyApprovedBy`).
-- **Pushed back on:** the claim that dynamic output could emit an undeclared signal - traced
-  `manifestload`'s template compiler and confirmed an object node's key set is always static
-  (YAML mapping keys, never an `{expr}` node), so this is not reachable in the current grammar. A
-  cheap defensive runtime check was added anyway (`declarative/runtime.go`, rejects any evaluated
-  signal name not in the operation's declared set) since it costs nothing and holds if the grammar
-  ever grows a dynamic-key construct.
-- **Residual gaps recorded, not fixed here** (`docs/03-backlog.md`): the redirect fix enforces
-  connection-policy `allowedPaths`, but cannot yet re-check the *lock's* route grant on a
-  redirected request, since that needs `Grant` plumbed into `connections.Registry`, which nothing
-  currently does; the concurrent-approval fix closes the race within one process but not between
-  the REST API and a concurrently-running `veduta integration approve` CLI invocation.
+- **Initially pushed back on, then confirmed correct on a second review pass:** the claim that
+  dynamic output could emit an undeclared signal. The first pass traced `manifestload`'s template
+  compiler, found that an object node's key set is always static (YAML mapping keys, never an
+  `{expr}` node), and concluded from that alone that the hole was unreachable - true for an
+  object-*shaped* `output`/`signals` node, but the compiler does not require either to be
+  object-shaped at all: `output: {expr: "..."}` (a mapping whose only key is `expr`) compiles the
+  *entire* output - the whole document, "signals" included - as one opaque expression, with no
+  static key to check against `op.Signals` in the first place, since there is nothing to walk into
+  until the expression actually runs. Confirmed reachable directly: an operation whose `output` is
+  `{expr: '{"title": "t", "blocks": [], "signals": r}'}`, with `r` bound to an upstream JSON
+  response naming a signal the manifest never declared, reaches `widgets.ValidateWithLimit` and
+  produces exactly that undeclared signal - and, with the runtime's own post-evaluation check
+  (`declarative/runtime.go`, added on the first pass "as a defensive measure") temporarily removed,
+  the invocation succeeds with the undeclared signal in the response. The check is load-bearing,
+  not future-proofing - `TestInvoke_DynamicOutputEmittingAnUndeclaredSignalIsRejected` and
+  `TestInvoke_DynamicOutputWithOnlyDeclaredSignalsSucceeds` are its regression tests.
+- **Redirect fix completed on a second review pass:** the first pass's redirect fix enforced
+  connection-policy `allowedPaths` on a redirect hop but could not re-check the *lock's* route
+  grant, since that needs a `Grant` plumbed into `connections.Registry`, which nothing did -
+  correctly challenged as incomplete rather than accepted as done. Closed via
+  `Grant.AuthorizesRedirect` plus a small context-carried hook
+  (`connections.WithRedirectAuthorizer`) that `capabilities.Broker.HTTP` attaches before calling
+  `registry.Do`, so `redirectPolicy` - built once at connection-construction time, with no `Grant`
+  in scope of its own - can call back into the invoking Grant via the redirected request's context
+  (which Go's `http.Client` carries unchanged through every hop). See `docs/03-backlog.md`'s
+  Resolved section for the full account and its regression tests.
+- **Residual gap recorded, not fixed here** (`docs/03-backlog.md`): the concurrent-approval fix
+  closes the lock-write race within one process but not between the REST API and a
+  concurrently-running `veduta integration approve` CLI invocation.
 - **Refactor critique (type duplication across `integrations.Limits`/`manifestload.Limits`/
   `EffectiveLimits`/`capabilities.Limits`) confirmed as a real contributor** to the `outputKB`/
   `responseMB` bugs above, but full unification declined - each type earns its shape from a prior,
@@ -1092,7 +1117,66 @@ full detail in each fix's own commit and test names, this is the summary:
   H1's own `deps: F1` was never reconciled with "H1 moves before E3." F1 is now called out as
   needing to be pulled forward to immediately before E1/Phase E, both at F1/E1/E2/E3's own entries
   and in Part 3's critical path; G4's stale `X-Emby-Authorization` text (superseded by S2's
-  completed live pass) is corrected to the real `Authorization` header.
+  completed **spec** pass, not its still-outstanding live pass) is corrected to the real
+  `Authorization` header.
+
+**Second review pass (2026-09), same review's own findings re-verified rather than taken as
+closed:** a follow-up review of the fixes above found several real gaps in the fixes themselves,
+addressed here rather than left for a third pass:
+- **The manifest-TOCTOU fix (finding #4) had reintroduced an unbounded read.** Both
+  `manifestload.Load` and `integrations.LoadManifest` read a manifest's bytes with a plain
+  `os.ReadFile` before comparing the result's length against the byte cap - meaning a
+  multi-gigabyte manifest would be fully allocated before being rejected, the exact unbounded-read
+  the cap exists to prevent, just moved one line later. Both now go through a `readBoundedFile`
+  helper (`io.LimitReader(f, maxBytes+1)`) that never allocates past the cap regardless of the
+  file's actual size.
+- **The redirect fix (finding #1) was genuinely incomplete**, not merely conservative - see the
+  "Redirect fix completed on a second review pass" bullet above.
+- **The undeclared-signal pushback (finding #6) was wrong** - see the "Initially pushed back on,
+  then confirmed correct" bullet above.
+- **`responseMB` (finding #2) was enforced only after the full response had already been read** at
+  the connection's own, wider `MaxResponseBytes` ceiling - a post-hoc check on already-buffered
+  bytes, not a bound on how much was ever read. `connections.Request` gained a
+  `MaxResponseBytes` field the caller can use to narrow (never widen) the connection's own limit;
+  `capabilities.Broker.HTTP` now passes the grant's `ResponseMB` through it, so `registry.Do`
+  itself stops reading at `min(connection limit, grant limit)` - see
+  `TestDo_CallerCeilingNarrowsTheConnectionLimit` and
+  `TestDo_CallerCeilingNeverWidensTheConnectionLimit`.
+- **The deadline fix (finding #2) checked only a stored wall-clock deadline, never `ctx.Err()`.**
+  `declarative.budget.check()` now checks both - closing the case where a parent context is
+  cancelled for a reason other than reaching the manifest's own timeout (a disconnected client, a
+  future scheduler fencing a stale invocation), which previously would not stop a long-running
+  expr-only loop (no HTTP call in it to notice the cancellation another way) until the wall-clock
+  deadline anyway. See `TestBudgetCheck_ObservesContextCancellationNotJustItsOwnDeadline` and
+  `TestRun_StopsPromptlyWhenContextIsCancelledMidExpression`.
+- **`widgets.ValidateWithLimit` (finding #2) had no upper bound of its own** on the caller-supplied
+  `maxBytes` - correct that a manifest's reconciled `outputKB` is already clamped to the schema's
+  256 KiB core maximum before it ever reaches this function, but the function itself trusted every
+  caller to have already done that, rather than enforcing it as a second, independent backstop.
+  Added `MaxDocumentBytesHardCap` (256 KiB, cross-checked against `internal/integrations`' own
+  core maximum by `TestOutputKBHardCapMatchesCoreMaximum`) as an absolute ceiling
+  `ValidateWithLimit` clamps to regardless of what it is asked for. Also found: the existing
+  "wider limit" test never actually exercised an output wider than the 64 KiB default (a single
+  text block's content is itself capped at 2048 bytes by the schema, so the fixture could not
+  reach past ~2 KiB) - rewritten using multiple schema-valid `list` blocks to genuinely test both
+  the wider-limit and hard-cap paths.
+- **Two plan-doc self-contradictions from the first pass, corrected:** A3 was cited as
+  "already landed" in two places while its own line says "partially landed" - narrowed to name
+  specifically which part (the HTTP-server scaffolding, not the still-open config-flags/request-id
+  work) F1/E1 actually depend on. Part 3's critical path chain omitted A3 despite F1 (later in the
+  same chain) depending on it - added.
+- **S2's status was misstated in two places** as "S2's completed live pass" when the live pass is
+  still outstanding (S2's own header: "spec pass DONE, live pass outstanding") - it was the
+  **spec** pass that settled the `Authorization` header question. Corrected in both places.
+- **S2 should block E1, not only E3 and G4:** E1's own asset-proxy content-type guard
+  ("non-image content type refused") is exactly what S2's still-outstanding live pass informs
+  ("the actual Content-Type of an Immich thumbnail... decides whether the asset proxy can compare
+  headers at all"), previously wired only to E3. Added to S2's `blocks` line and E1's `deps`.
+- **E3's synchronous invoke path was assumed, not scoped:** the first pass's dependency note
+  argued E3 doesn't need F2/F3 because it invokes the integration synchronously per request, but
+  named no deliverable that actually builds that path. `GET /api/v1/cards` currently returns
+  `state.Pending` unconditionally for every card - E3's entry now names replacing that stub with a
+  real `Invoke` call as its own new scope, not something already provided.
 
 Wiring note: `internal/connections.Registry` had never actually been constructed in production
 code before this milestone - D1 through D4 built and tested it in isolation, with Phase F (the
@@ -1104,9 +1188,11 @@ recorded in docs/03-backlog.md, since nothing before Phase F actually depends on
 
 ### Phase E — Assets and vertical slice #1 (2.5 d)
 
-**E1 · Asset token and proxy endpoint** · 1 d · deps: D2, F1 (see note below - Phase E is written
-before Phase F in this document, but F1 has no dependency beyond the already-landed A3 and must in
-practice be pulled forward ahead of E1)
+**E1 · Asset token and proxy endpoint** · 1 d · deps: D2, F1, S2 (F1: see note below - Phase E is
+written before Phase F in this document, but F1's own dependency, A3, only needs A3's
+already-landed HTTP-server portion (F1 adds its own `--data-dir` layout rather than needing A3's
+still-open config-flags work first - see the note below for why this distinction matters), so F1
+must in practice be pulled forward ahead of E1. S2: the live pass, not yet run - see S2's own entry)
 Creates: `internal/capabilities/assets/` (mint, verify, HMAC key bootstrap in `settings`),
 `GET /api/v1/assets/{token}` with all §7 guards.
 Creates also: `connection_state` revision bootstrap and rotation on material config or resolved
@@ -1124,9 +1210,13 @@ also: `connection_state` revision bootstrap" and "persisted signing key") both n
 tables from §10 (`connection_state`, `settings`) that this document's own F1 entry says it creates
 ("the thirteen tables from §10"). E1 was written with only `deps: D2`, silently assuming storage
 that does not exist yet at that point in the document's own phase order (Phase E precedes Phase F).
-Since F1's only dependency is A3 (already landed), the fix is not to give E1 its own bespoke
-bootstrap store, but to pull F1 forward: land F1 immediately before E1, keep the rest of Phase F
-where it is. `docs/03-backlog.md`'s existing entries for the asset-token signing key and
+Since F1's own dependency, A3, is only *partially* landed (A3's own line above: request-id
+middleware and config flags remain) but the part F1 actually needs - the HTTP-server scaffolding
+`internal/api` already provides - is the part that's done, the fix is not to give E1 its own
+bespoke bootstrap store, but to pull F1 forward: land F1 immediately before E1, keep the rest of
+Phase F where it is. This does not require A3's still-open config-flags work first: F1's own line
+already says it creates the `--data-dir` layout itself, so F1 is adding that flag, not waiting on
+A3 to add it. `docs/03-backlog.md`'s existing entries for the asset-token signing key and
 `connection_state` already say "Priority: E1" for this reason; this note makes the dependency
 explicit in the plan itself rather than leaving it implied only in the backlog.
 
@@ -1145,7 +1235,17 @@ single-flight/backoff/circuit-breaker machinery formalises this once F2 lands, i
 precondition for the first working demo)
 Objective: **the demo.** Dashboard → Immich → six most recent photos → signed proxy → browser.
 Creates: `plugins/immich/manifest.yaml` (declarative), `testdata/immich/*.json`, golden documents,
-docs page.
+docs page, **and the synchronous invoke path itself** - `GET /api/v1/cards` (`internal/api/
+server.go`) currently returns `state.Pending(c.ID)` for every configured card unconditionally (a
+deliberate stub: "configured cards are returned honestly as pending so the production render path
+is usable" until a real invoker exists), so *something* has to replace that stub with a real
+`declarative.Instance.Invoke` call per request for E3's own AC to be true at all. **Named
+explicitly here on review (2026-09):** the dependency note above asserted this synchronous path as
+already implied by the critical path, but nothing in this entry previously listed building it - it
+is new scope for E3, not something D3/E1 already provide. F2 later replaces this direct per-request
+call with the real scheduler (single-flight, backoff, circuit breaker, caching) - this entry's own
+version is intentionally the simplest thing that can be true: invoke on request, no retry, no
+cache, no fencing.
 Tests: fixture test producing a golden Widget Document; an end-to-end test with an httptest server
 impersonating Immich, asserting the browser-visible HTML contains no API key and images load through
 `/api/v1/assets/`.
@@ -1219,8 +1319,10 @@ AC: a new plugin can be scaffolded and built in under five minutes following the
 
 **G4 · Jellyfin plugin — VERTICAL SLICE #2** · 1 d · deps: G2, S2
 Chosen because it needs real logic: send the `Authorization: MediaBrowser Token="..."` header (S2's
-completed live pass settled on this over the legacy `X-Emby-Authorization`/`X-Emby-Token` forms -
-see `docs/spikes/s2-upstream-reality-check.md` and `examples/veduta.yaml`'s Jellyfin connection),
+completed **spec** pass settled on this over the legacy `X-Emby-Authorization`/`X-Emby-Token` forms
+- F6 in `docs/spikes/s2-upstream-reality-check.md`, marked `[spec]` there, not `[live]`; S2's live
+pass against a real server is still outstanding - see `examples/veduta.yaml`'s Jellyfin connection
+for where the spec-pass decision already landed),
 resolve the user, list recently-added items, and mint poster asset refs.
 Tests: fixture test against recorded Jellyfin responses producing a golden document — **the same
 golden test must also pass if the integration is reimplemented as builtin Go**, proving the runtime
@@ -1241,6 +1343,21 @@ after E3, meaning H1 could not actually build where this section placed it. E1's
 pulls F1 forward to immediately before E1/Phase E for the same reason (`connection_state` and the
 signing key), which resolves this too: with F1 landing before Phase E, H1 (deps: F1) can genuinely
 land where this section says it does, before E3.
+
+**Why Part 3's critical path chain does not list H1 or A4, despite this section's own "before
+E3/A4" wording (a second inconsistency the same review found, resolved by making the distinction
+explicit rather than picking one wording and dropping the other):** "H1 moves before E3" is a
+*build-order* recommendation for a team planning to expose the running server on a real network
+sooner rather than later, not a dependency of the critical path's own goal, which A3's own gate
+already answers directly - the listener refuses a non-loopback bind until H1 lands, so a
+**loopback-only** demo (the critical path's actual target: "a compelling demo," not "a
+publicly-reachable one") needs no auth at all and genuinely does not depend on H1. The same is
+true of A4 (a container image/release build): nothing about producing one requires sessions to
+exist first, so "before A4" is the same build-order preference, not a technical dependency - A4's
+own `deps: A2` line is unaffected and correct as it stands. Both are real, useful sequencing advice
+for a team optimising for "safe to expose early," which is a different optimisation target than
+the critical path's "fastest to a demo" - stated as two different answers to two different
+questions here, rather than left for a reader to reconcile as one.
 
 **H1 · Sessions** · 1 d · deps: F1
 Creates: `internal/auth/` (argon2id via `x/crypto`, session store, cookie flags, CSRF double-submit,
@@ -1331,8 +1448,10 @@ iteration, docs, packaging, the things that always appear — **8–12 calendar 
 number. Roughly a quarter of it (the demo path below) is front-loaded, which is what keeps momentum.
 
 **Critical path (the shortest route to a compelling demo):**
-`Part 0 → S2 → S4 → A1 → A2 → B1 → B2 → B3 → B4 → C1 → C2 → D1 → D1b → D2 → D2b → D3 → F1 → E1 → E3` — Immich
-photos on a beautiful dashboard behind a credential-free proxy, with route-limited authority.
+`Part 0 → S2 → S4 → A1 → A2 → A3 → B1 → B2 → B3 → B4 → C1 → C2 → D1 → D1b → D2 → D2b → D3 → F1 → E1 → E3` — Immich
+photos on a beautiful dashboard behind a credential-free proxy, with route-limited authority. (A3
+added to this chain in the D2b/D3/D4/D5 review, 2026-09 - it was missing despite F1, later in the
+same chain, depending on it.)
 Roughly 16–18 developer-days, demonstrable, screenshot-able, and it validates every architectural
 decision that matters. **S1a runs alongside in week one** as an early warning; **S1b and the whole
 WASM phase are off this path** — the original plan contradicted itself by placing S1 first while
@@ -1340,8 +1459,10 @@ describing it as only "informing" the broker.
 
 **F1 is now on the critical path, not after it** (found in the D2b/D3/D4/D5 review, 2026-09): E1's
 `connection_state` revision and persisted signing key are real §10 SQLite tables, so F1 must land
-before E1, not after E3 as this line originally implied. F1's own dependency is only A3, already
-landed, so pulling it forward costs nothing here that wasn't already owed. **Then** `F2 → F3 → F4`
+before E1, not after E3 as this line originally implied. F1's own dependency is only A3 - and only
+the HTTP-server portion of A3 that's already landed, not the config-flags/request-id-middleware
+portion still open (see E1's own note above) - so pulling it forward costs nothing here that
+wasn't already owed. **Then** `F2 → F3 → F4`
 makes the rest of persistence and scheduling live, and `S1b → G1 → G2 → G4` makes it extensible.
 
 **Safe to parallelise:**

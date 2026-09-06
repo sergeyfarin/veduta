@@ -43,18 +43,7 @@ func (g Grant) Authorize(req HTTPRequest, use UseKind) error {
 // a route only "matches" if the ENTIRE tuple is satisfied, not just method+path.
 func anyRouteAllows(routes []Route, req HTTPRequest, canonicalPath string, use UseKind, manifestRequestBodyKB int) bool {
 	for _, route := range routes {
-		if route.Use != use {
-			continue
-		}
-		if route.Method != req.Method {
-			continue
-		}
-		routePattern, err := routepath.Canonicalise(route.Path)
-		if err != nil {
-			continue // a malformed route pattern can never match; schema validation should have
-			// already rejected it at load time, but Authorize itself never trusts that blindly.
-		}
-		if !routepath.Match(routePattern, canonicalPath) {
+		if !routeMatchesMethodAndPath(route, req.Method, canonicalPath, use) {
 			continue
 		}
 		if !queryKeysAllowed(route.QueryKeys, req.Query) {
@@ -67,6 +56,59 @@ func anyRouteAllows(routes []Route, req HTTPRequest, canonicalPath string, use U
 			continue
 		}
 		return true
+	}
+	return false
+}
+
+// routeMatchesMethodAndPath is anyRouteAllows' method+path+use match, factored out so
+// AuthorizesRedirect can reuse it without the query/content-type/body checks that only apply to
+// a caller-constructed request - a redirect response carries none of the original request's
+// query, content-type or body, so re-checking those against the redirect target would be
+// checking the wrong thing, not a stricter check.
+func routeMatchesMethodAndPath(route Route, method, canonicalPath string, use UseKind) bool {
+	if route.Use != use || route.Method != method {
+		return false
+	}
+	routePattern, err := routepath.Canonicalise(route.Path)
+	if err != nil {
+		return false // a malformed route pattern can never match; schema validation should have
+		// already rejected it at load time, but this never trusts that blindly.
+	}
+	return routepath.Match(routePattern, canonicalPath)
+}
+
+// AuthorizesRedirect reports whether method+path - the destination of an already-authorised
+// request's HTTP redirect, not a new caller-constructed request - remains covered by a manifest
+// route, a lock-approved route, and the connection's own allowedPaths for slot. Found in review:
+// redirectPolicy (internal/connections/client.go) could check host, scheme and a connection's
+// allowedPaths on a redirect hop, but had no way to re-run the manifest/lock route grant itself,
+// since only the broker holds the Grant - an authorised `/api/public` on a connection with no
+// (or a permissive) allowedPaths could redirect to `/api/admin` on the identical host and the
+// credentialed request would simply follow it. Deliberately narrower than Authorize:
+// queryKeys/contentType/maxBodyKB are not re-checked here, because a redirect response carries
+// none of the original request's query, content-type or body - only the destination changed.
+func (g Grant) AuthorizesRedirect(slot, method, path string) error {
+	canonicalPath, err := routepath.Canonicalise(path)
+	if err != nil {
+		return fmt.Errorf("%w: %w", ErrRouteDenied, err)
+	}
+	if !anyRoutePathAllows(g.ManifestRoutes, method, canonicalPath, UseData) {
+		return fmt.Errorf("%w: no manifest route permits a redirect to %s %s", ErrRouteDenied, method, canonicalPath)
+	}
+	if !anyRoutePathAllows(g.ApprovedRoutes, method, canonicalPath, UseData) {
+		return fmt.Errorf("%w: no approved (lock) route permits a redirect to %s %s", ErrRouteDenied, method, canonicalPath)
+	}
+	if policy, ok := g.ConnectionPolicy[slot]; ok && !connectionAllows(policy, canonicalPath) {
+		return fmt.Errorf("%w: the connection's own allowedPaths forbids a redirect to %s", ErrRouteDenied, canonicalPath)
+	}
+	return nil
+}
+
+func anyRoutePathAllows(routes []Route, method, canonicalPath string, use UseKind) bool {
+	for _, route := range routes {
+		if routeMatchesMethodAndPath(route, method, canonicalPath, use) {
+			return true
+		}
 	}
 	return false
 }

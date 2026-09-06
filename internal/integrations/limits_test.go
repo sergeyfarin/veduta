@@ -10,6 +10,7 @@ import (
 
 	"veduta.dev/veduta/internal/capabilities"
 	"veduta.dev/veduta/internal/integrations/manifestload"
+	"veduta.dev/veduta/internal/widgets"
 )
 
 // TestLimitBoundsMatchManifestSchema reads schemas/plugin-manifest.v1.schema.json directly and
@@ -134,6 +135,21 @@ func TestCapabilitiesLimitsIsARealSubsetOfLimitBounds(t *testing.T) {
 		if _, ok := limitBounds[key]; !ok {
 			t.Errorf("capabilities.Limits field %s (%s) is missing from limitBounds", fieldName, key)
 		}
+	}
+}
+
+// TestOutputKBHardCapMatchesCoreMaximum cross-checks widgets.MaxDocumentBytesHardCap - the
+// absolute ceiling ValidateWithLimit will accept regardless of what a caller passes - against
+// this package's own core maximum for outputKB. The two live in different packages (widgets
+// cannot import this one, which imports widgets; see MaxDocumentBytesHardCap's own doc comment)
+// specifically so ValidateWithLimit's defensive clamp does not depend on a caller having already
+// reconciled EffectiveLimits correctly - but that independence only holds if the two numbers
+// actually agree, which is what this test guards.
+func TestOutputKBHardCapMatchesCoreMaximum(t *testing.T) {
+	want := limitBounds["outputKB"].max << 10
+	if widgets.MaxDocumentBytesHardCap != want {
+		t.Fatalf("widgets.MaxDocumentBytesHardCap = %d, want %d (limitBounds[outputKB].max<<10)",
+			widgets.MaxDocumentBytesHardCap, want)
 	}
 }
 

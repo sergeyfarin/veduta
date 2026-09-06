@@ -398,6 +398,78 @@ func TestBroker_HTTP_ResponseMBAllowsUnderTheLimit(t *testing.T) {
 	}
 }
 
+// TestBroker_HTTP_RedirectToAnUnapprovedRouteIsDenied is the regression test for a real gap
+// found in review: connections.redirectPolicy could check host, scheme and a connection's own
+// allowedPaths on a redirect hop, but had no way to re-run the manifest/lock route grant itself,
+// since only the broker holds the Grant. An approved GET /api/public that redirects to
+// GET /api/admin - a route this Grant never approved - must not be silently followed just
+// because allowedPaths is unset (nil, meaning "any path on this connection", the deliberate
+// default for a connection with no allowedPaths configured at all).
+func TestBroker_HTTP_RedirectToAnUnapprovedRouteIsDenied(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/public" {
+			http.Redirect(w, r, "/api/admin", http.StatusFound)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("secret"))
+	}))
+	defer srv.Close()
+
+	cfg := map[string]config.Connection{
+		"conn1": {Kind: "http", HTTP: &config.HTTPConnection{BaseURL: srv.URL, Auth: config.ConnectionAuth{Type: "none"}, MaxRedirects: 3}},
+	}
+	reg, err := connections.New(cfg, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := capabilities.NewBroker(reg, capabilities.NewMemCache(), capabilities.NewMemAudit(), nil)
+	publicRoute := capabilities.Route{Slot: "server", Method: "GET", Path: "/api/public", Use: capabilities.UseData}
+	g := fullGrant([]capabilities.Route{publicRoute})
+
+	_, err = b.HTTP(context.Background(), g, capabilities.HTTPRequest{Slot: "server", Method: "GET", Path: "/api/public"})
+	if !errors.Is(err, capabilities.ErrRouteDenied) {
+		t.Fatalf("err = %v, want ErrRouteDenied - the redirect to /api/admin was never approved", err)
+	}
+}
+
+// TestBroker_HTTP_RedirectToAnApprovedRouteSucceeds proves the fix above is a real recheck, not
+// a blanket "redirects are now denied": a redirect landing on a route the same Grant also
+// approves must still succeed.
+func TestBroker_HTTP_RedirectToAnApprovedRouteSucceeds(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/public" {
+			http.Redirect(w, r, "/api/public-v2", http.StatusFound)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer srv.Close()
+
+	cfg := map[string]config.Connection{
+		"conn1": {Kind: "http", HTTP: &config.HTTPConnection{BaseURL: srv.URL, Auth: config.ConnectionAuth{Type: "none"}, MaxRedirects: 3}},
+	}
+	reg, err := connections.New(cfg, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := capabilities.NewBroker(reg, capabilities.NewMemCache(), capabilities.NewMemAudit(), nil)
+	routes := []capabilities.Route{
+		{Slot: "server", Method: "GET", Path: "/api/public", Use: capabilities.UseData},
+		{Slot: "server", Method: "GET", Path: "/api/public-v2", Use: capabilities.UseData},
+	}
+	g := fullGrant(routes)
+
+	resp, err := b.HTTP(context.Background(), g, capabilities.HTTPRequest{Slot: "server", Method: "GET", Path: "/api/public"})
+	if err != nil {
+		t.Fatalf("unexpected error following a redirect to an equally-approved route: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK || string(resp.Body) != "ok" {
+		t.Fatalf("resp = %+v", resp)
+	}
+}
+
 func TestBroker_Cache_ExpiredEntryIsGone(t *testing.T) {
 	b := capabilities.NewBroker(nil, capabilities.NewMemCache(), capabilities.NewMemAudit(), nil)
 	g := fullGrant(nil)

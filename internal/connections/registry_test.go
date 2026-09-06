@@ -154,6 +154,43 @@ func TestDo_OversizedResponseIsAnError(t *testing.T) {
 	}
 }
 
+// TestDo_CallerCeilingNarrowsTheConnectionLimit is the regression test for a real gap found in
+// review: capabilities.Broker.HTTP used to check a manifest's approved ResponseMB only after Do
+// had already read up to the connection's own (wider) MaxResponseBytes - so a small grant-level
+// ceiling never actually stopped an oversized body from being fully buffered first. A caller
+// supplying a tighter Request.MaxResponseBytes than the connection's own must make Do itself stop
+// there, not read the connection's full limit and reject afterwards.
+func TestDo_CallerCeilingNarrowsTheConnectionLimit(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(strings.Repeat("x", 1000)))
+	}))
+	defer srv.Close()
+
+	cfg := &HTTPConfig{BaseURL: srv.URL, MaxResponseBytes: 10000} // connection allows up to 10000
+	reg := singleHTTPRegistry(t, "x", cfg)
+	_, err := reg.Do(context.Background(), "x", Request{Method: http.MethodGet, Path: "/", MaxResponseBytes: 100})
+	if !errors.Is(err, ErrResponseTooLarge) {
+		t.Fatalf("err = %v, want ErrResponseTooLarge - the caller's 100-byte ceiling must apply despite the connection allowing 10000", err)
+	}
+}
+
+// TestDo_CallerCeilingNeverWidensTheConnectionLimit proves the narrowing is one-directional: a
+// caller-supplied ceiling wider than the connection's own must not override the connection's
+// tighter limit.
+func TestDo_CallerCeilingNeverWidensTheConnectionLimit(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(strings.Repeat("x", 1000)))
+	}))
+	defer srv.Close()
+
+	cfg := &HTTPConfig{BaseURL: srv.URL, MaxResponseBytes: 100} // connection allows only 100
+	reg := singleHTTPRegistry(t, "x", cfg)
+	_, err := reg.Do(context.Background(), "x", Request{Method: http.MethodGet, Path: "/", MaxResponseBytes: 10000})
+	if !errors.Is(err, ErrResponseTooLarge) {
+		t.Fatalf("err = %v, want ErrResponseTooLarge - a wider caller ceiling must not override the connection's own tighter limit", err)
+	}
+}
+
 func TestDo_ResponseWithinLimitSucceeds(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("small"))

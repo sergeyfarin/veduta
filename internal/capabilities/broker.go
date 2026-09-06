@@ -5,6 +5,7 @@ package capabilities
 import (
 	"context"
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/url"
@@ -90,28 +91,41 @@ func (b *broker) HTTP(ctx context.Context, g Grant, req HTTPRequest) (HTTPRespon
 	}
 	owned := newConnectionOwnership(string(conn.HTTP.Auth.Type), conn.HTTP.Auth.Name, conn.HTTP.Headers)
 
+	// A redirect the connection follows is re-checked against this same Grant, not just
+	// host/scheme/allowedPaths (connections.redirectPolicy's own, connection-level checks) -
+	// found in review: only the broker holds the Grant, so closing this gap needs the Grant
+	// threaded down through ctx to where the redirect is actually decided.
+	slot := req.Slot
+	ctx = connections.WithRedirectAuthorizer(ctx, func(method, path string) error {
+		return g.AuthorizesRedirect(slot, method, path)
+	})
+	// g.Limits.ResponseMB is the manifest's own per-response ceiling, narrower than (never wider
+	// than) the connection's own MaxResponseBytes. Found in review, in two parts: (1) this field
+	// was carried on Limits and documented as enforced here, but nothing ever actually read it;
+	// (2) the first fix for that read it only as a POST-HOC check, after Do had already read up
+	// to the connection's own wider limit - so a manifest approved for a small ResponseMB still
+	// let a misbehaving upstream's response be fully buffered before being rejected. Passing it
+	// as Request.MaxResponseBytes makes registry.Do itself stop reading at
+	// min(connection limit, grant limit), so an oversized body is never fully buffered in the
+	// first place, not read then discarded.
+	var maxResponseBytes int64
+	if g.Limits.ResponseMB > 0 {
+		maxResponseBytes = int64(g.Limits.ResponseMB) << 20
+	}
 	resp, err := b.registry.Do(ctx, connID, connections.Request{
-		Method:  req.Method,
-		Path:    req.Path,
-		Query:   filterQuery(req.Query, owned),
-		Headers: filterHeaders(req.Header, owned),
-		Body:    req.Body,
+		Method:           req.Method,
+		Path:             req.Path,
+		Query:            filterQuery(req.Query, owned),
+		Headers:          filterHeaders(req.Header, owned),
+		Body:             req.Body,
+		MaxResponseBytes: maxResponseBytes,
 	})
 	if err != nil {
+		if errors.Is(err, connections.ErrResponseTooLarge) {
+			b.audit.Denied(g.PluginID, "HTTP", ErrBudgetExceeded)
+			return HTTPResponse{}, fmt.Errorf("%w: %w", ErrBudgetExceeded, err)
+		}
 		return HTTPResponse{}, err
-	}
-	// g.Limits.ResponseMB is the manifest's own per-response ceiling, narrower than (never wider
-	// than) the connection's own MaxResponseBytes - which has already bounded what registry.Do
-	// could read at all, but does not know about any individual manifest's tighter request. Found
-	// in review: this field was carried on Limits and documented as enforced here, but nothing
-	// ever actually read it - a manifest approved for a small ResponseMB got no narrower ceiling
-	// than whatever the connection itself allowed. This is necessarily a post-hoc check - the
-	// bytes are already read by the time Do returns - but it still stops an oversized body from
-	// ever reaching the plugin/expression environment rather than silently accepting it.
-	if g.Limits.ResponseMB > 0 && len(resp.Body) > g.Limits.ResponseMB<<20 {
-		b.audit.Denied(g.PluginID, "HTTP", ErrBudgetExceeded)
-		return HTTPResponse{}, fmt.Errorf("%w: response is %d bytes, exceeding the %d MB limit",
-			ErrBudgetExceeded, len(resp.Body), g.Limits.ResponseMB)
 	}
 	return HTTPResponse{StatusCode: resp.StatusCode, Header: resp.Header, Body: resp.Body}, nil
 }

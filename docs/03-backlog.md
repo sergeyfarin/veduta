@@ -25,10 +25,17 @@ at startup, and hands it to `api.Config.Registry` - unlike `ConfigStore` itself 
 `atomic.Pointer[Snapshot]`, kept current by the same file watcher), nothing rebuilds this registry
 if the config later reloads with different, added or removed connections. `GET /api/v1/connections`
 and `POST /api/v1/connections/{id}/test` would then show a connection that no longer exists in the
-current config, or omit one just added, until the process restarts. Priority: Phase F - a live
-scheduler is the first thing that actually needs connections to reload correctly (a card bound to
-a newly-added connection has to work without a restart), so building the atomic-swap mechanism
-belongs there rather than being spot-fixed here ahead of a real need.
+current config, or omit one just added, until the process restarts - and, since the registry is
+what actually holds resolved secret values (baked in at `connections.New` construction time), a
+rotated secret is equally stale until restart, not just a changed connection shape. **Confirmed
+still open in the D2b/D3/D4/D5 review (2026-09):** that review's finding #9 named this same gap
+alongside the `auth: none` reload check; only the `auth: none` half was fixed
+(`cmd/veduta/main.go`'s `configLoader` now re-validates it on every reload, see
+`TestConfigLoader_RejectsAuthNoneOnHotReloadNotOnlyAtStartup`) - config, resolved secrets and the
+registry still do not reload as one coherent generation, and that is this entry, not a new one.
+Priority: Phase F - a live scheduler is the first thing that actually needs connections to reload
+correctly (a card bound to a newly-added connection has to work without a restart), so building
+the atomic-swap mechanism belongs there rather than being spot-fixed here ahead of a real need.
 
 ### `manifestload.Limits.CacheEntries` can't represent an explicit zero
 
@@ -187,24 +194,6 @@ work, or replace the shipped Jellyfin example with a connection shape the curren
 actually execute (e.g. a case where the whole auth value is one secret reference) until that
 composition work happens.
 
-### A redirect to an in-policy host can still reach a route the lock never approved
-
-Found in the D2b/D3/D4/D5 review (2026-09), fixed partially: `internal/connections/client.go`'s
-redirect policy now refuses a same-request redirect that changes host, downgrades scheme, or (when
-`allowedPaths` is configured) lands outside every allowed path subtree - see
-`routepath.HasPathPrefix` and `redirect_test.go`. What it still cannot do is re-run the *lock's*
-route-level authorization (`capabilities.connectionAllows`, the actual grant check) on the
-redirected path, because that check needs a `*capabilities.Grant` (built from the manifest/lock at
-invoke time), and `redirectPolicy` is constructed inside `connections.Registry`, a layer below and
-independent of `capabilities.Broker`. A manifest approved for `GET /api/stats` only, talking to a
-connection whose `allowedPaths` is permissive (or unset), could still be redirected by a
-compromised or misconfigured upstream to another *connection-policy-allowed* but
-*lock-unapproved* path on the same host. Priority: whenever `Grant` plumbing reaches
-`connections.Registry.Do` (no milestone currently owns threading a `Grant` that deep - it would
-need to become a parameter of `Do`/`redirectPolicy` rather than living only in `capabilities`);
-until then, operators who need this closed should set restrictive `allowedPaths` per connection,
-which the fix above does enforce today.
-
 ### The lock-write race is closed only within one process, not against a concurrent CLI approval
 
 Found in the D2b/D3/D4/D5 review (2026-09), fixed partially: `internal/api.Server` now serialises
@@ -223,6 +212,29 @@ ultimately call would close it without either caller needing to know about the o
 ---
 
 ## Resolved
+
+### A redirect to an in-policy host could still reach a route the lock never approved
+
+Found in the D2b/D3/D4/D5 review (2026-09), first fixed only partially: `internal/connections/
+client.go`'s redirect policy refused a same-request redirect that changed host, downgraded scheme,
+or (when `allowedPaths` was configured) landed outside every allowed path subtree - see
+`routepath.HasPathPrefix` and `redirect_test.go`. A second review pass correctly challenged this as
+incomplete: none of that re-ran the *lock's* route-level grant on the redirected path, so a
+manifest approved for `GET /api/stats` only, talking to a connection whose `allowedPaths` was
+permissive (or unset - the common case, since allowedPaths is optional), could still be redirected
+by a compromised or misconfigured upstream to another *connection-policy-allowed* but
+*lock-unapproved* path on the same host. Closed properly, not just noted: `capabilities.Grant`
+gained `AuthorizesRedirect(slot, method, path string) error` (`authorize.go`, reusing
+`anyRouteAllows`' method+path+use matching, factored out as `routeMatchesMethodAndPath` -
+deliberately narrower than a full `Authorize`, since a redirect target carries none of the
+original request's query/content-type/body to re-check). `internal/connections` gained a small
+context-carried hook (`redirectauth.go`'s `RedirectAuthorizer`/`WithRedirectAuthorizer`) so
+`redirectPolicy` - built once at connection-construction time, with no `Grant` in scope - can call
+back into whatever the *invoking* `capabilities.Broker.HTTP` call attached to `ctx`, which Go's
+`http.Client` carries unchanged through every redirect hop. `Broker.HTTP` attaches exactly that
+before calling `registry.Do`. `TestBroker_HTTP_RedirectToAnUnapprovedRouteIsDenied` and
+`TestBroker_HTTP_RedirectToAnApprovedRouteSucceeds` prove the fix without allowedPaths configured
+at all - the previously-open case - and the first was confirmed to fail against the pre-fix code.
 
 ### D5's `GET /api/v1/connections` checked connections sequentially, sharing one context - a slow one starved the rest
 

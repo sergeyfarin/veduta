@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -65,23 +66,43 @@ func (v *nodeValue) UnmarshalYAML(n *yaml.Node) error { //nolint:revive // yaml.
 	return nil
 }
 
-// Load parses, bounds, schema-validates, and compiles the template grammar at path. The file is
-// read exactly once: found in review that this used to read the same path three separate times
-// (once streaming for the YAML depth/node walk, once more for the exact byte-size check, and a
-// third time inside canonical.DigestFile) - a real TOCTOU window on exactly the guarantee
-// digest-bound approval exists to provide. A concurrent replacement between any of those reads
-// could load one version's structure while digesting another's bytes, silently decoupling the
-// approval record from what actually gets executed. Every check below - byte cap, YAML
-// depth/node/alias/duplicate-key limits, schema validation, structural decode, and the canonical
-// digest - now runs against the one immutable byte slice read here.
-func Load(path string) (*Manifest, error) {
+// readBoundedFile reads path, refusing to allocate more than maxBytes+1 bytes regardless of the
+// file's actual size - a plain os.ReadFile followed by a length check reads (and allocates) the
+// entire file first, so a multi-gigabyte manifest would be fully read into memory before being
+// rejected, which is the exact unbounded-read a byte cap exists to prevent (found in a second
+// review pass). The +1 is so a file of exactly maxBytes+1 or more is detected as oversized rather
+// than silently truncated to a validly-sized prefix - io.LimitReader stops supplying bytes at the
+// limit, it does not error, so the caller must compare the returned length against maxBytes itself.
+func readBoundedFile(path string, maxBytes int) ([]byte, error) {
 	// #nosec G304 -- path is the operator-selected integration manifest location.
-	raw, err := os.ReadFile(path)
+	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
-	if len(raw) > maxManifestBytes {
-		return nil, fmt.Errorf("%s: manifest exceeds %d bytes", path, maxManifestBytes)
+	defer func() { _ = f.Close() }()
+	raw, err := io.ReadAll(io.LimitReader(f, int64(maxBytes)+1))
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
+	if len(raw) > maxBytes {
+		return nil, fmt.Errorf("%s: manifest exceeds %d bytes", path, maxBytes)
+	}
+	return raw, nil
+}
+
+// Load parses, bounds, schema-validates, and compiles the template grammar at path. The file is
+// read exactly once, via readBoundedFile: found in review that this used to read the same path
+// three separate times (once streaming for the YAML depth/node walk, once more for the exact
+// byte-size check, and a third time inside canonical.DigestFile) - a real TOCTOU window on
+// exactly the guarantee digest-bound approval exists to provide. A concurrent replacement between
+// any of those reads could load one version's structure while digesting another's bytes, silently
+// decoupling the approval record from what actually gets executed. Every check below - byte cap,
+// YAML depth/node/alias/duplicate-key limits, schema validation, structural decode, and the
+// canonical digest - now runs against the one immutable byte slice read here.
+func Load(path string) (*Manifest, error) {
+	raw, err := readBoundedFile(path, maxManifestBytes)
+	if err != nil {
+		return nil, err
 	}
 	var root yaml.Node
 	if err = yaml.Unmarshal(raw, &root); err != nil {

@@ -205,6 +205,26 @@ func TestLimitsBeyondSchema(t *testing.T) {
 // TestValidateNeverPanics fuzzes the entrypoint that receives untrusted, integration-produced
 // bytes directly - a plugin's output must never be able to crash the core (docs/01-architecture.md
 // section 8, "Plugin DoS").
+// listBlocksDocument builds a schema-valid Widget Document out of numBlocks "list" blocks
+// (schema maximum 12), each with 100 items (schema maximum) carrying an id/title at their own
+// maxLength (128/120) - every individual field here respects the schema's own per-field limits,
+// so a document built this way is ever refused only because of its *total* byte size, never a
+// mismatched per-field or per-array constraint. A single text block cannot reach these sizes on
+// its own: its content is itself capped at 2048 bytes by the schema.
+func listBlocksDocument(numBlocks int) []byte {
+	item := `{"id":"` + strings.Repeat("a", 128) + `","title":"` + strings.Repeat("b", 120) + `"}`
+	items := make([]string, 100)
+	for i := range items {
+		items[i] = item
+	}
+	block := `{"type":"list","items":[` + strings.Join(items, ",") + `]}`
+	blocks := make([]string, numBlocks)
+	for i := range blocks {
+		blocks[i] = block
+	}
+	return []byte(`{"schemaVersion":1,"blocks":[` + strings.Join(blocks, ",") + `]}`)
+}
+
 // TestValidateWithLimit_NarrowerAndWiderThanTheCoreDefault is the regression test for a real gap
 // found in review: a manifest's approved outputKB (schema range 1-256 KiB) was reconciled into
 // EffectiveLimits and carried to the declarative runtime, but Validate only ever checked the
@@ -220,6 +240,39 @@ func TestValidateWithLimit_NarrowerAndWiderThanTheCoreDefault(t *testing.T) {
 	}
 	if _, err := widgets.ValidateWithLimit(raw, 0); err != nil {
 		t.Fatalf("zero must fall back to the core default like every other limit in this project, not mean unlimited: %v", err)
+	}
+
+	// A document between the 64 KiB core default and a wider approved limit: found in review
+	// that this test asserted the "narrower" half but never actually exercised "wider" - a
+	// caller-supplied maxBytes above 64 KiB must actually take effect, not silently stay
+	// clamped to the default (the exact bug ValidateWithLimit's own doc comment describes: "a
+	// wider one could never take effect").
+	between := listBlocksDocument(4)
+	if len(between) <= 64*1024 || len(between) >= 150*1024 {
+		t.Fatalf("test fixture is %d bytes, want it strictly between 64 KiB and 150 KiB", len(between))
+	}
+	if _, err := widgets.Validate(between); err == nil {
+		t.Fatal("this document must be rejected under the 64 KiB core default")
+	}
+	if _, err := widgets.ValidateWithLimit(between, 150*1024); err != nil {
+		t.Fatalf("a 150 KiB limit must accept this document, proving the wider limit actually took effect: %v", err)
+	}
+}
+
+// TestValidateWithLimit_CannotBeWidenedPastTheHardCap is the regression test for a gap found in
+// a second review pass: ValidateWithLimit let a caller-supplied maxBytes through with no upper
+// bound at all, so a bug in whatever reconciles a manifest's EffectiveLimits (or a future caller
+// that skips that reconciliation) could accept an arbitrarily large document - the exact
+// unbounded-output hole this package's byte cap exists to close in the first place.
+// MaxDocumentBytesHardCap (256 KiB, internal/integrations' own core maximum for outputKB) is the
+// absolute ceiling regardless of what the caller asks for.
+func TestValidateWithLimit_CannotBeWidenedPastTheHardCap(t *testing.T) {
+	tooLarge := listBlocksDocument(12) // the schema's own maximum block count
+	if len(tooLarge) <= widgets.MaxDocumentBytesHardCap {
+		t.Fatalf("test fixture is %d bytes, want it past the %d byte hard cap", len(tooLarge), widgets.MaxDocumentBytesHardCap)
+	}
+	if _, err := widgets.ValidateWithLimit(tooLarge, 10*widgets.MaxDocumentBytesHardCap); err == nil {
+		t.Fatal("a caller asking for ten times the hard cap must still be refused a document that large")
 	}
 }
 

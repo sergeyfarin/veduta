@@ -110,6 +110,13 @@ func (r *registry) Do(ctx context.Context, id string, req Request) (*Response, e
 	if limit <= 0 {
 		limit = defaultMaxResponseBytes
 	}
+	// A caller-supplied ceiling (capabilities.Broker.HTTP passes the grant's own ResponseMB)
+	// narrows this, never widens it - see Request.MaxResponseBytes' own doc comment. Checked here,
+	// before the read, not after: the point is to stop readLimited from ever buffering past the
+	// tighter of the two limits, not to buffer up to the wider one and reject afterwards.
+	if req.MaxResponseBytes > 0 && req.MaxResponseBytes < limit {
+		limit = req.MaxResponseBytes
+	}
 	data, err := readLimited(resp.Body, limit)
 	if err != nil {
 		return nil, err

@@ -15,6 +15,7 @@ package integrations
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 
@@ -22,6 +23,27 @@ import (
 
 	"veduta.dev/veduta/internal/canonical"
 )
+
+// readBoundedFile reads path, refusing to allocate more than maxBytes+1 bytes regardless of the
+// file's actual size - see manifestload.readBoundedFile's identical doc comment for why a plain
+// os.ReadFile-then-check-length is the exact unbounded-read a byte cap exists to prevent.
+func readBoundedFile(path string, maxBytes int) ([]byte, error) {
+	// #nosec G304 -- path was just located by findManifestFile within an operator-configured
+	// integration directory, not attacker-controlled request input.
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+	raw, err := io.ReadAll(io.LimitReader(f, int64(maxBytes)+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(raw) > maxBytes {
+		return nil, fmt.Errorf("manifest exceeds %d bytes", maxBytes)
+	}
+	return raw, nil
+}
 
 // Manifest is the subset of a plugin manifest (schemas/plugin-manifest.v1.schema.json) that
 // approval needs: what it asks for, not how its operations actually run - the pipeline/output
@@ -85,19 +107,28 @@ func findManifestFile(dir string) (string, error) {
 	return "", &ErrManifestNotFound{Dir: dir}
 }
 
+// maxManifestBytes bounds LoadManifest's read the same way manifestload.Load bounds its own -
+// found in a second review pass that a manifest this large would otherwise be fully allocated
+// before any check could reject it (see readBoundedFile's own doc comment). Kept as its own
+// constant rather than shared with manifestload's: the two packages are deliberately independent
+// (see docs/03-backlog.md's note on Limits/Manifest type duplication), and both happen to land on
+// the same 256 KiB a manifest has no legitimate reason to exceed.
+const maxManifestBytes = 256 << 10
+
 // LoadManifest loads and digests the manifest in dir. The file is read exactly once: found in
 // review that digesting and decoding used to read the same path independently (a real TOCTOU
 // window on exactly the guarantee digest-bound approval exists to provide - a concurrent
 // replacement between the two reads could associate the digest of one version of a manifest with
-// the executable content of another). Both now come from the one byte slice read here.
+// the executable content of another). Both now come from the one byte slice read here - and that
+// read is itself bounded (readBoundedFile), not a plain os.ReadFile: found in the same pass that
+// reading the whole file before comparing its length against a cap would fully allocate a
+// multi-gigabyte manifest before rejecting it, the exact unbounded-read a cap exists to prevent.
 func LoadManifest(dir string) (*Manifest, error) {
 	path, err := findManifestFile(dir)
 	if err != nil {
 		return nil, err
 	}
-	// #nosec G304 -- path was just located by findManifestFile within an operator-configured
-	// integration directory, not attacker-controlled request input.
-	raw, err := os.ReadFile(path)
+	raw, err := readBoundedFile(path, maxManifestBytes)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}

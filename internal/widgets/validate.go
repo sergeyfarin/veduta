@@ -25,6 +25,19 @@ const (
 	maxMarkdownBytes = 2048 // matches the schema's content maxLength; enforced again defensively
 )
 
+// MaxDocumentBytesHardCap is the absolute ceiling ValidateWithLimit will ever accept, regardless
+// of what a caller passes as maxBytes. It must track internal/integrations' own core maximum for
+// outputKB (256 KiB - the widest a manifest's approved outputKB can ever be reconciled to,
+// checked against schemas/plugin-manifest.v1.schema.json by that package's own
+// TestLimitBoundsMatchManifestSchema). Found in a second review pass: ValidateWithLimit let a
+// caller-supplied maxBytes through uncapped, so a bug in whatever reconciles EffectiveLimits (or
+// a future caller that never goes through that reconciliation at all) could silently accept an
+// arbitrarily large document - the exact unbounded-output hole maxDocumentBytes originally
+// existed to close. Kept as internal/widgets' own constant rather than importing
+// internal/integrations (which imports internal/widgets, and would cycle);
+// TestOutputKBHardCapMatchesCoreMaximum in internal/integrations cross-checks the two stay equal.
+const MaxDocumentBytesHardCap = 256 * 1024
+
 var (
 	schemaOnce sync.Once
 	schemaErr  error
@@ -86,6 +99,9 @@ func Validate(raw []byte) (Document, error) {
 func ValidateWithLimit(raw []byte, maxBytes int) (Document, error) {
 	if maxBytes <= 0 {
 		maxBytes = maxDocumentBytes
+	}
+	if maxBytes > MaxDocumentBytesHardCap {
+		maxBytes = MaxDocumentBytesHardCap
 	}
 	if len(raw) > maxBytes {
 		return Document{}, &ValidationError{Problems: []string{

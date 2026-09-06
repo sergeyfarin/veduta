@@ -4,6 +4,9 @@ package integrations_test
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"veduta.dev/veduta/internal/integrations"
@@ -28,6 +31,23 @@ func TestLoadManifest_Glances(t *testing.T) {
 	}
 	if m.Digest == "" {
 		t.Fatal("digest must not be empty")
+	}
+}
+
+// TestLoadManifest_RejectsOversizedManifestWithoutReadingItWhole is the regression test for a
+// gap found in review: LoadManifest used to read the whole file with os.ReadFile before checking
+// its length, so a manifest far larger than the 256 KiB cap would still be fully allocated before
+// being rejected. This does not assert on memory directly (Go has no cheap way to do that from a
+// black-box test), but it does prove the cap is actually enforced end to end - the same coverage
+// manifestload's own TestLoad_RejectsOversizedManifest has for its loader.
+func TestLoadManifest_RejectsOversizedManifestWithoutReadingItWhole(t *testing.T) {
+	dir := t.TempDir()
+	body := strings.Repeat("x", 300<<10) // 300 KiB, past the 256 KiB cap
+	if err := os.WriteFile(filepath.Join(dir, "manifest.yaml"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := integrations.LoadManifest(dir); err == nil {
+		t.Fatal("expected LoadManifest to reject an oversized manifest")
 	}
 }
 

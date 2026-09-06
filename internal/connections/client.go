@@ -95,21 +95,21 @@ func concurrencyOrDefault(n int) int {
 }
 
 // redirectPolicy refuses a redirect to a different host or a weaker scheme outright, any
-// redirect beyond maxRedirects (default 0 - docs/01-architecture.md section 8), and - the fix for
-// a real gap found in review - a redirect to a path outside the connection's own allowedPaths
-// when one is configured.
+// redirect beyond maxRedirects (default 0 - docs/01-architecture.md section 8), a redirect to a
+// path outside the connection's own allowedPaths when one is configured, and - the fix for the
+// gap this function's own doc comment used to describe as open - re-runs the caller's
+// manifest/lock route grant against the redirect target via whatever RedirectAuthorizer the
+// request's context carries (see redirectauth.go).
 //
-// Same-host was, before this fix, believed sufficient: the broker authorises the *original*
-// request's path against the manifest, the lock and allowedPaths, but a followed redirect never
-// re-runs any of those three checks against the *new* path - an authorised `/api/public` could
-// redirect to `/api/admin` on the identical host and the credentialed request would simply follow
-// it. Checking allowedPaths here closes that for any connection that has one configured, which
-// docs/01's own "http-json escape hatch" language already calls "the only thing standing between
-// a card and every path on that connection" - it is not yet a fix for a connection with no
-// allowedPaths configured (nil/empty there means "any path is fine" by design), where a redirect
-// could still reach a path the manifest/lock did not approve; that residual gap needs the broker
-// itself to re-run Grant.Authorize against the redirect target, which needs the Grant plumbed
-// into this policy and is tracked in docs/03-backlog.md rather than attempted here.
+// Same-host was, before the allowedPaths fix, believed sufficient: the broker authorises the
+// *original* request's path against the manifest, the lock and allowedPaths, but a followed
+// redirect never re-ran any of those three checks against the *new* path - an authorised
+// `/api/public` could redirect to `/api/admin` on the identical host and the credentialed request
+// would simply follow it. allowedPaths closed part of that (any connection that has one
+// configured); the manifest/lock recheck below closes the rest, for every connection regardless
+// of whether allowedPaths is set - capabilities.Broker.HTTP attaches a RedirectAuthorizer built
+// from the same Grant it already checked the original request against, so this is not a second,
+// independent policy, only the first one re-run against a different destination.
 func redirectPolicy(base *url.URL, maxRedirects int, allowedPaths []string) func(req *http.Request, via []*http.Request) error {
 	return func(req *http.Request, via []*http.Request) error {
 		if len(via) > maxRedirects {
@@ -121,22 +121,31 @@ func redirectPolicy(base *url.URL, maxRedirects int, allowedPaths []string) func
 		if req.URL.Scheme != base.Scheme {
 			return fmt.Errorf("connections: redirect changes scheme %q -> %q, refused", base.Scheme, req.URL.Scheme)
 		}
-		if len(allowedPaths) == 0 {
-			return nil
-		}
 		canonicalPath, err := routepath.Canonicalise(req.URL.Path)
 		if err != nil {
 			return fmt.Errorf("connections: redirect target path %q: %w", req.URL.Path, err)
 		}
-		for _, allowed := range allowedPaths {
-			canonicalAllowed, err := routepath.Canonicalise(allowed)
-			if err != nil {
-				continue
+		if len(allowedPaths) > 0 {
+			allowed := false
+			for _, p := range allowedPaths {
+				canonicalAllowed, err := routepath.Canonicalise(p)
+				if err != nil {
+					continue
+				}
+				if routepath.HasPathPrefix(canonicalPath, canonicalAllowed) {
+					allowed = true
+					break
+				}
 			}
-			if routepath.HasPathPrefix(canonicalPath, canonicalAllowed) {
-				return nil
+			if !allowed {
+				return fmt.Errorf("connections: redirect to %q is outside the connection's allowedPaths", req.URL.Path)
 			}
 		}
-		return fmt.Errorf("connections: redirect to %q is outside the connection's allowedPaths", req.URL.Path)
+		if authorize := redirectAuthorizerFrom(req.Context()); authorize != nil {
+			if err := authorize(req.Method, canonicalPath); err != nil {
+				return fmt.Errorf("connections: redirect to %s %q refused: %w", req.Method, canonicalPath, err)
+			}
+		}
+		return nil
 	}
 }

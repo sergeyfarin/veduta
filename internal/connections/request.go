@@ -22,6 +22,14 @@ type Request struct {
 	Query   map[string]string
 	Headers map[string]string
 	Body    []byte
+
+	// MaxResponseBytes, when positive, narrows (never widens) the connection's own
+	// MaxResponseBytes for this one call - found in review: capabilities.Broker.HTTP checked a
+	// manifest's approved ResponseMB only after Do had already read up to the connection's full
+	// (wider) limit, so an approval for a small ResponseMB still let a misbehaving upstream's
+	// response be fully buffered before being rejected. Zero means "use the connection's own
+	// default", the same zero-value convention HTTPConfig.MaxResponseBytes itself uses.
+	MaxResponseBytes int64
 }
 
 // Response is what came back. Body is already read and size-capped - see doRequest.
