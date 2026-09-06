@@ -22,10 +22,14 @@ error carrying `file:line:col`), C2 (secrets: `env:`/`file:` providers, a redact
 type, a log scrubber active by default), C3 (atomic live reload with status), D1 (the
 connection registry and HTTP client: auth injection, an IP-pinning dialer against DNS rebinding,
 redirect/size/rate limits), D1b (the one route-canonicalisation and glob-matching routine every
-authority check shares, fuzz-tested), and D2 (the capability broker: three independent route
+authority check shares, fuzz-tested), D2 (the capability broker: three independent route
 policies, never a computed intersection; header/query allowlisting; shared per-invocation
-budgets) are done and green in CI; spikes S2 (upstream API reality check) and S4 (visual
-prototype) are done. Next up: D2b (integration lock and approval flow). See
+budgets), and D2b (the integration lock and approval flow: canonical manifest digest, permission
+diff, `veduta integration list|diff|approve`, and the matching
+`GET/POST /api/v1/integrations...` endpoints - a sudo-window gate and audit trail are deferred to
+H1/H2, which do not exist yet) are done and green in CI; spikes S2 (upstream API reality check)
+and S4 (visual prototype) are done. Next up: D3 (declarative runtime), once S3 (expr vs cel
+bake-off) is decided. See
 [docs/02-implementation-plan.md](docs/02-implementation-plan.md) for the full
 milestone table and what's marked **DONE**, and [docs/03-backlog.md](docs/03-backlog.md) for
 open gaps found along the way (currently: a config/schema asymmetry, a still-undone expression-
@@ -97,6 +101,7 @@ This repository currently contains:
 | [internal/connections/](internal/connections/) | The credential boundary: per-connection HTTP client, auth injection, IP-pinning dialer, rate/redirect/size limits |
 | [internal/connections/routepath/](internal/connections/routepath/) | The one route-canonicalisation and glob-matching routine every authority check shares — fuzz-tested |
 | [internal/capabilities/](internal/capabilities/) | The capability broker: three independent route policies, header/query allowlisting, per-invocation budgets, typed denials |
+| [internal/integrations/](internal/integrations/) | The lock file: canonical manifest digest, permission diff, two-step digest-bound approval — `veduta integration list\|diff\|approve` and `GET/POST /api/v1/integrations...` both call into it |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | DCO sign-off, the licence split, what a change needs |
 | [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md) | Every dependency and its licence, enforced by a test |
 | [LICENSING.md](LICENSING.md) | Multi-license layout, plugin exception, AGPL §13 obligations |

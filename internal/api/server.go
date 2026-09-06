@@ -148,6 +148,7 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("GET /api/v1/version", s.handleVersion)
 	if s.cfg.ConfigStore != nil {
 		s.routeConfig(mux)
+		s.routeIntegrations(mux)
 	}
 
 	if s.cfg.Fixtures != nil {

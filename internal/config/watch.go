@@ -69,6 +69,11 @@ func Open(path string, logger *slog.Logger, loader Loader) (*Store, Diagnostics)
 // Snapshot returns the current immutable snapshot. It is safe and lock-free for concurrent use.
 func (s *Store) Snapshot() *Snapshot { return s.current.Load() }
 
+// Path returns the primary config file path this Store was opened with - callers that need to
+// locate a file conventionally sited next to it (veduta.lock.yaml, a `path:` integration source)
+// resolve relative to its directory rather than guessing the working directory.
+func (s *Store) Path() string { return s.path }
+
 // Status returns a copy of the latest load result.
 func (s *Store) Status() Status {
 	s.mu.RLock()

@@ -787,7 +787,8 @@ one test per still-red line rather than guessing which branches mattered.
 values × all six requested methods (30 cases), the literal "a route-denial test exists for every
 method in the enum" AC.
 
-**D2b · Integration lock and approval flow** · 1 d · deps: D2, C1
+**D2b · Integration lock and approval flow** · 1 d · deps: D2, C1 · **DONE** (core + CLI + REST;
+sudo window and audit trail deferred, see below)
 Objective: make "safe to install from strangers" enforceable without a marketplace.
 Creates: `internal/integrations/lock.go` (canonical manifest digest, lock read/write through
 `config.Apply`, permission diff), `veduta integration approve|list|diff`, `GET /api/v1/integrations`,
@@ -807,6 +808,72 @@ integrations are exempt; every approval is audited with actor, IP and diff.
 AC: the UI shows a human-readable **applicability report** — for each declared route, whether it is
 approved, and whether the connection's policy would permit it — produced by the same three
 independent checks the broker runs. It is explicitly not a computed three-way glob intersection.
+
+**Scope decision, made explicitly before starting rather than discovered mid-build:** this
+milestone's own text above asks for a sudo-window gate and an audited approval trail, but sessions
+(H1, deps: F1 - not built) and `internal/audit` (H2, deps: H1) do not exist, and D2b's own listed
+deps are only `D2, C1`. Building a fake sudo window with nothing real to gate would be worse than
+not building one, so the implementation covers everything with no such dependency - the digest,
+lock file, permission diff, CLI and REST access to approve - and the sudo/audit gap is recorded in
+docs/03-backlog.md (priority H2) with the exact hook point named (`internal/api/integrations.go`'s
+approve handler) rather than silently built against non-existent sessions or silently dropped.
+
+`internal/integrations/{types→route,limits,manifest,source,lock,status,diff,approve,schema}.go`
+reuses `internal/canonical` (already built in Part 0) for the digest rather than duplicating it -
+the plan's own "Also creates: internal/integrations/canonical/" line turned out unnecessary once
+Part 0's package was confirmed to already implement exactly what this milestone needed.
+`ComputeDiff`'s route/capability/limit comparisons are genuinely the "well-defined, exact-tuple"
+side docs/01 draws a contrast with - `manifest ∩ lock computed by exact-tuple comparison` - never
+the three-independent-searches evaluation `Broker.Authorize` performs at request time; the two are
+deliberately different operations serving different purposes (showing a human what changed vs.
+authorising one concrete request) and this milestone does not conflate them.
+
+Found and fixed while building `ComputeDiff` against the real, checked-in fixtures rather than only
+synthetic ones (`TestComputeDiff_RealExamplesMatchTheirLockRecords` runs every one of `plugins/*/
+manifest.yaml` against `examples/veduta.lock.yaml`): the lock's own `effectiveLimits` formula is
+`min(core maximum, manifest value-or-default, approved value-or-default)`, where *approved* comes
+from the lock entry's own optional `limits:` field, genuinely independent of what the manifest
+requests - this is `internal/contracts/semantic.go`'s own pre-existing, already-tested formula, not
+something invented here. `examples/veduta.lock.yaml`'s glances entry recorded
+`effectiveLimits.timeoutMs: 3000` (the default) while its manifest requests `4000` with no
+`limits:` override on record to justify granting it - a real, previously uncaught inconsistency in
+a hand-authored fixture, caught the moment a real reconciliation implementation existed to check
+it. Fixed by adding the missing `limits: {timeoutMs: 4000}`, mirroring the convention immich's own
+entry already used. A second, independent fixture bug found the same way: immich's lock entry
+recorded `version: 0.1.0` while its manifest's actual (and correctly-digested) version is `0.2.0` -
+a stale display-only field, fixed to match.
+
+`internal/integrations.Grants` carries an optional `Limits` field the architecture doc's own
+illustrative `POST /approve` body does not show (see docs/03-backlog.md) - an additive field,
+needed because otherwise no client could ever grant a limit above its default through the
+documented endpoint at all. The CLI and the REST handler's own default echo the manifest's full
+requested limits back as that override, matching how routes and capabilities already default to
+"approve everything requested"; a narrower value is how an admin declines an elevated limit, the
+same subset-approval shape routes and capabilities already have. `Approve` refuses a `Grants` that
+asks for more than the manifest requests on any of the three axes (capabilities, routes, limits) -
+symmetric checks, all returning `ErrGrantExceedsRequest`.
+
+`veduta integration list|diff|approve` (`cmd/veduta/integration.go`) talks to
+`internal/integrations` directly rather than over HTTP, so approval works without a running
+server - the CLI is documented as available under every auth mode, including `forward` and `none`,
+for exactly this reason. `approve` without `--yes` prints the diff and requires an interactive
+`y`/`yes` confirmation before writing; a diff that is already empty is a no-op regardless (no
+prompt, matching "approving nothing does nothing"). `GET/POST /api/v1/integrations...`
+(`internal/api/integrations.go`) is the REST equivalent, wired only when `Config.ConfigStore` is
+set; its `POST .../approve` recomputes the digest from a fresh `LoadManifest` call within the same
+request, so `ErrDigestChanged`'s 409 response is never built from a stale in-memory manifest.
+
+`internal/contracts/routepath_boundary_test.go`'s `routepathAllowlist` gained four entries for this
+milestone's new `filepath.Join`/`filepath.Dir` call sites (locating `veduta.lock.yaml` next to the
+primary config file, resolving a `path:` integration source, finding a manifest file on disk) -
+local filesystem paths, the same category the existing config/secrets entries already cover, not
+the connection-route authority `internal/connections/routepath` exists to guard.
+
+91.5% coverage on `internal/integrations` (`go tool cover -func`), reached the same way as D2:
+obvious tests first, then one targeted test per still-uncovered line - every deliberately-triggered
+error path (malformed route mid-diff/mid-approve, a hand-built lock entry that would bypass
+`Approve`'s own field-stripping, a schema-rejected lock document) is a real regression test, not
+just a coverage number.
 
 **D3 · Declarative runtime** · 2 d · deps: D2b, S3, B2
 Creates: `internal/integrations/declarative/` (manifest loader, template-grammar validator for the

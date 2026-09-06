@@ -15,6 +15,47 @@ priority (which milestone should absorb it, or "before X" for a hard blocker).
 
 ## Open
 
+### D2b's approval endpoint has no sudo-window gate and no audit trail yet
+
+`docs/02-implementation-plan.md`'s D2b entry calls for `POST /api/v1/auth/sudo`, a fresh
+re-authentication window gating `POST /api/v1/integrations/{id}/approve`, and every approval
+audited with actor, IP and diff. None of that exists: sessions are milestone H1 (deps: F1, which
+does not exist either) and `internal/audit/` is H2 (deps: H1) - D2b's own listed deps are only
+`D2, C1`, so the plan itself asks for machinery from milestones that have not been reached yet.
+Building a fake sudo window with no real session to gate would be worse than not building one, so
+`internal/api/integrations.go`'s `POST .../approve` handler currently has no additional gate
+beyond whatever reaches it at all (bounded today by the same loopback-only bind every other
+unauthenticated endpoint relies on - see `Config.AllowPublicWithoutAuth`). `veduta integration
+approve` (the CLI) is unaffected, since docs/01-architecture.md already documents CLI approval as
+available unconditionally regardless of auth mode.
+Priority: **H2** - wire a sudo-window check and an audit write into
+`internal/api/integrations.go`'s approve handler once `internal/auth` (H1) and `internal/audit`
+(H2) exist; the handler's own logic (digest check, grant-subset check, lock write) does not need
+to change.
+
+### The documented approve flow has no way to grant a limit above its documented default
+
+Found while implementing D2b's `Grants`/`ReconcileAtApproval`: `internal/contracts/semantic.go`
+(part of the contract suite since before D2b, checked against `examples/veduta.lock.yaml`) already
+encodes `effective(k) = min(core maximum, manifest value-or-default, approved value-or-default)`
+where the *approved* side comes from the lock entry's own optional `limits:` field, independently
+of what the manifest requests - an integration approved with no such override stays at the
+documented default no matter what its manifest asks for (glances requests `timeoutMs: 4000`, but
+its lock entry needed an explicit `limits: {timeoutMs: 4000}` to actually be granted that, which
+`examples/veduta.lock.yaml` was missing until this milestone added it - a real, previously
+uncaught fixture bug this reconciliation logic caught the moment it existed to check it).
+docs/01-architecture.md section 6's shown `POST /approve` body (`{expectedManifestSha256, grants:
+{capabilities[], routes[]}}`) has no `limits` field at all, so `internal/integrations.Grants` adds
+one as an additive, non-breaking field; the CLI and the REST handler's own default both echo the
+manifest's full requested limits back as that override (matching "approve everything requested",
+the same default behaviour routes and capabilities already have), but a client (or an admin
+hand-editing the lock file) can narrow it, mirroring the subset-approval behaviour the architecture
+doc describes for routes and capabilities. Not a defect needing a fix, but worth recording because
+the architecture doc's own illustrative request body does not show this field, and a future reader
+implementing a second client from that prose alone would miss it.
+Priority: low - clarify in `docs/01-architecture.md` section 6 the next time that section gets a
+deliberate revision, so the illustrative POST body includes the optional `limits` field.
+
 ### AssetRef tokens are missing the connection-revision field ("cf") that makes revocation enforceable
 
 `internal/capabilities.AssetRef` (D2) mints a token structurally matching

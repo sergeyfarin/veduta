@@ -5,6 +5,9 @@
 //	veduta serve [--listen host:port]   run the HTTP server
 //	veduta version [--json]             print build identity
 //	veduta manifest digest <file>...    print the canonical digest of an integration manifest
+//	veduta integration list             show every declared integration's lock status
+//	veduta integration diff <id>        print the permission diff since the last approval
+//	veduta integration approve <id>     review the diff and record approval in veduta.lock.yaml
 //	veduta --check-config [--config path]   validate a config file and print diagnostics
 //
 // Until authentication lands (milestone H1) the server refuses to bind a non-loopback address,
@@ -54,8 +57,10 @@ func run(args []string) error {
 		return printVersion(args)
 	case "manifest":
 		return manifestCmd(args)
+	case "integration":
+		return integrationCmd(args)
 	default:
-		return fmt.Errorf("unknown command %q (try: serve, version, manifest)", cmd)
+		return fmt.Errorf("unknown command %q (try: serve, version, manifest, integration)", cmd)
 	}
 }
 

@@ -5,7 +5,7 @@ version: 1
 integrations:
   immich:
     manifestSha256: dc88753711be8d4c462cf9062607313435e4577869a125be1190b9b67561156b
-    version: 0.1.0
+    version: 0.2.0
     runtime: declarative
     approvedAt: "2026-09-04T21:40:00Z"
     approvedBy: sergey
@@ -85,9 +85,10 @@ integrations:
       outputKB: 64
       requestBodyKB: 64
       responseMB: 4
-      timeoutMs: 3000
+      timeoutMs: 4000
     routes:
       - { slot: server, method: GET, path: /api/4/cpu }
       - { slot: server, method: GET, path: /api/4/mem }
       - { slot: server, method: GET, path: /api/4/fs }
       - { slot: server, method: GET, path: /api/4/uptime }
+    limits: { timeoutMs: 4000 }
