@@ -95,17 +95,37 @@ whether image endpoints accept the same auth as JSON endpoints, response sizes, 
 the exact route set each integration needs**, which is now manifest content, not an implementation
 detail. Prevents discovering in E3 that Immich thumbnails need a session cookie.
 
-### S3 — Expression and validation bake-off · 0.5 d · **blocks C1, D3, J2**
+### S3 — Expression and validation bake-off · 0.5 d · **blocks C1, D3, J2** · **DONE**
 
-Implement the same three mappings in `expr-lang/expr` and `cel-go`: Immich stats, a Jellyfin item
-list, and `signal("coding-server","fs.root.percent") > 90 for 5m`. Compare ergonomics for non-programmers, error messages, cost, dependency weight — **and
-interruptibility, now an acceptance criterion**: write a hostile expression (nested `map` over a
-200 000-element array) and prove the evaluator can be stopped by a context deadline. `expr`'s
-context-aware mode instruments loops with cancellation checks; if that does not actually interrupt
-the hostile case, that is a reason to choose the other candidate. Also measure AST-node counting for
-a load-time `exprNodes` limit. In the same spike, confirm
-`santhosh-tekuri/jsonschema/v6` errors carry a usable `file:line:col` when combined with `yaml.v3`
-Node positions. **Decision produced:** D7.
+Two separable questions, resolved separately (C1 already answered the second one while building
+ahead of this spike, see C1's own entry): `santhosh-tekuri/jsonschema/v6` errors do combine with
+`yaml.v3` Node positions into a usable `file:line:col` (confirmed directly in C1, not assumed).
+
+**Which expression language, resolved without the originally-planned dual-library benchmark.**
+The plan's own reasoning for that benchmark was that `expr`'s context-aware mode "instruments loops
+with cancellation checks" and a spike was needed to prove that empirically — checked directly
+against `expr`'s source and docs instead: `expr.WithContext` propagates cancellation only to
+context-aware **custom functions**, never to `expr`'s own built-in `map`/`filter`/`sortBy`/etc., so
+neither candidate offers free interruption for those operators and a benchmark comparing "which
+library interrupts a hostile loop automatically" would have measured a property neither library
+actually has. That reframes the decision: CEL's real advantage isn't "battle-tested," it's that its
+interpreter accounts for its own comprehensions — a structural property, not something a benchmark
+against three sample mappings would surface differently than reading the two interpreters' designs.
+Confirmed separately (also without needing the benchmark to run): `expr.DisableBuiltin`/
+`DisableAllBuiltins` remove a builtin from name resolution before compilation, so an
+environment-supplied function of the same name resolves in its place - the mechanism D3 needs to
+own the sandbox itself rather than trust `expr`'s.
+
+**Decision:** `expr-lang/expr`, for both D3 and J2, used as a parser/evaluator only - D3 owns the
+entire execution budget (deadline, iteration budget, output-size/depth budget, AST complexity
+limit) and every scalable collection builtin is disabled and replaced by a D3-owned charged
+implementation of the same name. Ergonomics is the deciding factor, not safety: D3's manifest DSL is
+templating-shaped (`map`/`filter`/`sortBy`/`take`/string/date helpers), which is what `expr` already
+looks like natively - CEL optimises for boolean policy predicates and would push a manifest-DSL
+redesign around CEL's macro model, not a mere library swap, for a use (J2's `signal(...) > 90`
+predicates) where either language is equally trivial. Full rationale, the corrected claim about
+`WithContext`, and the explicit supported-function-list design: docs/01-architecture.md D47 and §5's
+"expr is a parser and evaluator; D3 is the sandbox." **Decision produced:** D7, D47.
 
 ### S4 — Visual prototype · 1 d · **blocks B1** · **DONE**
 
@@ -875,14 +895,20 @@ error path (malformed route mid-diff/mid-approve, a hand-built lock entry that w
 `Approve`'s own field-stripping, a schema-rejected lock document) is a real regression test, not
 just a coverage number.
 
-**D3 · Declarative runtime** · 2 d · deps: D2b, S3, B2
+**D3 · Declarative runtime** · 2 d · deps: D2b, S3, B2 · S3 resolved: `expr-lang/expr`, used as
+parser/evaluator only — see docs/01-architecture.md D47 and §5's "expr is a parser and evaluator;
+D3 is the sandbox"
 Creates: `internal/integrations/declarative/` (manifest loader, template-grammar validator for the
-four node kinds, pipeline executor, `expr` environment, output builder, signal emitter) and
-`internal/integrations/manifestload/` (pre-parse limits: byte cap, YAML depth/node/alias caps,
-duplicate-key rejection, then schema validation, then aggregate expression/template ceilings).
+four node kinds, pipeline executor, `expr` environment with every scalable builtin disabled via
+`expr.DisableBuiltin` and replaced by a D3-owned charged implementation of the same name, output
+builder, signal emitter) and `internal/integrations/manifestload/` (pre-parse limits: byte cap,
+YAML depth/node/alias caps, duplicate-key rejection, then schema validation, then aggregate
+expression/template ceilings).
 Also creates: the resource budget from §5 — streaming decode with `inputMB`/`jsonDepth`/`jsonNodes`
 caps, a load-time `exprNodes` check, and one shared `iterations` counter decremented by every
-`each`/`map`/`filter`/`sortBy` and template expansion.
+`each`/`map`/`filter`/`sortBy` and template expansion; the explicit supported-function list (D47)
+that is the actual manifest DSL surface, versioned as a compatibility promise independent of
+`expr`'s own stdlib.
 Tests: fixture-driven — a manifest + recorded HTTP responses produce a byte-identical golden
 Widget Document; **adversarial: a billion-laughs manifest is refused before parsing completes; a
 manifest with duplicate mapping keys is rejected rather than silently overwritten; a manifest of
@@ -892,11 +918,15 @@ without allocating it; a nested `map`/`filter`/`sortBy` over a large array exhau
 card rather than the process; an expression with 5 000 AST nodes is rejected at load; a pipeline that
 builds a huge intermediate list and then takes six elements is stopped on intermediate size, not
 final output; a benchmark asserts a hostile manifest cannot exceed its deadline by more than one
-evaluation step**; **a pipeline request with no matching manifest route is a load error, not a runtime
-denial** (the declarative runtime must not be a way around D2's checks); an `{asset}` node against a
-non-asset route is a load error; expression errors report a YAML path; a manifest requesting an
-undeclared slot or missing the `http` capability is rejected at load; an operation emitting an
-undeclared signal fails validation.
+evaluation step (checked inside the charged collection operations, not only between whole-expression
+evaluations)**; **expr's native `map`/`filter`/`sortBy`/`all`/`any`/`one`/`none`/`find` are
+unreachable — a manifest expression naming any of them resolves to the D3-owned charged
+implementation, proven by asserting the disabled name is absent from the compiled program's
+resolved builtins, not merely by behavioural inference**; **a pipeline request with no matching
+manifest route is a load error, not a runtime denial** (the declarative runtime must not be a way
+around D2's checks); an `{asset}` node against a non-asset route is a load error; expression errors
+report a YAML path; a manifest requesting an undeclared slot or missing the `http` capability is
+rejected at load; an operation emitting an undeclared signal fails validation.
 AC: an integration is added by dropping one YAML file in and approving it once, with no rebuild.
 
 **D4 · Generic HTTP/JSON card** · 0.5 d · deps: D3

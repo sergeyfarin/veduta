@@ -27,14 +27,13 @@ policies, never a computed intersection; header/query allowlisting; shared per-i
 budgets), and D2b (the integration lock and approval flow: canonical manifest digest, permission
 diff, `veduta integration list|diff|approve`, and the matching
 `GET/POST /api/v1/integrations...` endpoints - a sudo-window gate and audit trail are deferred to
-H1/H2, which do not exist yet) are done and green in CI; spikes S2 (upstream API reality check)
-and S4 (visual prototype) are done. Next up: D3 (declarative runtime), once S3 (expr vs cel
-bake-off) is decided. See
+H1/H2, which do not exist yet) are done and green in CI; spikes S2 (upstream API reality check),
+S3 (expr vs cel bake-off - decided: `expr-lang/expr`, used as parser/evaluator only, never as the
+sandbox), and S4 (visual prototype) are done. Next up: D3 (declarative runtime). See
 [docs/02-implementation-plan.md](docs/02-implementation-plan.md) for the full
 milestone table and what's marked **DONE**, and [docs/03-backlog.md](docs/03-backlog.md) for
-open gaps found along the way (currently: a config/schema asymmetry, a still-undone expression-
-language spike blocking D3/J2, and how Jellyfin's real auth header exposed a real limit in
-`${secret:NAME}`).
+open gaps found along the way (currently: a config/schema asymmetry, and how Jellyfin's real auth
+header exposed a real limit in `${secret:NAME}`).
 
 The contract suite in `internal/contracts` is the CI gate from the first commit —
 `mise run contracts`.

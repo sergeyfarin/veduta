@@ -463,17 +463,41 @@ cheapest way to spend the most time.
 
 Two further rules: **intermediate** values are counted, not only the final document — a pipeline that
 builds a 50 MB list and then takes the first six has already lost — and the evaluator must be
-*interruptible*. If `expr` is chosen (D7), its context-aware evaluation mode instruments loops with
-cancellation checks; **verifying that this actually interrupts a hostile expression is now an explicit
-acceptance criterion of Spike 3**, and an evaluator that cannot be interrupted is a reason to pick the
-other candidate. Adversarial benchmarks (deeply nested expressions over large arrays) ship with the
+*interruptible*. Adversarial benchmarks (deeply nested expressions over large arrays) ship with the
 runtime, not after it.
 
-The first draft of this format mixed quoted expressions (`'"Photos"'`), an `items.expr` escape
-hatch and a `{{ … }}` body template — three grammars with property-name-dependent evaluation rules.
-One language, explicit nodes, predictable escaping, and error messages that can point at a YAML
-path. The `expr` sandbox provides `take`, `map`, `filter`, `sortBy`, `sum`, `bytes`, `date`,
-`default`, and nothing that can reach the host.
+#### expr is a parser and evaluator; D3 is the sandbox (D47)
+
+`expr.WithContext` propagates cancellation to **context-aware custom functions** — it does not make
+`expr`'s own built-in collection operators (`map`, `filter`, `sortBy`, `all`, `any`, `one`, `none`,
+`find`, …) check the deadline, and a synchronous evaluator never interrupts itself unless something
+instruments it to. So D3 does not lean on `expr` for safety at all: it disables every scalable
+built-in (`expr.DisableBuiltin` removes a name from the builtin table before name resolution, so an
+environment function of the same name resolves in its place instead — confirmed as the mechanism,
+not an AST-rewrite) and replaces each with a D3-owned implementation that charges the shared
+`iterations` counter per element (`n·log₂n`, minimum `n`, for a sort) and checks the deadline on
+every element, not only between whole-expression evaluations. `expr` contributes parsing,
+compilation and the pure, host-unreachable expression core (arithmetic, comparisons, string
+handling, closures); D3 contributes every operation whose cost can scale with its input.
+
+This makes the manifest DSL a **deliberately smaller, explicitly supported surface**, not "whatever
+`expr` happens to ship": `map`, `filter`, `sortBy`, `take`, `sum`, `len`, arithmetic/comparison/
+boolean operators, string helpers, `bytes`, `date`, and whatever further template-specific helpers
+a card actually needs — reviewed for charging semantics before it is added, since an unreviewed
+`expr` builtin that turns out to scale with input is a sandbox hole the moment a manifest starts
+relying on it. The first draft of this format mixed quoted expressions (`'"Photos"'`), an
+`items.expr` escape hatch and a `{{ … }}` body template — three grammars with property-name-dependent
+evaluation rules. One language, explicit nodes, predictable escaping, error messages that point at a
+YAML path, and a supported-function list that is part of the product's compatibility promise, not an
+implementation detail of which library backs it.
+
+**D3's acceptance test:** given an expression containing nested collection operations over a large
+upstream payload, evaluation terminates when any configured deadline, iteration budget, AST
+complexity limit, result-size limit or nesting-depth limit is exceeded — and the check happens
+*inside* the scalable, D3-provided collection operations (per element), not only between expression
+evaluations. Hostile cases to cover: nested `map(filter(map(...)))`, an expensive `sortBy`,
+deliberately huge intermediate results, deep object traversal, and a custom function that receives
+context and is slow to respond to it.
 
 See [`plugins/immich/manifest.yaml`](../plugins/immich/manifest.yaml) for the complete worked example.
 
@@ -1276,7 +1300,7 @@ user needs that, the webhook channel hands off to n8n/Node-RED, which is the cor
 | D4 | Asset refs are broker-minted signed tokens | **Frozen** | See C9 |
 | D5 | YAML is the single source of truth | **Frozen for 0.1** | Avoids duelling stores; GUI is additive later |
 | D6 | Extism on wazero for WASM | Provisional — Spike 1 | Falls back to a hand-rolled ABI behind `Runtime` |
-| D7 | `expr-lang/expr` for mapping and rules | Provisional — Spike 3 | CEL is the alternative |
+| D7 | `expr-lang/expr` for mapping and rules | **Decided — S3** | Ergonomics decide it, not safety: D3's manifest DSL is templating-shaped (`map`/`filter`/`sortBy`/`take`/string and date helpers), which is what expr already looks like natively; CEL optimises for boolean policy predicates and would push a manifest-DSL redesign around CEL's macro model rather than a library swap. CEL's actual edge — an interpreter that accounts for its own comprehensions — is answered by D47 instead: expr is used as a parser/evaluator only, never as the sandbox |
 | D8 | No SSH in 0.1 | **Decided** | See C4; host metrics come from Glances/Beszel over HTTP |
 | D9 | SSE, one stream per tab | Decided | WebSockets only if bidirectional need appears |
 | D10 | `modernc.org/sqlite` | Decided | Pure Go; ARM cross-compilation |
@@ -1316,6 +1340,7 @@ user needs that, the webhook channel hands off to n8n/Node-RED, which is the cor
 | D44 | Notification dedupe is a partial unique index; delivery is at-least-once | **Frozen** | Concurrency needs the database to arbitrate, and remote-accepted-then-crash is unfixable locally |
 | D45 | Plugin cache is namespaced by manifest digest | **Frozen** | An upgraded plugin must not consume cache written by the version it replaced |
 | D46 | `auth` is a required config block; without authentication the server binds loopback only | **Frozen** | The default listener is all-interfaces and the demo carries real credentials |
+| D47 | expr is a parser/evaluator only; D3 owns the execution budget, and every scalable collection builtin (`map`/`filter`/`sortBy`/`all`/`any`/`one`/`none`/`find`/…) is disabled via `expr.DisableBuiltin` and replaced by a D3-owned, charged implementation under the same name | **Frozen** | expr's own resource accounting is not a sandbox (see §5's "expr is a parser and evaluator; D3 is the sandbox"); confirmed `expr.DisableBuiltin`/`DisableAllBuiltins` remove a name from the builtin table before name resolution, so an environment function of the same name resolves in its place — a supported mechanism, not an AST-rewrite hack |
 
 ## 15. Deliberately postponed
 

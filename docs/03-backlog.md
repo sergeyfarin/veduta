@@ -115,18 +115,28 @@ implements auth injection for HTTP connections - D1 is the first place this need
 work, and rewriting `examples/veduta.yaml`'s Jellyfin block to a syntax that doesn't yet exist
 would be premature before D1 settles the shape.
 
-### S3 (expr vs cel bake-off) is still undone and genuinely blocks D3 and J2
-
-Found while starting C1, which lists S3 as a dependency. C1 routed around it - `rule.when` is only
-pattern-scanned for card-id string literals there, never evaluated, so which expression language
-rules use doesn't matter yet. **D3** (declarative runtime) and **J2** (rules) cannot take that
-shortcut: D3 literally builds "an `expr` environment" and needs a real evaluator, and J2 evaluates
-`when` for real. Priority: **before D3 starts** - there is runway (D1 → D1b → D2 → D2b sit between
-here and D3), but this is a decision to make deliberately, not something to discover mid-D3.
-
 ---
 
 ## Resolved
+
+### S3 (expr vs cel bake-off) is decided: `expr-lang/expr`, used as parser/evaluator only
+
+Found while starting C1, which lists S3 as a dependency; C1 routed around it since `rule.when` was
+only pattern-scanned there, never evaluated. Resolved by decision rather than by running the
+originally-planned dual-library benchmark: the benchmark's own premise (prove `expr`'s
+"context-aware mode instruments loops with cancellation checks" by writing a hostile expression)
+turned out to be checkable directly against `expr`'s source instead of empirically - `WithContext`
+only propagates cancellation to context-aware custom functions, never to `expr`'s own built-in
+`map`/`filter`/`sortBy`, so no benchmark would have shown either candidate interrupting a hostile
+loop for free. That reframes the decision around ergonomics (D3's manifest DSL is
+templating-shaped, which is what `expr` already looks like; CEL optimises for boolean policy
+predicates and would push a DSL redesign) with safety handled by a **D3-owned** execution budget,
+not by either library's own resource accounting - confirmed `expr.DisableBuiltin`/
+`DisableAllBuiltins` remove a name from the builtin table before name resolution, so D3 can
+reliably disable every scalable builtin and replace it with a charged implementation of the same
+name. Decision, corrected `WithContext` claim, and the explicit supported-function-list design:
+docs/01-architecture.md decisions D7 and D47, and §5's "expr is a parser and evaluator; D3 is the
+sandbox." D3 itself (not yet started) is where this is actually implemented and tested.
 
 ### Config: `baseUrl` whitespace regex accidentally rejected the letter `s`
 
