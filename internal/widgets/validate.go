@@ -70,11 +70,26 @@ func (e *ValidationError) Error() string {
 
 // Validate is the single gate every runtime (builtin, declarative, wasm) passes an integration's
 // output through before it is ever stored or rendered. It never returns a Document on error - a
-// caller cannot accidentally use a partially-validated value.
+// caller cannot accidentally use a partially-validated value. Enforces the core default byte
+// ceiling; a caller with its own approved, possibly narrower or wider `outputKB` (schema range
+// 1-256 KiB) should call ValidateWithLimit instead.
 func Validate(raw []byte) (Document, error) {
-	if len(raw) > maxDocumentBytes {
+	return ValidateWithLimit(raw, maxDocumentBytes)
+}
+
+// ValidateWithLimit is Validate with an explicit byte ceiling in place of the core default -
+// found missing in review: a manifest's approved `outputKB` was reconciled into EffectiveLimits
+// and carried all the way to the declarative runtime, but Validate only ever checked the
+// hardcoded core default, so a narrower approval was never actually tighter and a wider one could
+// never take effect. maxBytes <= 0 falls back to the core default, same as every other limit in
+// this project treating "unset" as "the documented default," never "unlimited."
+func ValidateWithLimit(raw []byte, maxBytes int) (Document, error) {
+	if maxBytes <= 0 {
+		maxBytes = maxDocumentBytes
+	}
+	if len(raw) > maxBytes {
 		return Document{}, &ValidationError{Problems: []string{
-			fmt.Sprintf("document is %d bytes, exceeding the %d byte limit", len(raw), maxDocumentBytes),
+			fmt.Sprintf("document is %d bytes, exceeding the %d byte limit", len(raw), maxBytes),
 		}}
 	}
 

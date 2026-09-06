@@ -314,7 +314,18 @@ func Load(path string) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	if ext := filepath.Ext(path); ext == ".yaml" || ext == ".yml" {
+	return LoadBytes(raw, filepath.Ext(path))
+}
+
+// LoadBytes is Load without its own file read - found needed in review: a caller that also needs
+// the manifest's structure (not just its digest) was reading the same path twice, independently,
+// once here and once for its own decode. Two reads of a file that can change between them is a
+// real TOCTOU window on exactly the guarantee digest-bound approval exists to provide: a
+// concurrent replacement could associate the digest of one version of a manifest with the
+// executable content of another. Read the bytes once and pass them to both this and whatever else
+// needs them, never read the same path twice for one manifest.
+func LoadBytes(raw []byte, ext string) (any, error) {
+	if ext == ".yaml" || ext == ".yml" {
 		dec := yaml.NewDecoder(strings.NewReader(string(raw)))
 		var n yaml.Node
 		if err := dec.Decode(&n); err != nil {
@@ -338,9 +349,20 @@ func Load(path string) (any, error) {
 	return doc, nil
 }
 
-// DigestFile loads a manifest from disk and returns its canonical digest.
+// DigestFile loads a manifest from disk and returns its canonical digest. Prefer DigestBytes when
+// the caller already has the file's bytes in hand (see LoadBytes's own doc comment on why reading
+// the same manifest path twice is a real TOCTOU window).
 func DigestFile(path string) (string, error) {
 	doc, err := Load(path)
+	if err != nil {
+		return "", err
+	}
+	return Digest(doc)
+}
+
+// DigestBytes is DigestFile against already-read bytes rather than a path.
+func DigestBytes(raw []byte, ext string) (string, error) {
+	doc, err := LoadBytes(raw, ext)
 	if err != nil {
 		return "", err
 	}

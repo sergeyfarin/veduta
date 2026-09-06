@@ -4,11 +4,13 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"veduta.dev/veduta/internal/config"
 )
@@ -85,5 +87,58 @@ notifications: {channels: {}}
 	}
 	if err := validateAuthNone(snapshot, true); err != nil {
 		t.Fatalf("explicit override was rejected: %v", err)
+	}
+}
+
+// TestConfigLoader_RejectsAuthNoneOnHotReloadNotOnlyAtStartup is the regression test for a real
+// gap found in review: validateAuthNone previously ran once, right after the initial
+// config.Open, and never again - a config edited live from a safe auth mode to auth: none while
+// still referencing secrets would reload successfully and go live unguarded. configLoader now
+// carries the same check into every load, including a reload triggered by config.Store.Watch, so
+// the bad edit is refused as an ordinary diagnostic and the last-good snapshot stays live.
+func TestConfigLoader_RejectsAuthNoneOnHotReloadNotOnlyAtStartup(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "veduta.yaml")
+	safe := `version: 1
+auth: {mode: password, admin: {username: a, passwordHash: x}}
+connections:
+  service: {kind: http, baseUrl: "http://service:8080", auth: {type: bearer, value: "${secret:TOKEN}"}}
+`
+	unsafe := `version: 1
+auth: {mode: none}
+connections:
+  service: {kind: http, baseUrl: "http://service:8080", auth: {type: bearer, value: "${secret:TOKEN}"}}
+`
+	t.Setenv("TOKEN", "sometoken")
+	if err := os.WriteFile(path, []byte(safe), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	store, diags := config.Open(path, nil, configLoader(false))
+	if diags.HasErrors() {
+		t.Fatal(diags.String())
+	}
+	good := store.Snapshot()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { _ = store.Watch(ctx) }()
+	time.Sleep(50 * time.Millisecond) // let the watcher attach before the edit
+
+	if err := os.WriteFile(path, []byte(unsafe), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if s := store.Status(); !s.OK && len(s.Diagnostics) > 0 {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	status := store.Status()
+	if status.OK {
+		t.Fatal("the unsafe reload should have been refused, but Status().OK is true")
+	}
+	if store.Snapshot() != good {
+		t.Fatal("the unsafe reload replaced the last-good snapshot instead of being refused")
 	}
 }

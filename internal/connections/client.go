@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"golang.org/x/time/rate"
+
+	"veduta.dev/veduta/internal/connections/routepath"
 )
 
 const defaultTimeout = 10 * time.Second
@@ -72,7 +74,7 @@ func newHTTPClient(id string, cfg *HTTPConfig, logger *slog.Logger) (*client, er
 	httpClient := &http.Client{
 		Transport:     transport,
 		Timeout:       timeout,
-		CheckRedirect: redirectPolicy(base, cfg.MaxRedirects),
+		CheckRedirect: redirectPolicy(base, cfg.MaxRedirects, cfg.AllowedPaths),
 	}
 
 	return &client{
@@ -92,10 +94,23 @@ func concurrencyOrDefault(n int) int {
 	return n
 }
 
-// redirectPolicy refuses a redirect to a different host outright, and any redirect beyond
-// maxRedirects - docs/01-architecture.md section 8's default of 0 means "no other package" needs
-// its own opinion about redirects, since Go's http.Client already has none once this is set.
-func redirectPolicy(base *url.URL, maxRedirects int) func(req *http.Request, via []*http.Request) error {
+// redirectPolicy refuses a redirect to a different host or a weaker scheme outright, any
+// redirect beyond maxRedirects (default 0 - docs/01-architecture.md section 8), and - the fix for
+// a real gap found in review - a redirect to a path outside the connection's own allowedPaths
+// when one is configured.
+//
+// Same-host was, before this fix, believed sufficient: the broker authorises the *original*
+// request's path against the manifest, the lock and allowedPaths, but a followed redirect never
+// re-runs any of those three checks against the *new* path - an authorised `/api/public` could
+// redirect to `/api/admin` on the identical host and the credentialed request would simply follow
+// it. Checking allowedPaths here closes that for any connection that has one configured, which
+// docs/01's own "http-json escape hatch" language already calls "the only thing standing between
+// a card and every path on that connection" - it is not yet a fix for a connection with no
+// allowedPaths configured (nil/empty there means "any path is fine" by design), where a redirect
+// could still reach a path the manifest/lock did not approve; that residual gap needs the broker
+// itself to re-run Grant.Authorize against the redirect target, which needs the Grant plumbed
+// into this policy and is tracked in docs/03-backlog.md rather than attempted here.
+func redirectPolicy(base *url.URL, maxRedirects int, allowedPaths []string) func(req *http.Request, via []*http.Request) error {
 	return func(req *http.Request, via []*http.Request) error {
 		if len(via) > maxRedirects {
 			return fmt.Errorf("connections: exceeded the %d allowed redirect(s)", maxRedirects)
@@ -103,6 +118,25 @@ func redirectPolicy(base *url.URL, maxRedirects int) func(req *http.Request, via
 		if req.URL.Host != base.Host {
 			return fmt.Errorf("connections: redirect to a different host %q refused", req.URL.Host)
 		}
-		return nil
+		if req.URL.Scheme != base.Scheme {
+			return fmt.Errorf("connections: redirect changes scheme %q -> %q, refused", base.Scheme, req.URL.Scheme)
+		}
+		if len(allowedPaths) == 0 {
+			return nil
+		}
+		canonicalPath, err := routepath.Canonicalise(req.URL.Path)
+		if err != nil {
+			return fmt.Errorf("connections: redirect target path %q: %w", req.URL.Path, err)
+		}
+		for _, allowed := range allowedPaths {
+			canonicalAllowed, err := routepath.Canonicalise(allowed)
+			if err != nil {
+				continue
+			}
+			if routepath.HasPathPrefix(canonicalPath, canonicalAllowed) {
+				return nil
+			}
+		}
+		return fmt.Errorf("connections: redirect to %q is outside the connection's allowedPaths", req.URL.Path)
 	}
 }

@@ -1039,6 +1039,61 @@ ever runs. `TestHealth_NetworkFailureNeverLeaksAQueryAuthCredential` is the regr
 occupy in the first place - id, kind, health, nothing else - so "never credentials" is enforced by
 the response's shape, not solely by remembering to scrub a richer one.
 
+**External review of D2b through D5, before any of it shipped further (2026-09):** an outside
+review of the manifest/lock/broker/declarative-runtime/connections code built across these four
+milestones raised ten numbered findings plus a type-duplication and a plan-sequencing critique.
+Verified independently against the actual code (not taken on trust) and addressed as follows -
+full detail in each fix's own commit and test names, this is the summary:
+- **Confirmed and fixed:** a redirect could reach an unauthorized route or downgrade HTTPS
+  (`connections/client.go`'s `redirectPolicy` now enforces same-scheme and, when configured,
+  `allowedPaths` on every hop - `routepath.HasPathPrefix`, `redirect_test.go`); `responseMB` was
+  never enforced by the broker (`capabilities.Broker.HTTP`, `TestBroker_HTTP_ResponseMBEnforced`);
+  `outputKB` was hardcoded to 64 KiB regardless of the approved limit
+  (`widgets.ValidateWithLimit`, `TestInvoke_ApprovedOutputKBIsActuallyEnforced`); a caller-supplied
+  deadline could *replace* rather than only *narrow* the manifest's approved `timeoutMs`, and the
+  computed deadline was never actually attached to the HTTP context or the expr environment
+  (`declarative/runtime.go`'s `Invoke`, `TestInvoke_CallerDeadlineCanOnlyNarrowNeverExtendTheApprovedTimeout`);
+  the shipped Jellyfin example has been non-functional since D1 shipped, not merely "pending a
+  decision" as the backlog previously said (`docs/03-backlog.md`, updated); both `manifest.go` and
+  `manifestload/load.go` read a manifest's bytes multiple independent times for digest vs.
+  structure, a real TOCTOU on digest-bound approval (`canonical.LoadBytes`/`DigestBytes`, both
+  loaders now read once); static connection `headers` were configured but never sent
+  (`connections/registry.go`'s `Do`, `TestDo_StaticHeadersAreSentAndOverrideTheCaller`);
+  `allowedPaths` used a raw `strings.HasPrefix`, so `/api` wrongly matched `/apievil`
+  (`routepath.HasPathPrefix`, shared by both `capabilities.connectionAllows` and the new redirect
+  check); the approval API had no body-size ceiling and accepted trailing content after the JSON
+  body (`api.Server.limitBody`, strict `json.Decoder` framing in `integrations.go`); hot reload
+  updated only the config snapshot, not the `auth: none` safety check, which ran once at startup
+  only (`cmd/veduta/main.go`'s `configLoader`,
+  `TestConfigLoader_RejectsAuthNoneOnHotReloadNotOnlyAtStartup`); two concurrent approvals could
+  race and lose an update, and `approvedBy` was client-supplied and unauthenticated
+  (`api.Server.approveMu`, a fixed `unauthenticatedApprovedBy` sentinel,
+  `TestIntegrationApprove_ConcurrentApprovalsOfDifferentIntegrationsDoNotLoseAnUpdate`,
+  `TestIntegrationApprove_ClientCannotSupplyApprovedBy`).
+- **Pushed back on:** the claim that dynamic output could emit an undeclared signal - traced
+  `manifestload`'s template compiler and confirmed an object node's key set is always static
+  (YAML mapping keys, never an `{expr}` node), so this is not reachable in the current grammar. A
+  cheap defensive runtime check was added anyway (`declarative/runtime.go`, rejects any evaluated
+  signal name not in the operation's declared set) since it costs nothing and holds if the grammar
+  ever grows a dynamic-key construct.
+- **Residual gaps recorded, not fixed here** (`docs/03-backlog.md`): the redirect fix enforces
+  connection-policy `allowedPaths`, but cannot yet re-check the *lock's* route grant on a
+  redirected request, since that needs `Grant` plumbed into `connections.Registry`, which nothing
+  currently does; the concurrent-approval fix closes the race within one process but not between
+  the REST API and a concurrently-running `veduta integration approve` CLI invocation.
+- **Refactor critique (type duplication across `integrations.Limits`/`manifestload.Limits`/
+  `EffectiveLimits`/`capabilities.Limits`) confirmed as a real contributor** to the `outputKB`/
+  `responseMB` bugs above, but full unification declined - each type earns its shape from a prior,
+  deliberate decision. Mitigated with `TestManifestloadLimitsMatchesTheFieldSet` and
+  `TestCapabilitiesLimitsIsARealSubsetOfLimitBounds` (`internal/integrations/limits_test.go`), see
+  `docs/03-backlog.md` for the full reasoning.
+- **Plan-sequencing critique confirmed:** E1 (and, transitively, E2/E3) needs F1's SQLite storage
+  for `connection_state`/`settings`/`asset_cache` despite Phase E being written before Phase F, and
+  H1's own `deps: F1` was never reconciled with "H1 moves before E3." F1 is now called out as
+  needing to be pulled forward to immediately before E1/Phase E, both at F1/E1/E2/E3's own entries
+  and in Part 3's critical path; G4's stale `X-Emby-Authorization` text (superseded by S2's
+  completed live pass) is corrected to the real `Authorization` header.
+
 Wiring note: `internal/connections.Registry` had never actually been constructed in production
 code before this milestone - D1 through D4 built and tested it in isolation, with Phase F (the
 scheduler) always the intended place to hold a live one, and Phase F does not exist yet. D5 is the
@@ -1049,7 +1104,9 @@ recorded in docs/03-backlog.md, since nothing before Phase F actually depends on
 
 ### Phase E — Assets and vertical slice #1 (2.5 d)
 
-**E1 · Asset token and proxy endpoint** · 1 d · deps: D2
+**E1 · Asset token and proxy endpoint** · 1 d · deps: D2, F1 (see note below - Phase E is written
+before Phase F in this document, but F1 has no dependency beyond the already-landed A3 and must in
+practice be pulled forward ahead of E1)
 Creates: `internal/capabilities/assets/` (mint, verify, HMAC key bootstrap in `settings`),
 `GET /api/v1/assets/{token}` with all §7 guards.
 Creates also: `connection_state` revision bootstrap and rotation on material config or resolved
@@ -1062,14 +1119,30 @@ a transform outside the allowlist is refused; a token minted for slot A cannot b
 connection B; the response never contains upstream credentials in any header; **the token payload
 contains no hash of any configuration value** (asserted structurally).
 
-**E2 · Asset disk cache** · 0.5 d · deps: E1
+**Dependency correction, found in the D2b/D3/D4/D5 review (2026-09):** the two bullets above ("Creates
+also: `connection_state` revision bootstrap" and "persisted signing key") both name real SQLite
+tables from §10 (`connection_state`, `settings`) that this document's own F1 entry says it creates
+("the thirteen tables from §10"). E1 was written with only `deps: D2`, silently assuming storage
+that does not exist yet at that point in the document's own phase order (Phase E precedes Phase F).
+Since F1's only dependency is A3 (already landed), the fix is not to give E1 its own bespoke
+bootstrap store, but to pull F1 forward: land F1 immediately before E1, keep the rest of Phase F
+where it is. `docs/03-backlog.md`'s existing entries for the asset-token signing key and
+`connection_state` already say "Priority: E1" for this reason; this note makes the dependency
+explicit in the plan itself rather than leaving it implied only in the backlog.
+
+**E2 · Asset disk cache** · 0.5 d · deps: E1, F1
 Creates: `internal/storage/assetcache/` (sha256-addressed files, LRU eviction to a byte budget,
-metadata in `asset_cache`).  Note: depends on F1 for the table — either land F1 first or use an
-in-memory cache and follow up.
+metadata in `asset_cache`). `asset_cache` is one of F1's own §10 tables; now that E1 formally pulls
+F1 forward (see E1's note above), F1 is available by the time E2 starts and the earlier
+in-memory-cache fallback is unnecessary.
 Tests: cache hit avoids upstream; eviction respects the budget; corrupt file is re-fetched;
 concurrent requests for the same asset coalesce.
 
-**E3 · Immich integration — VERTICAL SLICE #1** · 1 d · deps: D3, E1, S2
+**E3 · Immich integration — VERTICAL SLICE #1** · 1 d · deps: D3, E1, S2, F1 (transitively, via E1 -
+not F2/F3: this vertical slice invokes the integration synchronously per request, as the critical
+path in Part 3 already implies by reaching E3 without F2/F3 in the chain; the scheduler's
+single-flight/backoff/circuit-breaker machinery formalises this once F2 lands, it is not a
+precondition for the first working demo)
 Objective: **the demo.** Dashboard → Immich → six most recent photos → signed proxy → browser.
 Creates: `plugins/immich/manifest.yaml` (declarative), `testdata/immich/*.json`, golden documents,
 docs page.
@@ -1145,8 +1218,10 @@ conformance suite against a third-party module.
 AC: a new plugin can be scaffolded and built in under five minutes following the README.
 
 **G4 · Jellyfin plugin — VERTICAL SLICE #2** · 1 d · deps: G2, S2
-Chosen because it needs real logic: build the `X-Emby-Authorization` header, resolve the user, list
-recently-added items, and mint poster asset refs.
+Chosen because it needs real logic: send the `Authorization: MediaBrowser Token="..."` header (S2's
+completed live pass settled on this over the legacy `X-Emby-Authorization`/`X-Emby-Token` forms -
+see `docs/spikes/s2-upstream-reality-check.md` and `examples/veduta.yaml`'s Jellyfin connection),
+resolve the user, list recently-added items, and mint poster asset refs.
 Tests: fixture test against recorded Jellyfin responses producing a golden document — **the same
 golden test must also pass if the integration is reimplemented as builtin Go**, proving the runtime
 swap is faithful.
@@ -1158,6 +1233,14 @@ the browser.
 **Ordering change:** H1 (sessions) is now scheduled immediately after C2 and before E3/A4, so the
 first build that talks to a real credentialed service can also be exposed safely. Until H1 lands the
 server binds loopback only. H2 remains where it is and must land before any public release.
+
+**Ordering correction, found in the D2b/D3/D4/D5 review (2026-09):** H1's own `deps: F1` line was
+already correct, but this section's "moves before E3" claim did not carry that dependency along
+with it - as originally written, H1 was scheduled before E3 while F1 (Phase F) was still scheduled
+after E3, meaning H1 could not actually build where this section placed it. E1's entry above now
+pulls F1 forward to immediately before E1/Phase E for the same reason (`connection_state` and the
+signing key), which resolves this too: with F1 landing before Phase E, H1 (deps: F1) can genuinely
+land where this section says it does, before E3.
 
 **H1 · Sessions** · 1 d · deps: F1
 Creates: `internal/auth/` (argon2id via `x/crypto`, session store, cookie flags, CSRF double-submit,
@@ -1248,14 +1331,18 @@ iteration, docs, packaging, the things that always appear — **8–12 calendar 
 number. Roughly a quarter of it (the demo path below) is front-loaded, which is what keeps momentum.
 
 **Critical path (the shortest route to a compelling demo):**
-`Part 0 → S2 → S4 → A1 → A2 → B1 → B2 → B3 → B4 → C1 → C2 → D1 → D1b → D2 → D2b → D3 → E1 → E3` — Immich
+`Part 0 → S2 → S4 → A1 → A2 → B1 → B2 → B3 → B4 → C1 → C2 → D1 → D1b → D2 → D2b → D3 → F1 → E1 → E3` — Immich
 photos on a beautiful dashboard behind a credential-free proxy, with route-limited authority.
 Roughly 16–18 developer-days, demonstrable, screenshot-able, and it validates every architectural
 decision that matters. **S1a runs alongside in week one** as an early warning; **S1b and the whole
 WASM phase are off this path** — the original plan contradicted itself by placing S1 first while
 describing it as only "informing" the broker.
 
-**Then** `F1 → F2 → F3 → F4` makes it live, and `S1b → G1 → G2 → G4` makes it extensible.
+**F1 is now on the critical path, not after it** (found in the D2b/D3/D4/D5 review, 2026-09): E1's
+`connection_state` revision and persisted signing key are real §10 SQLite tables, so F1 must land
+before E1, not after E3 as this line originally implied. F1's own dependency is only A3, already
+landed, so pulling it forward costs nothing here that wasn't already owed. **Then** `F2 → F3 → F4`
+makes the rest of persistence and scheduling live, and `S1b → G1 → G2 → G4` makes it extensible.
 
 **Safe to parallelise:**
 - Frontend (B1–B5) against backend (C1–D5) — the Widget Document schema (B2) is the only shared

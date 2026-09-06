@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/expr-lang/expr/ast"
@@ -64,17 +65,26 @@ func (v *nodeValue) UnmarshalYAML(n *yaml.Node) error { //nolint:revive // yaml.
 	return nil
 }
 
-// Load parses, bounds, schema-validates, and compiles the template grammar at path.
+// Load parses, bounds, schema-validates, and compiles the template grammar at path. The file is
+// read exactly once: found in review that this used to read the same path three separate times
+// (once streaming for the YAML depth/node walk, once more for the exact byte-size check, and a
+// third time inside canonical.DigestFile) - a real TOCTOU window on exactly the guarantee
+// digest-bound approval exists to provide. A concurrent replacement between any of those reads
+// could load one version's structure while digesting another's bytes, silently decoupling the
+// approval record from what actually gets executed. Every check below - byte cap, YAML
+// depth/node/alias/duplicate-key limits, schema validation, structural decode, and the canonical
+// digest - now runs against the one immutable byte slice read here.
 func Load(path string) (*Manifest, error) {
 	// #nosec G304 -- path is the operator-selected integration manifest location.
-	f, err := os.Open(path)
+	raw, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = f.Close() }()
+	if len(raw) > maxManifestBytes {
+		return nil, fmt.Errorf("%s: manifest exceeds %d bytes", path, maxManifestBytes)
+	}
 	var root yaml.Node
-	dec := yaml.NewDecoder(&ioLimitReader{r: f, n: maxManifestBytes + 1})
-	if err = dec.Decode(&root); err != nil {
+	if err = yaml.Unmarshal(raw, &root); err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
 	if root.Content == nil {
@@ -87,14 +97,6 @@ func Load(path string) (*Manifest, error) {
 	if stats.nodes > 20000 || stats.depth > 32 {
 		return nil, fmt.Errorf("%s: YAML exceeds node/depth limit", path)
 	}
-	// #nosec G304 -- the same operator-selected path is reread for its exact byte ceiling.
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-	if len(raw) > maxManifestBytes {
-		return nil, fmt.Errorf("%s: manifest exceeds %d bytes", path, maxManifestBytes)
-	}
 	var generic any
 	if err = root.Content[0].Decode(&generic); err != nil {
 		return nil, err
@@ -106,7 +108,7 @@ func Load(path string) (*Manifest, error) {
 	if err = root.Content[0].Decode(&doc); err != nil {
 		return nil, err
 	}
-	digest, err := canonical.DigestFile(path)
+	digest, err := canonical.DigestBytes(raw, filepath.Ext(path))
 	if err != nil {
 		return nil, err
 	}
@@ -224,23 +226,6 @@ func countTemplate(t *Template, d int, s *templateStats) {
 			countTemplate(v, d+1, s)
 		}
 	}
-}
-
-type ioLimitReader struct {
-	r *os.File
-	n int64
-}
-
-func (l *ioLimitReader) Read(p []byte) (int, error) {
-	if l.n <= 0 {
-		return 0, errors.New("manifest byte limit exceeded")
-	}
-	if int64(len(p)) > l.n {
-		p = p[:l.n]
-	}
-	n, e := l.r.Read(p)
-	l.n -= int64(n)
-	return n, e
 }
 
 type yamlStats struct{ nodes, depth int }

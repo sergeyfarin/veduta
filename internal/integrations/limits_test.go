@@ -5,7 +5,11 @@ package integrations
 import (
 	"encoding/json"
 	"os"
+	"reflect"
 	"testing"
+
+	"veduta.dev/veduta/internal/capabilities"
+	"veduta.dev/veduta/internal/integrations/manifestload"
 )
 
 // TestLimitBoundsMatchManifestSchema reads schemas/plugin-manifest.v1.schema.json directly and
@@ -59,6 +63,77 @@ func TestLimitBoundsMatchManifestSchema(t *testing.T) {
 	}
 	if len(limitFieldOrder) != len(limitBounds) {
 		t.Fatalf("limitFieldOrder has %d entries, limitBounds has %d", len(limitFieldOrder), len(limitBounds))
+	}
+}
+
+// TestManifestloadLimitsMatchesTheFieldSet guards the cross-type duplication this package,
+// manifestload, and capabilities all deliberately carry (each package has its own Limits shape
+// for its own decode/enforcement boundary, rather than one shared type - see capabilities.Limits'
+// own doc comment on why). Found in the D2b/D3/D4/D5 review: that duplication is exactly what let
+// outputKB and responseMB go unenforced for a time - a field present in the schema and in this
+// package's own limitBounds table, but silently absent from (or ignored by) a consumer type,
+// surfaces nowhere until a manual audit or a targeted regression test catches it. Rather than
+// collapsing the types (each earns its shape from a real, previously-decided constraint -
+// pointer-fielded here for "explicit zero vs unset", plain-int in manifestload for "already
+// reconciled", a narrow broker-only subset in capabilities), this test is the cheap mitigation:
+// every limitBounds key must have a same-named field in manifestload.Limits, so a schema field
+// can never silently lack a reconciled-limits home.
+func TestManifestloadLimitsMatchesTheFieldSet(t *testing.T) {
+	mlType := reflect.TypeOf(manifestload.Limits{})
+	mlFields := make(map[string]bool, mlType.NumField())
+	for i := 0; i < mlType.NumField(); i++ {
+		f := mlType.Field(i)
+		tag := f.Tag.Get("yaml")
+		if tag == "" {
+			t.Fatalf("manifestload.Limits field %s has no yaml tag", f.Name)
+		}
+		mlFields[tag] = true
+	}
+	for name := range limitBounds {
+		if !mlFields[name] {
+			t.Errorf("limitBounds has %q, missing from manifestload.Limits", name)
+		}
+	}
+	for name := range mlFields {
+		if _, ok := limitBounds[name]; !ok {
+			t.Errorf("manifestload.Limits has %q, missing from limitBounds", name)
+		}
+	}
+}
+
+// TestCapabilitiesLimitsIsARealSubsetOfLimitBounds checks the other half of the same
+// duplication: capabilities.Limits is a deliberate, narrower subset (only the fields the broker
+// itself enforces - the declarative runtime's/WASM sandbox's own budgets live elsewhere), but
+// every one of its field names must still be a real limitBounds key, or a typo/rename here would
+// silently create a broker-enforced ceiling with no manifest-declarable counterpart.
+func TestCapabilitiesLimitsIsARealSubsetOfLimitBounds(t *testing.T) {
+	// Go field name -> limitBounds/schema key. Explicit rather than a lowercase-first-letter
+	// heuristic: Go's own acronym capitalisation (HTTPRequests, not HttpRequests) breaks that
+	// heuristic for exactly one of these six fields, and a heuristic that's wrong for one input
+	// defeats the point of a drift-detecting test.
+	toKey := map[string]string{
+		"HTTPRequests":  "httpRequests",
+		"ResponseMB":    "responseMB",
+		"CacheEntries":  "cacheEntries",
+		"CacheBytesKB":  "cacheBytesKB",
+		"HostCalls":     "hostCalls",
+		"RequestBodyKB": "requestBodyKB",
+	}
+	capType := reflect.TypeOf(capabilities.Limits{})
+	if capType.NumField() != len(toKey) {
+		t.Fatalf("capabilities.Limits has %d fields, this test's name map has %d - update toKey",
+			capType.NumField(), len(toKey))
+	}
+	for i := 0; i < capType.NumField(); i++ {
+		fieldName := capType.Field(i).Name
+		key, known := toKey[fieldName]
+		if !known {
+			t.Errorf("capabilities.Limits field %s is not in this test's name map", fieldName)
+			continue
+		}
+		if _, ok := limitBounds[key]; !ok {
+			t.Errorf("capabilities.Limits field %s (%s) is missing from limitBounds", fieldName, key)
+		}
 	}
 }
 

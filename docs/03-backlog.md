@@ -86,6 +86,38 @@ implementing a second client from that prose alone would miss it.
 Priority: low - clarify in `docs/01-architecture.md` section 6 the next time that section gets a
 deliberate revision, so the illustrative POST body includes the optional `limits` field.
 
+### Limits/Manifest type duplication across packages is deliberate, but was a real contributor to two enforcement bugs
+
+Found in the D2b/D3/D4/D5 review (2026-09): `integrations.Limits` (pointer-fielded, manifest-
+declared), `manifestload.Limits` (plain-int, already reconciled), `integrations.EffectiveLimits`,
+and `capabilities.Limits` (a deliberately narrower broker-only subset - see its own doc comment)
+all separately name overlapping resource ceilings. The review is right that this duplication
+contributed to two real bugs this same review found and fixed: `capabilities.Broker.HTTP` never
+read `Grant.Limits.ResponseMB` at all, and `internal/widgets.Validate` had no way to accept a
+narrower-than-default `outputKB` from `manifestload.Limits`, so both fields were present in the
+schema and in at least one Go type but silently unenforced by the code that should have checked
+them. The review's proposed fix (unify into one type) is declined: each shape earns its difference
+from a real, previously-made decision - `integrations.Limits` needs pointer fields specifically so
+an explicit `cacheEntries: 0` is distinguishable from "unset" (see the `CacheEntries can't
+represent an explicit zero` entry below for the one place that distinction still isn't threaded
+through), `manifestload.Limits` is post-reconciliation and has no such ambiguity to represent, and
+`capabilities.Limits` is intentionally narrower because the broker never enforces the declarative
+runtime's/WASM sandbox's own budgets (memoryMB, timeoutMs, jsonDepth, exprNodes, iterations, ...).
+Collapsing these into one type would either lose that distinction or leak enforcement concerns
+across a package boundary that `docs/01-architecture.md` deliberately keeps separate.
+Mitigated instead: `internal/integrations/limits_test.go`'s
+`TestManifestloadLimitsMatchesTheFieldSet` and `TestCapabilitiesLimitsIsARealSubsetOfLimitBounds`
+now cross-check every package's Limits field set against `limitBounds` (already checked against
+the manifest schema by the existing `TestLimitBoundsMatchManifestSchema`), so a field silently
+missing from one of these types - the shape of both bugs this review found - now fails a fast,
+targeted test instead of surfacing as a wrong runtime ceiling. This checks that a schema field has
+a same-named home in every type; it does not (and structurally cannot, without duplicating the
+enforcement logic itself) check that the field is actually *read* by the right enforcement code
+path - that part still needs one test per limit, the way `TestBroker_HTTP_ResponseMBEnforced` and
+`TestInvoke_ApprovedOutputKBIsActuallyEnforced` do. Priority: none currently open - this is a
+completed, permanent mitigation, recorded here (per this file's own stated purpose) so the
+trade-off and its reasoning survive even though nothing further is scheduled.
+
 ### AssetRef tokens are missing the connection-revision field ("cf") that makes revocation enforceable
 
 `internal/capabilities.AssetRef` (D2) mints a token structurally matching
@@ -140,10 +172,53 @@ scalar containing `${secret:` that doesn't match the whole-value pattern, so thi
 visible at `--check-config` time instead of failing silently at runtime. The real fix needs
 `SecretRef` to become template-aware (a string with one or more named placeholders, composed and
 wrapped in a single opaque `secrets.Value` - not a per-placeholder redaction problem, since the
-*whole* composed result can just always print as `***`). Priority: **decide before D1** actually
-implements auth injection for HTTP connections - D1 is the first place this needs to actually
-work, and rewriting `examples/veduta.yaml`'s Jellyfin block to a syntax that doesn't yet exist
-would be premature before D1 settles the shape.
+*whole* composed result can just always print as `***`). **Update, found in the D2b/D3/D4/D5
+review (2026-09):** D1 shipped without resolving this. `examples/veduta.yaml`'s Jellyfin
+connection still carries the literal `${secret:JELLYFIN_KEY}` placeholder embedded inside a larger
+`auth` value, and D1's `internal/connections` auth injection only supports the schema's typed
+`auth.type` values (`bearer`/`basic`/`header`), none of which composes a secret into a larger
+string either - so the shipped example is not just a documentation gap but a **non-functional
+example connection**: `--check-config` only warns (via `suspiciousSecretRefs`), it does not fail,
+so an operator copying this example gets a connection that silently sends the literal placeholder
+text as a header value instead of a real token. Priority raised to **before D6 (or whichever
+milestone next touches `examples/veduta.yaml` or ships the CLI's example-generation path)** -
+either give `SecretRef` the template-aware composition described above so the example can actually
+work, or replace the shipped Jellyfin example with a connection shape the current schema can
+actually execute (e.g. a case where the whole auth value is one secret reference) until that
+composition work happens.
+
+### A redirect to an in-policy host can still reach a route the lock never approved
+
+Found in the D2b/D3/D4/D5 review (2026-09), fixed partially: `internal/connections/client.go`'s
+redirect policy now refuses a same-request redirect that changes host, downgrades scheme, or (when
+`allowedPaths` is configured) lands outside every allowed path subtree - see
+`routepath.HasPathPrefix` and `redirect_test.go`. What it still cannot do is re-run the *lock's*
+route-level authorization (`capabilities.connectionAllows`, the actual grant check) on the
+redirected path, because that check needs a `*capabilities.Grant` (built from the manifest/lock at
+invoke time), and `redirectPolicy` is constructed inside `connections.Registry`, a layer below and
+independent of `capabilities.Broker`. A manifest approved for `GET /api/stats` only, talking to a
+connection whose `allowedPaths` is permissive (or unset), could still be redirected by a
+compromised or misconfigured upstream to another *connection-policy-allowed* but
+*lock-unapproved* path on the same host. Priority: whenever `Grant` plumbing reaches
+`connections.Registry.Do` (no milestone currently owns threading a `Grant` that deep - it would
+need to become a parameter of `Do`/`redirectPolicy` rather than living only in `capabilities`);
+until then, operators who need this closed should set restrictive `allowedPaths` per connection,
+which the fix above does enforce today.
+
+### The lock-write race is closed only within one process, not against a concurrent CLI approval
+
+Found in the D2b/D3/D4/D5 review (2026-09), fixed partially: `internal/api.Server` now serialises
+concurrent `POST .../approve` requests with `approveMu sync.Mutex` (see
+`TestIntegrationApprove_ConcurrentApprovalsOfDifferentIntegrationsDoNotLoseAnUpdate`), closing the
+read-modify-write race between two REST requests hitting the same running process. It does not
+close the race between the REST API and a concurrent `veduta integration approve` CLI invocation -
+a separate process with its own in-memory view of `veduta.lock.yaml`, holding no lock the API
+process could see. Two approvals landing at the same instant, one via each path, can still lose an
+update the same way two REST requests used to. Priority: low (this requires an operator to be
+running the CLI and the API against the same lock file at the same instant, a narrow window) but
+worth closing whenever the lock file gains a real writer abstraction - an OS file lock
+(`flock`/`LockFileEx`) around the read-modify-write in whatever function both the CLI and the API
+ultimately call would close it without either caller needing to know about the other.
 
 ---
 

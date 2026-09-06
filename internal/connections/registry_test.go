@@ -192,6 +192,36 @@ func TestDo_TimeoutHonoured(t *testing.T) {
 	}
 }
 
+// TestDo_StaticHeadersAreSentAndOverrideTheCaller is the regression test for a real bug found in
+// review: HTTPConfig.Headers (connections.*.headers in config) was computed and stored at build
+// time, and the broker already treats these names as connection-owned (stripping any
+// plugin-supplied value for them), but Do itself never actually added them to the outgoing
+// request - a configured static header silently never went out on the wire at all. Also proves
+// precedence: a connection header always overrides whatever a caller supplied for the same name,
+// matching the ownership model the broker's own filtering already assumes.
+func TestDo_StaticHeadersAreSentAndOverrideTheCaller(t *testing.T) {
+	var got string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.Header.Get("X-Static")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	cfg := &HTTPConfig{BaseURL: srv.URL, Headers: map[string]string{"X-Static": "from-config"}}
+	reg := singleHTTPRegistry(t, "x", cfg)
+
+	_, err := reg.Do(context.Background(), "x", Request{
+		Method: http.MethodGet, Path: "/",
+		Headers: map[string]string{"X-Static": "from-caller"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "from-config" {
+		t.Fatalf("upstream saw X-Static=%q, want the connection's own configured value to win", got)
+	}
+}
+
 // TestDo_RateLimiterEnforced is the D1 AC: "rate limiter enforced." A limiter of 1 request per
 // (effectively) never, burst 1, means a second immediate request must wait - proven by giving it
 // a context that expires before the limiter would ever let it through.

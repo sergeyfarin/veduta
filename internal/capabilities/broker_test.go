@@ -361,6 +361,43 @@ func TestBroker_CachePut_BytesBudgetSpecifically(t *testing.T) {
 	}
 }
 
+// TestBroker_HTTP_ResponseMBEnforced is the regression test for a real gap found in review:
+// Limits.ResponseMB was documented as a per-response ceiling the broker enforces, narrower than
+// the connection's own MaxResponseBytes, but nothing ever actually read the field - an approval
+// with a small ResponseMB got no narrower ceiling than whatever the connection itself allowed.
+func TestBroker_HTTP_ResponseMBEnforced(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(make([]byte, 2<<20)) // 2 MiB
+	}))
+	defer srv.Close()
+	b := capabilities.NewBroker(registryAgainst(t, srv, config.ConnectionAuth{Type: "none"}), capabilities.NewMemCache(), capabilities.NewMemAudit(), nil)
+	g := capabilities.NewGrant("plug", "1.0.0", "inst1", map[string]string{"server": "conn1"},
+		capabilities.NewCapSet("http"), []capabilities.Route{dataRoute()}, []capabilities.Route{dataRoute()}, nil,
+		capabilities.Limits{ResponseMB: 1}, capabilities.ExecutionIdentity{})
+	_, err := b.HTTP(context.Background(), g, capabilities.HTTPRequest{Slot: "server", Method: "GET", Path: "/api/stats"})
+	if !errors.Is(err, capabilities.ErrBudgetExceeded) {
+		t.Fatalf("got %v, want ErrBudgetExceeded for a 2 MiB response against a 1 MB limit", err)
+	}
+}
+
+func TestBroker_HTTP_ResponseMBAllowsUnderTheLimit(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(make([]byte, 10))
+	}))
+	defer srv.Close()
+	b := capabilities.NewBroker(registryAgainst(t, srv, config.ConnectionAuth{Type: "none"}), capabilities.NewMemCache(), capabilities.NewMemAudit(), nil)
+	g := capabilities.NewGrant("plug", "1.0.0", "inst1", map[string]string{"server": "conn1"},
+		capabilities.NewCapSet("http"), []capabilities.Route{dataRoute()}, []capabilities.Route{dataRoute()}, nil,
+		capabilities.Limits{ResponseMB: 1}, capabilities.ExecutionIdentity{})
+	resp, err := b.HTTP(context.Background(), g, capabilities.HTTPRequest{Slot: "server", Method: "GET", Path: "/api/stats"})
+	if err != nil {
+		t.Fatalf("unexpected error for a 10-byte response under a 1 MB limit: %v", err)
+	}
+	if len(resp.Body) != 10 {
+		t.Fatalf("body = %d bytes, want 10", len(resp.Body))
+	}
+}
+
 func TestBroker_Cache_ExpiredEntryIsGone(t *testing.T) {
 	b := capabilities.NewBroker(nil, capabilities.NewMemCache(), capabilities.NewMemAudit(), nil)
 	g := fullGrant(nil)

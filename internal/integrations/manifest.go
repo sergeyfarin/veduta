@@ -85,19 +85,23 @@ func findManifestFile(dir string) (string, error) {
 	return "", &ErrManifestNotFound{Dir: dir}
 }
 
-// LoadManifest loads and digests the manifest in dir.
+// LoadManifest loads and digests the manifest in dir. The file is read exactly once: found in
+// review that digesting and decoding used to read the same path independently (a real TOCTOU
+// window on exactly the guarantee digest-bound approval exists to provide - a concurrent
+// replacement between the two reads could associate the digest of one version of a manifest with
+// the executable content of another). Both now come from the one byte slice read here.
 func LoadManifest(dir string) (*Manifest, error) {
 	path, err := findManifestFile(dir)
 	if err != nil {
 		return nil, err
 	}
-	digest, err := canonical.DigestFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", path, err)
-	}
 	// #nosec G304 -- path was just located by findManifestFile within an operator-configured
 	// integration directory, not attacker-controlled request input.
 	raw, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
+	digest, err := canonical.DigestBytes(raw, filepath.Ext(path))
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}

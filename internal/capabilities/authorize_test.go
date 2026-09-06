@@ -222,6 +222,22 @@ func TestAuthorize_ConnectionPolicy_MultipleAllowedPathsSecondMatches(t *testing
 	}
 }
 
+// TestAuthorize_ConnectionPolicy_PrefixIsASubtreeNotAStringPrefix is the regression test for a
+// real, confirmed bug found in review: connectionAllows used to compare with a raw
+// strings.HasPrefix, which would let an allowedPaths entry of "/api" also permit "/apievil" -
+// not a subtree of "/api" at all, just a string that happens to start the same way. A request to
+// a route that is itself manifest- and lock-approved, but whose path only superficially shares a
+// prefix with the allowed subtree, must still be denied.
+func TestAuthorize_ConnectionPolicy_PrefixIsASubtreeNotAStringPrefix(t *testing.T) {
+	route := capabilities.Route{Slot: "server", Method: "GET", Path: "/apievil/x", Use: capabilities.UseData}
+	policy := map[string]capabilities.ConnectionPolicy{"server": {AllowedPaths: []string{"/api"}}}
+	g := grantWithRoutes([]capabilities.Route{route}, []capabilities.Route{route}, policy)
+	req := capabilities.HTTPRequest{Slot: "server", Method: "GET", Path: "/apievil/x"}
+	if err := g.Authorize(req, capabilities.UseData); !errors.Is(err, capabilities.ErrRouteDenied) {
+		t.Fatalf("got %v, want ErrRouteDenied - /apievil/x is not under the /api subtree", err)
+	}
+}
+
 // TestAuthorize_ConnectionPolicy_MalformedAllowedPathIgnored covers connectionAllows' continue
 // branch: a malformed entry in AllowedPaths must not crash Authorize, just never match.
 func TestAuthorize_ConnectionPolicy_MalformedAllowedPathIgnored(t *testing.T) {

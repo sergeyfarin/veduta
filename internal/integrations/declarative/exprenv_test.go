@@ -3,6 +3,7 @@
 package declarative
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
@@ -16,7 +17,7 @@ func TestPredicateCallBoundaryCharging(t *testing.T) {
 		t.Fatal(err)
 	}
 	b := &budget{deadline: time.Now().Add(time.Second), iterations: 2}
-	_, err = run(p, map[string]any{"items": []map[string]any{{"x": 1}, {"x": 2}, {"x": 3}}}, b)
+	_, err = run(context.Background(), p, map[string]any{"items": []map[string]any{{"x": 1}, {"x": 2}, {"x": 3}}}, b)
 	if !errors.Is(err, errBudgetExceeded) {
 		t.Fatalf("got %v, want budget error", err)
 	}
@@ -47,7 +48,7 @@ func TestSortByChargesNLogN(t *testing.T) {
 		t.Fatal(err)
 	}
 	b := &budget{deadline: time.Now().Add(time.Second), iterations: 7}
-	_, err = run(p, map[string]any{"items": []map[string]any{{"x": 4}, {"x": 3}, {"x": 2}, {"x": 1}}}, b)
+	_, err = run(context.Background(), p, map[string]any{"items": []map[string]any{{"x": 4}, {"x": 3}, {"x": 2}, {"x": 1}}}, b)
 	if !errors.Is(err, errBudgetExceeded) {
 		t.Fatalf("got %v, want budget error", err)
 	}

@@ -205,6 +205,24 @@ func TestLimitsBeyondSchema(t *testing.T) {
 // TestValidateNeverPanics fuzzes the entrypoint that receives untrusted, integration-produced
 // bytes directly - a plugin's output must never be able to crash the core (docs/01-architecture.md
 // section 8, "Plugin DoS").
+// TestValidateWithLimit_NarrowerAndWiderThanTheCoreDefault is the regression test for a real gap
+// found in review: a manifest's approved outputKB (schema range 1-256 KiB) was reconciled into
+// EffectiveLimits and carried to the declarative runtime, but Validate only ever checked the
+// hardcoded 64 KiB core default - a narrower approval was never actually tighter and a wider one
+// could never take effect.
+func TestValidateWithLimit_NarrowerAndWiderThanTheCoreDefault(t *testing.T) {
+	raw := []byte(`{"schemaVersion":1,"blocks":[{"type":"text","content":"` + strings.Repeat("x", 2000) + `"}]}`)
+	if _, err := widgets.Validate(raw); err != nil {
+		t.Fatalf("under the 64 KiB core default this must pass: %v", err)
+	}
+	if _, err := widgets.ValidateWithLimit(raw, 1024); err == nil {
+		t.Fatal("a 1 KiB limit must reject a document over 2 KiB, which the 64 KiB default alone would not catch")
+	}
+	if _, err := widgets.ValidateWithLimit(raw, 0); err != nil {
+		t.Fatalf("zero must fall back to the core default like every other limit in this project, not mean unlimited: %v", err)
+	}
+}
+
 func TestValidateNeverPanics(t *testing.T) {
 	f, err := os.CreateTemp(t.TempDir(), "corpus")
 	if err != nil {

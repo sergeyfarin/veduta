@@ -122,7 +122,7 @@ func endpoint(v any, last bool) (any, error) {
 	}
 	return rv.Index(n).Interface(), nil
 }
-func run(p *vm.Program, env map[string]any, b *budget) (any, error) {
-	env["__ctx"] = context.WithValue(context.Background(), budgetKey{}, b)
+func run(ctx context.Context, p *vm.Program, env map[string]any, b *budget) (any, error) {
+	env["__ctx"] = context.WithValue(ctx, budgetKey{}, b)
 	return expr.Run(p, env)
 }

@@ -141,7 +141,10 @@ func bodySizeAllowed(routeMaxKB, manifestRequestBodyKB int, body []byte) bool {
 
 // connectionAllows checks a connection's own allowedPaths - the third, independent policy.
 // Empty/nil AllowedPaths means any path under the connection's BaseURL is fine (D1's own
-// default); a non-empty list is a prefix allowlist.
+// default); a non-empty list is a subtree allowlist, matched via routepath.HasPathPrefix rather
+// than a raw strings.HasPrefix - a naive prefix check would let an allowed "/api" also cover
+// "/apievil", which is not a subtree of "/api" at all, just a string that happens to start the
+// same way. Found and fixed in review: no test had ever exercised this specific boundary before.
 func connectionAllows(policy ConnectionPolicy, canonicalPath string) bool {
 	if len(policy.AllowedPaths) == 0 {
 		return true
@@ -151,7 +154,7 @@ func connectionAllows(policy ConnectionPolicy, canonicalPath string) bool {
 		if err != nil {
 			continue
 		}
-		if strings.HasPrefix(canonicalPath, canonicalAllowed) {
+		if routepath.HasPathPrefix(canonicalPath, canonicalAllowed) {
 			return true
 		}
 	}

@@ -87,6 +87,16 @@ func (r *registry) Do(ctx context.Context, id string, req Request) (*Response, e
 	for k, v := range req.Headers {
 		httpReq.Header.Set(k, v)
 	}
+	// The connection's own static headers (connections.*.headers in config) always win over
+	// anything a caller supplied - the broker already treats their names as connection-owned and
+	// strips a plugin-supplied value for them (see capabilities/headers.go's ownership model),
+	// but Do itself is the actual authority: not every caller goes through the broker (Health,
+	// for one), so this cannot assume that filtering already happened. Found in review: these
+	// were computed into HTTPConfig.Headers at build time and never actually added to a request -
+	// a configured static header silently never went out on the wire at all.
+	for k, v := range c.cfg.Headers {
+		httpReq.Header.Set(k, v)
+	}
 	injectAuth(httpReq, query, c.cfg.Auth)
 	httpReq.URL.RawQuery = query.Encode()
 

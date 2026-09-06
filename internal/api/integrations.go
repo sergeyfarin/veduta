@@ -5,6 +5,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"path/filepath"
 	"sort"
@@ -57,12 +58,21 @@ type approvalPreview struct {
 }
 
 // approveRequest is POST /api/v1/integrations/{id}/approve's body - docs/01-architecture.md
-// section 6: "the client sends the exact grants it is approving, not a bare yes."
+// section 6: "the client sends the exact grants it is approving, not a bare yes." Deliberately
+// has no approvedBy field: found in review that a client-supplied actor string was passed
+// straight through to the audit-trail attribution with no authentication behind it at all - not
+// this endpoint's own mistake so much as a real limitation of having no session system yet (H1),
+// but "attribute this approval to whatever string the request happened to include" is worse than
+// an honest, fixed sentinel until one exists. See unauthenticatedApprovedBy below.
 type approveRequest struct {
 	ExpectedManifestSHA256 string              `json:"expectedManifestSha256"`
 	Grants                 integrations.Grants `json:"grants"`
-	ApprovedBy             string              `json:"approvedBy,omitempty"`
 }
+
+// unauthenticatedApprovedBy is what every REST approval is attributed to until H1 (sessions)
+// exists to derive a real actor from an authenticated request. The CLI's own `--by` flag (default
+// the OS username) is a different, more trustworthy channel and is unaffected by this.
+const unauthenticatedApprovedBy = "rest-api (unauthenticated)"
 
 // errIntegrationNotDeclared and errIntegrationBuiltin distinguish "there is nothing to approve
 // here" from an ordinary manifest load failure, so the handler can pick the right status code.
@@ -156,6 +166,14 @@ func (s *Server) routeIntegrations(mux *http.ServeMux) {
 	})
 
 	mux.HandleFunc("POST /api/v1/integrations/{id}/approve", func(w http.ResponseWriter, r *http.Request) {
+		// Serialises this whole read-modify-write of veduta.lock.yaml against every other
+		// concurrent approval in this process - see approveMu's own doc comment for the race
+		// this closes. Held across resolveForApproval's own lock read too, so the digest/diff
+		// this request acts on and the lock state it eventually writes back are never computed
+		// against two different snapshots of the file.
+		s.approveMu.Lock()
+		defer s.approveMu.Unlock()
+
 		id := r.PathValue("id")
 		resolved, err := s.resolveForApproval(id)
 		if err != nil {
@@ -164,12 +182,20 @@ func (s *Server) routeIntegrations(mux *http.ServeMux) {
 		}
 
 		var req approveRequest
-		if decodeErr := json.NewDecoder(r.Body).Decode(&req); decodeErr != nil {
+		dec := json.NewDecoder(r.Body)
+		dec.DisallowUnknownFields()
+		if decodeErr := dec.Decode(&req); decodeErr != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body: " + decodeErr.Error()})
 			return
 		}
+		// Reject trailing content after the first JSON value, the same strict framing
+		// internal/canonical already requires of a manifest - found missing here in review.
+		if _, decodeErr := dec.Token(); !errors.Is(decodeErr, io.EOF) {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "trailing content after the JSON body"})
+			return
+		}
 
-		entry, err := integrations.Approve(resolved.manifest, req.ExpectedManifestSHA256, req.Grants, req.ApprovedBy, time.Now())
+		entry, err := integrations.Approve(resolved.manifest, req.ExpectedManifestSHA256, req.Grants, unauthenticatedApprovedBy, time.Now())
 		if err != nil {
 			if errors.Is(err, integrations.ErrDigestChanged) {
 				// docs/01-architecture.md section 6: "409 Conflict with the new diff. Nothing is

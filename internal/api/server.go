@@ -17,6 +17,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"sync"
 	"time"
 
 	"veduta.dev/veduta/internal/config"
@@ -79,6 +80,14 @@ type Server struct {
 	cfg  Config
 	log  *slog.Logger
 	http *http.Server
+
+	// approveMu serialises POST /api/v1/integrations/{id}/approve's read-modify-write of
+	// veduta.lock.yaml - found missing in review: two concurrent approvals (even of different
+	// integrations) could each read the same lock, add their own entry to their own in-memory
+	// copy, and the second WriteLock silently discards the first's addition. This closes the
+	// in-process race; a concurrent writer in a different process (the CLI, running at the same
+	// moment) is a separate, recorded gap - see docs/03-backlog.md.
+	approveMu sync.Mutex
 }
 
 // ErrPublicWithoutAuth is returned when a non-loopback bind is attempted before authentication
@@ -178,7 +187,7 @@ func (s *Server) routes() http.Handler {
 	}
 	mux.Handle("/", s.staticHandler(assets, present))
 
-	return s.recoverPanics(mux)
+	return s.recoverPanics(s.limitBody(mux))
 }
 
 func (s *Server) routeConfig(mux *http.ServeMux) {
@@ -240,6 +249,24 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 // the corresponding source.
 func (s *Server) handleVersion(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, version.Current())
+}
+
+// maxRequestBodyBytes bounds every request body server-wide - milestone A3's own "Creates" list
+// promised "max header/body bytes" alongside the header limit already enforced by
+// http.Server.MaxHeaderBytes, but nothing ever added the body half; found in review, still
+// self-documented in docs/02-implementation-plan.md as an A3 gap ("Request-id middleware and
+// config flags remain" did not mention this one). 1 MiB is generous for every JSON body this API
+// accepts today (an approval's grants list is the largest, and still far under this).
+const maxRequestBodyBytes = 1 << 20
+
+// limitBody wraps every request body in http.MaxBytesReader, so a handler's own json.Decoder
+// naturally errors once more than maxRequestBodyBytes has been read, rather than an unbounded
+// read exhausting memory before a handler ever gets a chance to reject an oversized request.
+func (s *Server) limitBody(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodyBytes)
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (s *Server) recoverPanics(next http.Handler) http.Handler {

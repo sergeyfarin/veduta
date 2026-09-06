@@ -191,10 +191,22 @@ func (i *instance) Invoke(ctx context.Context, req integrations.InvokeRequest) (
 			return integrations.InvokeResponse{}, fmt.Errorf("params: %w", e)
 		}
 	}
-	deadline := req.Deadline
-	if deadline.IsZero() {
-		deadline = time.Now().Add(time.Duration(i.manifest.Limits.TimeoutMs) * time.Millisecond)
+	// The manifest's own timeoutMs is a ceiling a caller-supplied deadline may only narrow, never
+	// replace with something later - found in review: this used to let any non-zero
+	// req.Deadline override the approved timeoutMs outright, the wrong direction for an
+	// "effective limit" (docs/01-architecture.md's own effective(k) = min(...), never max). The
+	// resulting deadline is then actually applied to ctx (previously computed but never attached
+	// to anything - a three-second-approved integration could still block for the connection's
+	// own ten-second HTTP client timeout), so every broker call and expression evaluation below
+	// shares one real, enforced deadline instead of the budget's wall-clock check being the only
+	// thing that ever looked at it.
+	deadline := time.Now().Add(time.Duration(i.manifest.Limits.TimeoutMs) * time.Millisecond)
+	if !req.Deadline.IsZero() && req.Deadline.Before(deadline) {
+		deadline = req.Deadline
 	}
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithDeadline(ctx, deadline)
+	defer cancel()
 	b := &budget{deadline: deadline, iterations: i.manifest.Limits.Iterations, maxBytes: i.manifest.Limits.InputMB << 20, maxNodes: i.manifest.Limits.JSONNodes}
 	env := map[string]any{"params": params, "now": time.Now().UTC(), "__grant": req.Grant}
 	for _, step := range op.Pipeline {
@@ -202,7 +214,7 @@ func (i *instance) Invoke(ctx context.Context, req integrations.InvokeRequest) (
 			return integrations.InvokeResponse{}, e
 		}
 		if step.When != nil {
-			v, e := run(i.programs[step.When], env, b)
+			v, e := run(ctx, i.programs[step.When], env, b)
 			if e != nil {
 				return integrations.InvokeResponse{}, e
 			}
@@ -269,17 +281,34 @@ func (i *instance) Invoke(ctx context.Context, req integrations.InvokeRequest) (
 	if e != nil {
 		return integrations.InvokeResponse{}, e
 	}
-	doc, e := widgets.Validate(body)
+	// The approved outputKB, not the package's own hardcoded default - found missing in review:
+	// EffectiveLimits.OutputKB was reconciled and carried this far but nothing downstream ever
+	// read it, so a narrower or wider approval than the 64 KiB core default had no effect either
+	// way.
+	doc, e := widgets.ValidateWithLimit(body, i.manifest.Limits.OutputKB<<10)
 	if e != nil {
 		return integrations.InvokeResponse{}, e
 	}
+	declared := make(map[string]bool, len(op.Signals))
 	for _, s := range op.Signals {
+		declared[s.Name] = true
 		sig, ok := doc.Signals[s.Name]
 		if !ok {
 			continue
 		}
 		if !signalType(sig.Value, s.Type) {
 			return integrations.InvokeResponse{}, fmt.Errorf("signal %s is not %s", s.Name, s.Type)
+		}
+	}
+	// manifestload's own load-time check already rejects any signals key not in op.Signals - a
+	// YAML mapping's keys are always static (there is no construct in this grammar that produces
+	// one at evaluation time), so this can only fire if that invariant is ever broken by a future
+	// grammar change. Kept anyway as a second, independent check on the *evaluated* map, raised in
+	// review: cheap, and it means adding a dynamic-key construct later fails loudly here rather
+	// than silently reintroducing an undeclared-signal hole.
+	for name := range doc.Signals {
+		if !declared[name] {
+			return integrations.InvokeResponse{}, fmt.Errorf("signal %s is not declared", name)
 		}
 	}
 	return integrations.InvokeResponse{Document: doc}, nil
@@ -325,7 +354,7 @@ func (i *instance) eval(ctx context.Context, t *manifestload.Template, env map[s
 	case "literal":
 		return t.Literal, nil
 	case "expr":
-		return run(i.programs[t.Expr], env, b)
+		return run(ctx, i.programs[t.Expr], env, b)
 	case "array":
 		out := make([]any, 0, len(t.Array))
 		for _, x := range t.Array {
@@ -347,7 +376,7 @@ func (i *instance) eval(ctx context.Context, t *manifestload.Template, env map[s
 		}
 		return out, nil
 	case "each":
-		v, e := run(i.programs[t.Each.Expr], env, b)
+		v, e := run(ctx, i.programs[t.Each.Expr], env, b)
 		if e != nil {
 			return nil, e
 		}

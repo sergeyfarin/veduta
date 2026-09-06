@@ -149,24 +149,9 @@ func serve(args []string) error {
 		logger.Warn("serving the checked-in showcase dashboard, not real configuration",
 			"hint", "this is --fixtures - remove it for a real deployment")
 	} else {
-		loader := func(path string) (*config.Snapshot, config.Diagnostics) {
-			snapshot, diags := config.LoadPath(path)
-			if snapshot == nil || diags.HasErrors() {
-				return nil, diags
-			}
-			_, secretDiags := secrets.ResolveAll(snapshot.SecretRefs, secrets.DefaultResolver())
-			diags = append(diags, secretDiags...)
-			if diags.HasErrors() {
-				return nil, diags
-			}
-			return snapshot, diags
-		}
-		store, diags := config.Open(*configPath, logger, loader)
+		store, diags := config.Open(*configPath, logger, configLoader(*override))
 		if diags.HasErrors() {
 			return fmt.Errorf("load config:\n%s", diags.String())
-		}
-		if err := validateAuthNone(store.Snapshot(), *override); err != nil {
-			return err
 		}
 		cfg.ConfigStore = store
 		cfg.Listen = store.Snapshot().Config.Server.Listen
@@ -212,6 +197,32 @@ func serve(args []string) error {
 		return err
 	}
 	return nil
+}
+
+// configLoader is config.Store's Loader for real (non-fixture) configuration: parse, resolve
+// secrets, then validateAuthNone - run every time a config is loaded, including a hot reload, not
+// only once at startup. Found in review: this check previously ran once, right after the initial
+// config.Open, and never again - a config edited live from auth.mode: password to auth.mode: none
+// while still referencing secrets would reload successfully and go live with no warning at all. A
+// failed check here is an ordinary load diagnostic, so config.Store's own atomic-swap semantics
+// apply automatically: the bad snapshot is refused and the previous good one stays live.
+func configLoader(override bool) config.Loader {
+	return func(path string) (*config.Snapshot, config.Diagnostics) {
+		snapshot, diags := config.LoadPath(path)
+		if snapshot == nil || diags.HasErrors() {
+			return nil, diags
+		}
+		_, secretDiags := secrets.ResolveAll(snapshot.SecretRefs, secrets.DefaultResolver())
+		diags = append(diags, secretDiags...)
+		if diags.HasErrors() {
+			return nil, diags
+		}
+		if err := validateAuthNone(snapshot, override); err != nil {
+			diags = append(diags, config.Diagnostic{Severity: config.SeverityError, File: path, Message: err.Error()})
+			return nil, diags
+		}
+		return snapshot, diags
+	}
 }
 
 func validateAuthNone(snapshot *config.Snapshot, override bool) error {

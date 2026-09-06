@@ -100,6 +100,19 @@ func (b *broker) HTTP(ctx context.Context, g Grant, req HTTPRequest) (HTTPRespon
 	if err != nil {
 		return HTTPResponse{}, err
 	}
+	// g.Limits.ResponseMB is the manifest's own per-response ceiling, narrower than (never wider
+	// than) the connection's own MaxResponseBytes - which has already bounded what registry.Do
+	// could read at all, but does not know about any individual manifest's tighter request. Found
+	// in review: this field was carried on Limits and documented as enforced here, but nothing
+	// ever actually read it - a manifest approved for a small ResponseMB got no narrower ceiling
+	// than whatever the connection itself allowed. This is necessarily a post-hoc check - the
+	// bytes are already read by the time Do returns - but it still stops an oversized body from
+	// ever reaching the plugin/expression environment rather than silently accepting it.
+	if g.Limits.ResponseMB > 0 && len(resp.Body) > g.Limits.ResponseMB<<20 {
+		b.audit.Denied(g.PluginID, "HTTP", ErrBudgetExceeded)
+		return HTTPResponse{}, fmt.Errorf("%w: response is %d bytes, exceeding the %d MB limit",
+			ErrBudgetExceeded, len(resp.Body), g.Limits.ResponseMB)
+	}
 	return HTTPResponse{StatusCode: resp.StatusCode, Header: resp.Header, Body: resp.Body}, nil
 }
 
