@@ -957,10 +957,58 @@ four-node template grammar and pipeline step shape have no cache-triggering cons
 bug the moment caching is wired in.
 AC: an integration is added by dropping one YAML file in and approving it once, with no rebuild.
 
-**D4 · Generic HTTP/JSON card** · 0.5 d · deps: D3
+**D4 · Generic HTTP/JSON card** · 0.5 d · deps: D3 · **DONE**
 Objective: Homepage's `customapi` equivalent, defined inline in a card without a manifest — the
 migration workhorse.
-AC: a card with `integration: http-json` plus a `mapping:` block renders metrics from any JSON API.
+AC: a card with `integration: http-json` plus a `view:` block renders metrics from any JSON API
+(the plan's own text said `mapping:` - stale wording from before C1's config schema shipped;
+`schemas/config.v1.schema.json`'s actual, already-frozen field is `view` -
+`Card.View map[string]any`, and `examples/veduta.yaml`'s own checked-in adguard card already uses
+it. Followed the real schema, not the plan's earlier wording).
+
+Does not implement a second execution engine: `docs/01-architecture.md`'s "http-json escape
+hatch" already specifies "the same expression and resource budgets as any declarative
+integration," so `internal/integrations/manifestload.SynthesizeHTTPJSON` builds a single-operation
+`Manifest` in memory from a card's `params.path`/`params.method`/`params.query` and its `view:`
+block, and hands it to `internal/integrations/declarative` (D3) completely unchanged - an
+http-json card gets the identical charged-builtin expression sandbox, budgets, and
+`$env`/`__`-prefix/`matches`/custom-call rejection a real manifest does, not a parallel,
+unreviewed one. `internal/integrations/httpjson` is the thin layer above that: it builds the
+self-approving lock entry (http-json is exempt from approval - docs/01 section 6, "builtin
+integrations... have no separate trust boundary" - a sentinel digest `HTTPJSONDigest` on both the
+manifest and the lock entry, since there is nothing external for a digest to drift against when
+the "manifest" is synthesised fresh from the same card config every invocation) and the `Grant`
+authorising exactly the one request the card names.
+
+Two things not obvious from the AC, decided while building:
+- **Route grant self-consistency, not weakening.** With no manifest file and no approval record,
+  `ManifestRoutes`/`ApprovedRoutes` are both trivially derived from the same `params.path` the
+  card itself configures - not independently meaningful the way a real manifest's request vs. an
+  administrator's approval are. The connection's own `ConnectionPolicy` (`allowedPaths`) is
+  untouched and remains the real, independent gate - proven directly, not assumed:
+  `TestBuild_ConnectionAllowedPathsStillGates` shows a path outside `allowedPaths` is still denied
+  even though it's the card's own configured path.
+- **Bare field names, not `{expr: ...}`.** `view:` values are written the way Homepage's
+  `customapi` mapping already was - `num_blocked_filtering / num_dns_queries`, no wrapping syntax
+  - which doesn't match how D3's pipeline binds a response (`env[step.As] = decoded`, so fields
+  live under a name, not at the top level). Rather than changing D3's already-reviewed env
+  construction, `manifestload.bindBareFieldsToData` rewrites the AST before compiling: every bare
+  identifier except the two real top-level bindings (`params`, `now`) becomes member access on
+  `data` (the pipeline step's own binding name) - `num_dns_queries` becomes `data.num_dns_queries`.
+  This turned out to also be a stronger, structural version of the D3 review's `__grant` fix:
+  writing `__grant` as a view value rewrites to `data.__grant`, ordinary (and always absent) field
+  access on the JSON response, not the real internal env key - `data` can never contain it, so
+  there's nothing for the shared `__`-prefix check to even need to catch here.
+  `TestBuild_BareFieldNamesCannotReachInternalEnvKeys` proves the rendered document never carries
+  Grant-shaped content.
+
+Tests: `TestBuild_AdGuardExampleRendersMetrics` runs `examples/veduta.yaml`'s real, checked-in
+adguard card through a real `capabilities.Broker`/`connections.Registry`/`Grant` end to end
+(same discipline as D3's own `TestGlances_RealBrokerEndToEnd`, not a permissive fake); the
+connection-`allowedPaths` and internal-env-key tests above; `SynthesizeHTTPJSON`'s own tests cover
+GET-default, POST/other-method rejection, a malformed path, an oversized view expression, and
+`matches` rejection; `bindBareFieldsToData` is tested directly against a small table (bare names,
+arithmetic, comparison, ternary, dotted access, and confirming `params`/`now` are left alone).
 
 **D5 · Connection health and admin endpoints** · 0.5 d · deps: D1 · ⇉ with D3/D4
 Creates: `GET /api/v1/connections`, `POST /api/v1/connections/{id}/test`, health tracked per connection.

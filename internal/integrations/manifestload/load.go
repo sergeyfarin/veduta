@@ -393,7 +393,16 @@ func compileExprNode(n *yaml.Node, max int) (*Expression, error) {
 	if e := n.Decode(&raw); e != nil {
 		return nil, e
 	}
-	tree, e := parser.Parse(raw.Expr)
+	return compileExprSource(raw.Expr, n.Line, n.Column, max)
+}
+
+// compileExprSource is compileExprNode's core, factored out for callers with no backing
+// *yaml.Node - http-json's synthesised, card-configured expressions (httpjson.go) go through
+// this exact same AST-size and $env/matches/__-prefix/custom-call validation, not a parallel,
+// less-scrutinised check: docs/01-architecture.md is explicit that http-json gets "the same
+// expression and resource budgets as any declarative integration."
+func compileExprSource(src string, line, col, max int) (*Expression, error) {
+	tree, e := parser.Parse(src)
 	if e != nil {
 		return nil, e
 	}
@@ -405,7 +414,7 @@ func compileExprNode(n *yaml.Node, max int) (*Expression, error) {
 	if v.count > max {
 		return nil, fmt.Errorf("expression has %d AST nodes, limit %d", v.count, max)
 	}
-	return &Expression{raw.Expr, n.Line, n.Column, v.count}, nil
+	return &Expression{src, line, col, v.count}, nil
 }
 
 type exprVisitor struct {
