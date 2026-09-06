@@ -28,8 +28,8 @@ budgets), and D2b (the integration lock and approval flow: canonical manifest di
 diff, `veduta integration list|diff|approve`, and the matching
 `GET/POST /api/v1/integrations...` endpoints - a sudo-window gate and audit trail are deferred to
 H1/H2, which do not exist yet) are done and green in CI; spikes S2 (upstream API reality check),
-S3 (expr vs cel bake-off - decided: `expr-lang/expr`, used as parser/evaluator only, never as the
-sandbox), and S4 (visual prototype) are done. Next up: D3 (declarative runtime). See
+S3 (expr vs cel bake-off), S4 (visual prototype), and D3 (the bounded declarative runtime) are done.
+Next up: D4 (generic HTTP/JSON card). See
 [docs/02-implementation-plan.md](docs/02-implementation-plan.md) for the full
 milestone table and what's marked **DONE**, and [docs/03-backlog.md](docs/03-backlog.md) for
 open gaps found along the way (currently: a config/schema asymmetry, and how Jellyfin's real auth

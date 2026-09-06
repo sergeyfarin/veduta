@@ -471,12 +471,13 @@ runtime, not after it.
 `expr.WithContext` propagates cancellation to **context-aware custom functions** — it does not make
 `expr`'s own built-in collection operators (`map`, `filter`, `sortBy`, `all`, `any`, `one`, `none`,
 `find`, …) check the deadline, and a synchronous evaluator never interrupts itself unless something
-instruments it to. So D3 does not lean on `expr` for safety at all: it disables every scalable
-built-in (`expr.DisableBuiltin` removes a name from the builtin table before name resolution, so an
-environment function of the same name resolves in its place instead — confirmed as the mechanism,
-not an AST-rewrite) and replaces each with a D3-owned implementation that charges the shared
-`iterations` counter per element (`n·log₂n`, minimum `n`, for a sort) and checks the deadline on
-every element, not only between whole-expression evaluations. `expr` contributes parsing,
+instruments it to. Predicate-taking builtins are parser-special, so disabling and replacing them
+would also disable the `.field`/`{...}` predicate syntax. D3 therefore leaves those builtins native
+and uses `expr.Patch` to wrap their collection argument in a runtime charging call. The whole cost
+is reserved before the builtin starts (`n·log₂n`, minimum `n`, for `sortBy` and `reduce`). Ordinary
+collection helpers such as `take` are D3-owned functions. A permitted native loop is not preemptible
+mid-call; its absolute size is bounded by the JSON node ceiling, while chained and nested calls share
+one iteration budget and are interrupted at their next call boundary. `expr` contributes parsing,
 compilation and the pure, host-unreachable expression core (arithmetic, comparisons, string
 handling, closures); D3 contributes every operation whose cost can scale with its input.
 
@@ -492,10 +493,11 @@ YAML path, and a supported-function list that is part of the product's compatibi
 implementation detail of which library backs it.
 
 **D3's acceptance test:** given an expression containing nested collection operations over a large
-upstream payload, evaluation terminates when any configured deadline, iteration budget, AST
-complexity limit, result-size limit or nesting-depth limit is exceeded — and the check happens
-*inside* the scalable, D3-provided collection operations (per element), not only between expression
-evaluations. Hostile cases to cover: nested `map(filter(map(...)))`, an expensive `sortBy`,
+upstream payload, evaluation terminates when any configured iteration budget, AST complexity limit,
+result-size limit or nesting-depth limit is exceeded. Deadlines are checked at every D3-controlled
+call and top-level evaluation boundary; a native predicate builtin already in progress completes
+within the independent JSON-size bound. Hostile cases to cover: nested `map(filter(map(...)))`,
+an expensive `sortBy`,
 deliberately huge intermediate results, deep object traversal, and a custom function that receives
 context and is slow to respond to it.
 

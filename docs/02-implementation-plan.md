@@ -895,13 +895,13 @@ error path (malformed route mid-diff/mid-approve, a hand-built lock entry that w
 `Approve`'s own field-stripping, a schema-rejected lock document) is a real regression test, not
 just a coverage number.
 
-**D3 · Declarative runtime** · 2 d · deps: D2b, S3, B2 · S3 resolved: `expr-lang/expr`, used as
+**D3 · Declarative runtime** · DONE · deps: D2b, S3, B2 · S3 resolved: `expr-lang/expr`, used as
 parser/evaluator only — see docs/01-architecture.md D47 and §5's "expr is a parser and evaluator;
 D3 is the sandbox"
-Creates: `internal/integrations/declarative/` (manifest loader, template-grammar validator for the
-four node kinds, pipeline executor, `expr` environment with every scalable builtin disabled via
-`expr.DisableBuiltin` and replaced by a D3-owned charged implementation of the same name, output
-builder, signal emitter) and `internal/integrations/manifestload/` (pre-parse limits: byte cap,
+Creates: `internal/integrations/declarative/` (pipeline executor and an `expr`
+environment whose parser-special predicate builtins retain native syntax and have their collection
+argument wrapped by `expr.Patch` for call-boundary charging; ordinary scalable helpers are D3-owned;
+also the output builder and signal emitter) and `internal/integrations/manifestload/` (pre-parse limits: byte cap,
 YAML depth/node/alias caps, duplicate-key rejection, then schema validation, then aggregate
 expression/template ceilings).
 Also creates: the resource budget from §5 — streaming decode with `inputMB`/`jsonDepth`/`jsonNodes`
