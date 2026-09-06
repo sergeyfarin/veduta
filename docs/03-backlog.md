@@ -15,6 +15,21 @@ priority (which milestone should absorb it, or "before X" for a hard blocker).
 
 ## Open
 
+### `api.Config.Registry` is built once at startup and does not follow config hot-reload
+
+Found while building D5, which is the first thing to actually construct
+`internal/connections.Registry` in production code at all (D1 through D4 only built and tested it
+in isolation; Phase F, the intended long-term owner of a live one, does not exist yet).
+`cmd/veduta/main.go`'s `serve` builds the registry once, from the snapshot `config.Open` returns
+at startup, and hands it to `api.Config.Registry` - unlike `ConfigStore` itself (an
+`atomic.Pointer[Snapshot]`, kept current by the same file watcher), nothing rebuilds this registry
+if the config later reloads with different, added or removed connections. `GET /api/v1/connections`
+and `POST /api/v1/connections/{id}/test` would then show a connection that no longer exists in the
+current config, or omit one just added, until the process restarts. Priority: Phase F - a live
+scheduler is the first thing that actually needs connections to reload correctly (a card bound to
+a newly-added connection has to work without a restart), so building the atomic-swap mechanism
+belongs there rather than being spot-fixed here ahead of a real need.
+
 ### `manifestload.Limits.CacheEntries` can't represent an explicit zero
 
 Found reviewing D3. `manifestload.Limits` (and the `rawManifest`/lock-derived construction in

@@ -27,11 +27,12 @@ policies, never a computed intersection; header/query allowlisting; shared per-i
 budgets), and D2b (the integration lock and approval flow: canonical manifest digest, permission
 diff, `veduta integration list|diff|approve`, and the matching
 `GET/POST /api/v1/integrations...` endpoints - a sudo-window gate and audit trail are deferred to
-H1/H2, which do not exist yet), D3 (the bounded declarative runtime), and D4 (the generic
+H1/H2, which do not exist yet), D3 (the bounded declarative runtime), D4 (the generic
 HTTP/JSON card - a card's `view:` block synthesises a manifest reused wholesale through D3, not a
-second execution engine) are done and green in CI; spikes S2 (upstream API reality check), S3
-(expr vs cel bake-off), and S4 (visual prototype) are done. Next up: D5 (connection health and
-admin endpoints). See
+second execution engine), and D5 (connection health and admin endpoints: `GET /api/v1/connections`,
+`POST /api/v1/connections/{id}/test`, DNS/TCP/TLS/auth/HTTP-status classified separately) are done
+and green in CI, closing out Phase D; spikes S2 (upstream API reality check), S3 (expr vs cel
+bake-off), and S4 (visual prototype) are done. Next up: E1 (asset token and proxy endpoint). See
 [docs/02-implementation-plan.md](docs/02-implementation-plan.md) for the full
 milestone table and what's marked **DONE**, and [docs/03-backlog.md](docs/03-backlog.md) for
 open gaps found along the way (currently: a config/schema asymmetry, and how Jellyfin's real auth
@@ -99,7 +100,7 @@ This repository currently contains:
 | [web/playwright.config.ts](web/playwright.config.ts) / [web/tests/visual.spec.ts](web/tests/visual.spec.ts) | Visual regression baseline against `--fixtures`: frozen clock, one pinned browser |
 | [internal/config/](internal/config/) | `veduta.yaml` + `conf.d/*.yaml` loader: merge, schema and semantic validation, `file:line:col` on every error |
 | [internal/secrets/](internal/secrets/) | `${secret:NAME}` resolution: `env:`/`file:` providers, a redacting `Value` type, the log scrubber |
-| [internal/connections/](internal/connections/) | The credential boundary: per-connection HTTP client, auth injection, IP-pinning dialer, rate/redirect/size limits |
+| [internal/connections/](internal/connections/) | The credential boundary: per-connection HTTP client, auth injection, IP-pinning dialer, rate/redirect/size limits, health classified by stage (DNS/TCP/TLS/auth/HTTP-status) with credential scrubbing on the error path |
 | [internal/connections/routepath/](internal/connections/routepath/) | The one route-canonicalisation and glob-matching routine every authority check shares — fuzz-tested |
 | [internal/capabilities/](internal/capabilities/) | The capability broker: three independent route policies, header/query allowlisting, per-invocation budgets, typed denials |
 | [internal/integrations/](internal/integrations/) | The lock file: canonical manifest digest, permission diff, two-step digest-bound approval — `veduta integration list\|diff\|approve` and `GET/POST /api/v1/integrations...` both call into it; also the frozen `Runtime`/`Instance` contract every runtime implements |

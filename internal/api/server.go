@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"veduta.dev/veduta/internal/config"
+	"veduta.dev/veduta/internal/connections"
 	"veduta.dev/veduta/internal/fixtures"
 	"veduta.dev/veduta/internal/state"
 	"veduta.dev/veduta/internal/version"
@@ -54,6 +55,15 @@ type Config struct {
 	// configured cards are returned honestly as pending so the production render path is usable.
 	// Mutually exclusive with Fixtures.
 	ConfigStore *config.Store
+
+	// Registry is the credential boundary (internal/connections, milestone D1) built once from
+	// the snapshot ConfigStore held at startup - milestone D5's admin endpoints are the first
+	// production caller. Known, disclosed limitation: unlike ConfigStore itself, this does not
+	// currently rebuild when the config hot-reloads with different connections (see
+	// docs/03-backlog.md) - Phase F's scheduler is where a live-reloading registry actually
+	// matters, and does not exist yet either. nil disables GET /connections and
+	// POST /connections/{id}/test entirely, the same way a nil ConfigStore disables /dashboard.
+	Registry connections.Registry
 }
 
 // errBothFixturesAndConfigStore documents why New refuses to build a server with both set: they
@@ -149,6 +159,9 @@ func (s *Server) routes() http.Handler {
 	if s.cfg.ConfigStore != nil {
 		s.routeConfig(mux)
 		s.routeIntegrations(mux)
+		if s.cfg.Registry != nil {
+			s.routeConnections(mux)
+		}
 	}
 
 	if s.cfg.Fixtures != nil {

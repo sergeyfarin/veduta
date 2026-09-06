@@ -28,6 +28,7 @@ import (
 	"veduta.dev/veduta/internal/api"
 	"veduta.dev/veduta/internal/canonical"
 	"veduta.dev/veduta/internal/config"
+	"veduta.dev/veduta/internal/connections"
 	"veduta.dev/veduta/internal/fixtures"
 	"veduta.dev/veduta/internal/secrets"
 	"veduta.dev/veduta/internal/version"
@@ -172,6 +173,24 @@ func serve(args []string) error {
 		if *listen != "" {
 			cfg.Listen = *listen
 		}
+
+		// Re-resolved once more here, not reused from the loader closure above: that call
+		// discards its resolved map (it only needed the diagnostics), and config.Loader's own
+		// signature has no room to smuggle one out. Resolution is idempotent (env/file reads),
+		// so a second call is correct, if not free. Known, disclosed limitation (D5, see
+		// docs/03-backlog.md): this registry is built once, matching the snapshot at startup,
+		// and does not rebuild if the config hot-reloads with different connections - Phase F's
+		// scheduler is where a live-reloading registry actually matters, and does not exist yet.
+		snapshot := store.Snapshot()
+		resolved, secretDiags := secrets.ResolveAll(snapshot.SecretRefs, secrets.DefaultResolver())
+		if secretDiags.HasErrors() {
+			return fmt.Errorf("resolve secrets:\n%s", secretDiags.String())
+		}
+		registry, err := connections.New(snapshot.Config.Connections, resolved, logger)
+		if err != nil {
+			return fmt.Errorf("build connection registry: %w", err)
+		}
+		cfg.Registry = registry
 	}
 
 	srv, err := api.New(cfg)

@@ -1010,10 +1010,42 @@ GET-default, POST/other-method rejection, a malformed path, an oversized view ex
 `matches` rejection; `bindBareFieldsToData` is tested directly against a small table (bare names,
 arithmetic, comparison, ternary, dotted access, and confirming `params`/`now` are left alone).
 
-**D5 · Connection health and admin endpoints** · 0.5 d · deps: D1 · ⇉ with D3/D4
+**D5 · Connection health and admin endpoints** · 0.5 d · deps: D1 · ⇉ with D3/D4 · **DONE**
 Creates: `GET /api/v1/connections`, `POST /api/v1/connections/{id}/test`, health tracked per connection.
 Tests: the response contains no credentials (asserted by scanning the JSON for every configured
 secret value); test endpoint distinguishes DNS / TCP / TLS / auth / HTTP-status failures.
+
+D1 already left `connections.Health{Reachable, Error}` and a one-line implementation with a doc
+comment naming this milestone as where it grows a real classifier - it did: `classifyError` walks
+the error chain with `errors.As` (through `*url.Error`'s `Unwrap`, so wrapping never hides the
+real cause) to distinguish `*net.DNSError` (DNS), TLS-specific types (`tls.
+CertificateVerificationError`, `x509.HostnameError`/`UnknownAuthorityError`/
+`CertificateInvalidError`, `tls.RecordHeaderError`), a `*url.Error` that timed out or any other
+`*net.OpError` (TCP/dial), then - once the round trip itself succeeds - 401/403 (auth) vs. any
+other non-2xx (HTTP status) vs. 2xx (healthy). All five stages proven against **real** failures,
+not mocked errors: a reserved `.invalid` hostname for DNS, a closed listener for TCP, an untrusted
+`httptest.NewTLSServer` certificate for TLS, real 401/403/500 responses for the other two.
+
+**A real, confirmed credential leak found and fixed while building this, before any response
+shape existed to hide it:** a `query`-type auth connection injects its resolved secret directly
+into the request URL (`injectAuth`); a network-level failure's `*url.Error` formats as
+`Op "URL": Err`, so the raw credential would appear verbatim in `Health.Error` the moment such a
+connection's probe failed at the DNS/TCP/TLS layer - not a hypothetical, since the config schema
+has supported `auth.type: query` since C1. Fixed by scrubbing `Health.Error` through
+`secrets.DefaultRegistry()` - the same process-wide registry the log handler already uses, since
+every `secrets.Value` tracks itself there the moment it is constructed, active before this code
+ever runs. `TestHealth_NetworkFailureNeverLeaksAQueryAuthCredential` is the regression test, and
+`connectionSummary` (the REST DTO) is additionally built with no field a credential could ever
+occupy in the first place - id, kind, health, nothing else - so "never credentials" is enforced by
+the response's shape, not solely by remembering to scrub a richer one.
+
+Wiring note: `internal/connections.Registry` had never actually been constructed in production
+code before this milestone - D1 through D4 built and tested it in isolation, with Phase F (the
+scheduler) always the intended place to hold a live one, and Phase F does not exist yet. D5 is the
+first real caller, so `cmd/veduta/main.go`'s `serve` now builds one once at startup (`api.Config`
+gained a `Registry` field, wired the same way `ConfigStore` is). Disclosed limitation, not silently
+shipped: this registry does not rebuild when the config hot-reloads with different connections -
+recorded in docs/03-backlog.md, since nothing before Phase F actually depends on it being live.
 
 ### Phase E — Assets and vertical slice #1 (2.5 d)
 
