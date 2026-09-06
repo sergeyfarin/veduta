@@ -224,6 +224,26 @@ ultimately call would close it without either caller needing to know about the o
 
 ## Resolved
 
+### D5's `GET /api/v1/connections` checked connections sequentially, sharing one context - a slow one starved the rest
+
+Found chasing down a CI-only failure of `TestConnectionsList_NeverLeaksAConfiguredSecret`
+(`internal/api/connections_test.go`) while confirming CI was green after the D2b/D3/D4/D5 review
+fixes above - it failed the exact same way on the D5 commit itself, before any of this review's
+changes, so this predates the review and was not introduced by it. `routeConnections`'s
+`GET /api/v1/connections` handler (`internal/api/connections.go`) checked every connection's
+health one at a time in a `for` loop, every check sharing the single incoming `r.Context()`. A
+connection that hangs until its context's own deadline - exactly what a real network black hole
+does, and what CI's network stack did for a dial to a reserved/unrouted test address where a
+developer machine might fail fast instead - consumed the *entire* remaining time budget; every
+connection checked after it inherited an already-expired context and was reported unreachable
+(`rate limit: context deadline exceeded`) for a reason that had nothing to do with its own health.
+Confirmed by reproducing the exact same failure locally with a deterministic hanging listener
+(accepts but never responds) rather than relying on environment-dependent dead-address behaviour,
+and by confirming the new regression test fails against the pre-fix code and passes against the
+fix. Fixed by running every connection's health check concurrently (one goroutine per connection,
+`sync.WaitGroup`) so one connection's slowness can no longer starve another's remaining budget -
+see `TestConnectionsList_OneSlowConnectionDoesNotStarveAnothersHealthCheck`.
+
 ### S3 (expr vs cel bake-off) is decided: `expr-lang/expr`, used as parser/evaluator only
 
 Found while starting C1, which lists S3 as a dependency; C1 routed around it since `rule.when` was

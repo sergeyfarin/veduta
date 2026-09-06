@@ -5,6 +5,7 @@ package api
 import (
 	"net/http"
 	"sort"
+	"sync"
 
 	"veduta.dev/veduta/internal/connections"
 )
@@ -40,12 +41,29 @@ func (s *Server) routeConnections(mux *http.ServeMux) {
 			ids = append(ids, id)
 		}
 		sort.Strings(ids)
+		// Checked concurrently, not in a sequential loop sharing one request-scoped context:
+		// found in review (a CI-only failure, not reproducing locally) that a slow or
+		// unreachable connection checked first could consume the whole remaining context
+		// budget before a later, genuinely healthy connection ever got probed - reporting it
+		// unreachable for a reason that had nothing to do with its own health. Every check now
+		// starts against the same context at the same time, so one connection's slowness no
+		// longer starves another's.
+		health := make([]connections.Health, len(ids))
+		var wg sync.WaitGroup
+		for i, id := range ids {
+			wg.Add(1)
+			go func(i int, id string) {
+				defer wg.Done()
+				health[i] = reg.Health(r.Context(), id)
+			}(i, id)
+		}
+		wg.Wait()
 		out := make([]connectionSummary, 0, len(ids))
-		for _, id := range ids {
+		for i, id := range ids {
 			out = append(out, connectionSummary{
 				ID:     id,
 				Kind:   snapshot.Config.Connections[id].Kind,
-				Health: reg.Health(r.Context(), id),
+				Health: health[i],
 			})
 		}
 		writeJSON(w, http.StatusOK, out)

@@ -5,6 +5,7 @@ package api_test
 import (
 	"context"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -110,6 +111,104 @@ func TestConnectionsList_NeverLeaksAConfiguredSecret(t *testing.T) {
 		if _, ok := byID["broken"][forbidden]; ok {
 			t.Errorf("response includes a %q field, which should not exist on a connection summary", forbidden)
 		}
+	}
+}
+
+// hangingServer accepts TCP connections but never responds - a deterministic stand-in for
+// "unreachable" that actually consumes wall-clock time until the caller's context gives up,
+// unlike a dial to a reserved/unrouted address (which CI's network stack may fail immediately,
+// unlike a developer machine's). Used to prove one connection's health check cannot starve
+// another's, regardless of how the environment happens to fail a dead address.
+func hangingServer(t *testing.T) string {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan struct{})
+	t.Cleanup(func() {
+		close(done)
+		_ = ln.Close()
+	})
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			go func(c net.Conn) {
+				<-done
+				_ = c.Close()
+			}(conn)
+		}
+	}()
+	return "http://" + ln.Addr().String()
+}
+
+// TestConnectionsList_OneSlowConnectionDoesNotStarveAnothersHealthCheck is the regression test
+// for a real bug found in review: GET /api/v1/connections checked every connection sequentially,
+// all sharing r.Context() - a connection that hangs until the context's own deadline expires (as
+// a real network black hole would, not every environment fails a dead address quickly) consumed
+// the whole remaining time budget, so any connection checked after it inherited an
+// already-expired context and was wrongly reported unreachable for a reason having nothing to do
+// with its own health. Health checks now run concurrently (connections.go's routeConnections),
+// so the fast connection here must come back healthy regardless of where it sorts relative to
+// the hanging one.
+func TestConnectionsList_OneSlowConnectionDoesNotStarveAnothersHealthCheck(t *testing.T) {
+	fast := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) }))
+	defer fast.Close()
+	slowURL := hangingServer(t)
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "veduta.yaml")
+	body := `version: 1
+auth: {mode: none}
+connections:
+  aaa-slow:
+    kind: http
+    baseUrl: ` + slowURL + `
+    auth: {type: none}
+  zzz-fast:
+    kind: http
+    baseUrl: ` + fast.URL + `
+    auth: {type: none}
+`
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	store, diags := config.Open(path, nil, nil)
+	if diags.HasErrors() {
+		t.Fatal(diags.String())
+	}
+	reg, err := connections.New(store.Snapshot().Config.Connections, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := api.New(api.Config{Listen: "127.0.0.1:0", Assets: fstest.MapFS{}, ConfigStore: store, Registry: reg})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/connections", nil).WithContext(ctx)
+	s.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	var got []map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	byID := map[string]map[string]any{}
+	for _, c := range got {
+		byID[c["id"].(string)] = c
+	}
+	fastHealth := byID["zzz-fast"]["health"].(map[string]any)
+	if fastHealth["reachable"] != true {
+		t.Fatalf("fast connection (sorted after the hanging one) reported unreachable: %+v", fastHealth)
 	}
 }
 
