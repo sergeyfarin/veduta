@@ -15,6 +15,20 @@ priority (which milestone should absorb it, or "before X" for a hard blocker).
 
 ## Open
 
+### AssetRef tokens are missing the connection-revision field ("cf") that makes revocation enforceable
+
+`internal/capabilities.AssetRef` (D2) mints a token structurally matching
+docs/01-architecture.md section 7's payload, but deliberately omits `cf` (the connection
+revision): that field is what makes "reject tokens for materially changed connections"
+enforceable (a repointed host, a rotated secret, a changed TLS policy), and it depends on
+`connection_state` - a persisted, instance-keyed revision that does not exist because no storage
+layer exists before milestone E1. The signing key itself is also ephemeral (generated fresh in
+memory on every process start, per `NewBroker`'s own doc comment) rather than the persisted
+`settings`-table key section 7 describes, so every restart invalidates outstanding refs today -
+acceptable for D2's own scope (authorisation), not for E1's (the asset proxy's actual lifecycle).
+Priority: **E1** - `Broker.AssetRef`'s signature does not need to change, only its
+implementation, once `connection_state` and the persisted signing key exist.
+
 ### Config: `httpConnection.headers` values are plain strings, not secret-capable
 
 `schemas/config.v1.schema.json`'s `httpConnection.headers` (line ~556) is

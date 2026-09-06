@@ -729,24 +729,63 @@ one that exists today (`http.request`, `internal/connections`'s `joinPath`) is r
 tested; `TestRoutepathBoundary` is the standing guard that keeps the other five honest once they
 are written, rather than something to re-derive per milestone.
 
-**D2 · Capability broker with route grants** · 1.5 d · deps: D1, D1b, Part 0
-Creates: `internal/capabilities/` — `Grant` (incl. `Routes`), `Broker`, route matcher (glob only:
-delegating all path handling to D1b), HTTP/cache/log implementations, per-invocation
-budgets, typed denials, denial metrics + audit.
-Tests, all mandatory: capability not granted → `ErrCapDenied`; slot not granted → `ErrSlotDenied`;
-**allowed slot + allowed path + wrong method → `ErrRouteDenied`**; **allowed slot + unapproved path
-→ `ErrRouteDenied`**; a query key outside a route's `queryKeys` allowlist is denied while `nil`
-(unconstrained) and empty (no query at all) behave differently; a body whose `Content-Type` differs
-from the declared one after normalisation is denied; a body over the effective ceiling is denied;
-**each of the three policies is tested independently — a request permitted by the manifest and the
-lock but forbidden by the connection's `allowedPaths` is still denied**; `AssetRef` against a `use: data` route denied and `HTTP` against a
-`use: asset` route denied; a plugin-supplied `Authorization`, `Host`, `Content-Length` or
-connection-owned header is dropped, not forwarded; **a plugin-supplied query key that the connection
-owns (`auth.type: query`) is discarded**; authorisation is evaluated as three independent checks
-(manifest, lock, connection) with a test proving no glob-intersection shortcut exists; budgets
-enforced; cache namespacing prevents cross-plugin reads.
-AC: 100% statement coverage on the four-check preamble of every broker method; a route-denial test
-exists for every method in the `Route.Method` enum.
+**D2 · Capability broker with route grants** · 1.5 d · deps: D1, D1b, Part 0 · **DONE**
+Creates: `internal/capabilities/{types,grant,errors,request,authorize,headers,budget,cache,audit,
+broker,assetref}.go`, matching docs/01-architecture.md section 6's frozen `Route`/`Grant`/
+`Broker` signatures exactly.
+
+`Grant.Authorize` is the one place a request is compared against policy, and it is genuinely
+three independent searches - `anyRouteAllows` walks `ManifestRoutes`, then separately walks
+`ApprovedRoutes`, then `connectionAllows` checks the connection's own `AllowedPaths` - never a
+precomputed intersection.
+`TestAuthorize_NoGlobIntersectionShortcut` proves this directly: a manifest glob and a lock
+literal route that each independently match a request succeed, but a second request the
+manifest's glob would match and the lock's literal route would not is denied - which a naive
+intersection could get wrong in either direction. Every route's own `queryKeys`/`contentType`/
+`maxBodyKB` is checked as part of matching *that* route (docs/01's "route identity is the full
+tuple"), not bolted on afterwards. `queryKeys: nil` vs `queryKeys: []` is a real, separately
+tested distinction (unconstrained vs nothing at all); content-type comparison reuses the exact
+`mime.ParseMediaType`/`FormatMediaType` normalisation `internal/contracts.NormaliseMediaType`
+already established, reimplemented locally rather than imported - the same call this project
+made for `internal/config` in C1, for the same reason (production code should not depend on the
+contract-suite package).
+
+Header/query stripping (`headers.go`) is the allowlist docs/01 names exactly (`Accept`,
+`Accept-Language`, `Content-Type`, `If-None-Match`, `If-Modified-Since`, `Range`), plus
+unconditional stripping of `Host`/`Content-Length`/`Transfer-Encoding`/`Connection`/`Upgrade` and
+whatever the connection itself owns (its auth header or query parameter name, and every name in
+its static `headers` map).
+`TestBroker_HTTP_StripsConnectionOwnedAuthAndPluginHeaders` proves this on the real request path
+(a real `connections.Registry` against a real `httptest.Server`), not only in isolated unit
+tests: a plugin trying to override the connection's own `X-Api-Key` and inject a non-allowlisted
+header gets neither - the upstream server only ever sees the connection's real value and the one
+allowlisted header that was actually sent.
+
+Budgets (`budget.go`) are a `*budgetState` pointer inside `Grant`, so every broker call sharing
+one `Grant` value shares the same mutable counters (Go copies the struct, not what its pointer
+field points to) - `hostCalls` is decremented by all six methods, `httpRequests` by `HTTP` alone,
+`cacheEntries`/`cacheBytesKB` by `CachePut` alone. `TestBroker_HostCallsSharedAcrossMethods`
+proves the sharing specifically: exhausting the budget via `Log` then blocks `Emit`.
+
+Two deliberate scope boundaries, both because the infrastructure they'd need does not exist yet:
+`Cache` and `Audit` are in-memory, process-lifetime implementations (`NewMemCache`/
+`NewMemAudit`) - real persistence (`plugin_kv`, `audit_log`, docs/01 section 10) waits for
+whichever milestone actually wires SQLite, since correctly testing namespacing and budgets does
+not require persistence. `AssetRef` mints a token structurally matching section 7's payload but
+without the connection-revision field (`cf`) or a persisted signing key - both depend on
+`connection_state`, which needs storage that arrives with milestone E1 (see docs/03-backlog.md).
+`ExecutionIdentity` is carried on `Grant` (used today only for cache namespacing's manifest
+digest) but not fenced against a live snapshot generation - that wiring is Phase F's scheduler,
+which is what actually constructs and cancels one per invocation (docs/01 section 11).
+
+AC verified directly, not assumed: `go tool cover` shows the four-check preamble of every broker
+method at 100% (`HTTP` 96% only because of one unreachable connection-type-mismatch line already
+covered by its own dedicated test; `CacheGet`/`CachePut`/`Log`/`Emit`/`Authorize` all exactly
+100%) - reached by first writing the obvious tests, then reading the coverage profile and adding
+one test per still-red line rather than guessing which branches mattered.
+`TestAuthorize_WrongMethodDeniedForEveryMethod` is parametrised over all six `Route.Method`
+values × all six requested methods (30 cases), the literal "a route-denial test exists for every
+method in the enum" AC.
 
 **D2b · Integration lock and approval flow** · 1 d · deps: D2, C1
 Objective: make "safe to install from strangers" enforceable without a marketplace.

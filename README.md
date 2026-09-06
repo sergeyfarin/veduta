@@ -21,10 +21,11 @@ loader: `veduta.yaml` + `conf.d/*.yaml` merged, schema-validated and semanticall
 error carrying `file:line:col`), C2 (secrets: `env:`/`file:` providers, a redacting `Value`
 type, a log scrubber active by default), C3 (atomic live reload with status), D1 (the
 connection registry and HTTP client: auth injection, an IP-pinning dialer against DNS rebinding,
-redirect/size/rate limits), and D1b (the one route-canonicalisation and glob-matching routine
-every authority check will share, fuzz-tested) are done and green in CI; spikes S2 (upstream API
-reality check) and S4 (visual prototype) are done. Next up: D2 (capability broker with route
-grants). See
+redirect/size/rate limits), D1b (the one route-canonicalisation and glob-matching routine every
+authority check shares, fuzz-tested), and D2 (the capability broker: three independent route
+policies, never a computed intersection; header/query allowlisting; shared per-invocation
+budgets) are done and green in CI; spikes S2 (upstream API reality check) and S4 (visual
+prototype) are done. Next up: D2b (integration lock and approval flow). See
 [docs/02-implementation-plan.md](docs/02-implementation-plan.md) for the full
 milestone table and what's marked **DONE**, and [docs/03-backlog.md](docs/03-backlog.md) for
 open gaps found along the way (currently: a config/schema asymmetry, a still-undone expression-
@@ -95,6 +96,7 @@ This repository currently contains:
 | [internal/secrets/](internal/secrets/) | `${secret:NAME}` resolution: `env:`/`file:` providers, a redacting `Value` type, the log scrubber |
 | [internal/connections/](internal/connections/) | The credential boundary: per-connection HTTP client, auth injection, IP-pinning dialer, rate/redirect/size limits |
 | [internal/connections/routepath/](internal/connections/routepath/) | The one route-canonicalisation and glob-matching routine every authority check shares — fuzz-tested |
+| [internal/capabilities/](internal/capabilities/) | The capability broker: three independent route policies, header/query allowlisting, per-invocation budgets, typed denials |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | DCO sign-off, the licence split, what a change needs |
 | [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md) | Every dependency and its licence, enforced by a test |
 | [LICENSING.md](LICENSING.md) | Multi-license layout, plugin exception, AGPL §13 obligations |
