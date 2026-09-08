@@ -28,6 +28,8 @@ type rawManifest struct {
 	Metadata struct{ ID, Name, Version string } `yaml:"metadata"`
 	Spec     struct {
 		Runtime      string   `yaml:"runtime"`
+		Module       string   `yaml:"module"`
+		SHA256       string   `yaml:"sha256"`
 		Capabilities []string `yaml:"capabilities"`
 		Slots        []struct {
 			Name, Kind string
@@ -134,6 +136,7 @@ func Load(path string) (*Manifest, error) {
 		return nil, err
 	}
 	m := &Manifest{Path: path, Digest: digest, ID: doc.Metadata.ID, Name: doc.Metadata.Name, Version: doc.Metadata.Version, Runtime: doc.Spec.Runtime, Capabilities: doc.Spec.Capabilities}
+	m.Module, m.ModuleSHA256 = doc.Spec.Module, doc.Spec.SHA256
 	for _, s := range doc.Spec.Slots {
 		req := true
 		if s.Required != nil {

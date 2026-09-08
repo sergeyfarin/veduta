@@ -43,3 +43,13 @@ func TestLoadRejectsAliasAndDuplicate(t *testing.T) {
 		})
 	}
 }
+
+func TestLoadWASMModulePin(t *testing.T) {
+	m, err := Load(filepath.Join("..", "..", "..", "plugins", "jellyfin", "manifest.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.Runtime != "wasm" || m.Module != "jellyfin.wasm" || len(m.ModuleSHA256) != 64 {
+		t.Fatalf("missing executable module identity: %#v", m)
+	}
+}

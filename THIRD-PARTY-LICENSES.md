@@ -11,6 +11,9 @@ Veduta's core is AGPL-3.0-or-later. Apache-2.0, BSD and MIT code is one-way comp
 
 | Module | Licence | Why |
 | --- | --- | --- |
+| `github.com/extism/go-sdk` | BSD-3-Clause | Extism JSON I/O ABI and per-call guest lifecycle for the G1 sandbox |
+| `github.com/tetratelabs/wazero` | Apache-2.0 | Pure-Go WebAssembly execution, compilation cache, memory ceilings and deadline interruption |
+| `github.com/tetratelabs/wabin` | Apache-2.0 | Builds small, auditable Wasm conformance fixtures directly in Go tests |
 | `github.com/fsnotify/fsnotify` | BSD-3-Clause | Portable filesystem notifications for atomic, debounced configuration reloads |
 | `github.com/expr-lang/expr` | MIT | Parses and evaluates the deliberately constrained declarative integration expression language; D3 supplies resource accounting |
 | `github.com/santhosh-tekuri/jsonschema/v6` | Apache-2.0 | One JSON Schema implementation validates configuration, manifests, lock records and widget documents — the same schema files the editor and the frontend use |
@@ -22,6 +25,11 @@ Veduta's core is AGPL-3.0-or-later. Apache-2.0, BSD and MIT code is one-way comp
 
 | Module | Licence |
 | --- | --- |
+| `github.com/dylibso/observe-sdk/go` | Apache-2.0 |
+| `github.com/gobwas/glob` | MIT |
+| `github.com/ianlancetaylor/demangle` | BSD-3-Clause |
+| `go.opentelemetry.io/proto/otlp` | Apache-2.0 |
+| `google.golang.org/protobuf` | BSD-3-Clause |
 | `golang.org/x/sys` | BSD-3-Clause |
 | `golang.org/x/text` | BSD-3-Clause |
 | `github.com/dustin/go-humanize` | MIT |

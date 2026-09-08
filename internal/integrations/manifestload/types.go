@@ -8,6 +8,7 @@ import "gopkg.in/yaml.v3"
 // Manifest is the fully validated executable view of a plugin manifest.
 type Manifest struct {
 	Path, Digest, ID, Name, Version, Runtime string
+	Module, ModuleSHA256                     string
 	Capabilities                             []string
 	Slots                                    []SlotSpec
 	Limits                                   Limits

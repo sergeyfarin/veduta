@@ -541,11 +541,12 @@ then run unmodified against the WASM version, which is how you prove the swap is
 ### WASM specifics
 
 - Host: **wazero** via **Extism**, cgo-free. `PluginRuntime` isolates the choice.
+  See the [G1 sandbox decision](spikes/s1-wasm-sandbox.md) for the implemented ABI and conformance coverage.
 - `allowed_hosts: []` (empty = deny all — `null` means allow all and must never be used).
-  A conformance test asserts `extism_http_request` fails.
+  G1 also rejects native HTTP imports at load; conformance tests cover both spellings.
 - Per-instance: memory cap (`WithMemoryLimitPages`), `WithCloseOnContextDone(true)` plus a
-  per-invocation `context.WithTimeout` (wazero has no fuel metering; the deadline is checked at
-  operation boundaries), no WASI filesystem, no env, no args, stdout/stderr captured and byte-capped.
+  per-invocation `context.WithTimeout` (wazero has no fuel metering), no WASI filesystem, no env,
+  no args. G1 disables WASI entirely, including stdout/stderr; bounded logging comes through G2.
 - Compilation cache on disk keyed by module sha256; modules compiled once, instantiated per call.
 - Module bytes verified against `spec.sha256` before compile.
 
@@ -1301,7 +1302,7 @@ user needs that, the webhook channel hands off to n8n/Node-RED, which is the cor
 | D3 | Credentials live in the core; integrations use slots | **Frozen** | See C2/C3 |
 | D4 | Asset refs are broker-minted signed tokens | **Frozen** | See C9 |
 | D5 | YAML is the single source of truth | **Frozen for 0.1** | Avoids duelling stores; GUI is additive later |
-| D6 | Extism on wazero for WASM | Provisional — Spike 1 | Falls back to a hand-rolled ABI behind `Runtime` |
+| D6 | Extism on wazero for WASM | Adopted — [G1 sandbox decision](spikes/s1-wasm-sandbox.md) | Per-call instances; ARM performance acceptance remains outstanding |
 | D7 | `expr-lang/expr` for mapping and rules | **Decided — S3** | Ergonomics decide it, not safety: D3's manifest DSL is templating-shaped (`map`/`filter`/`sortBy`/`take`/string and date helpers), which is what expr already looks like natively; CEL optimises for boolean policy predicates and would push a manifest-DSL redesign around CEL's macro model rather than a library swap. CEL's actual edge — an interpreter that accounts for its own comprehensions — is answered by D47 instead: expr is used as a parser/evaluator only, never as the sandbox |
 | D8 | No SSH in 0.1 | **Decided** | See C4; host metrics come from Glances/Beszel over HTTP |
 | D9 | SSE, one stream per tab | Decided | WebSockets only if bidirectional need appears |
