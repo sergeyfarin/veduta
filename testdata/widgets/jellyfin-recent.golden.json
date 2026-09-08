@@ -1,11 +1,9 @@
 {
   "schemaVersion": 1,
   "title": "Jellyfin",
-  "link": "https://jellyfin.lan",
   "status": {
     "level": "ok",
-    "text": "Online",
-    "since": "2026-09-04T10:00:00Z"
+    "text": "Online"
   },
   "blocks": [
     {
@@ -20,19 +18,38 @@
             "ref": "v1.eyJjIjoiamVsbHlmaW4ifQ.9f2c1a7b",
             "aspect": "2:3",
             "alt": "Dune poster"
-          },
-          "link": "https://jellyfin.lan/web/#!/details?id=a1"
+          }
         },
         {
           "id": "a2",
           "title": "Arrival",
           "subtitle": "2016",
           "image": {
-            "ref": "v1.eyJjIjoiamVsbHlmaW4iLCJwIjoyfQ.11ffaa02",
-            "aspect": "2:3"
+            "ref": "v1.YTI.c2lnMg",
+            "aspect": "2:3",
+            "alt": "Arrival poster"
           }
+        },
+        {
+          "id": "a3",
+          "title": "Andor",
+          "subtitle": "2022",
+          "image": { "ref": "v1.YTM.c2lnMw", "aspect": "2:3", "alt": "Andor poster" }
+        },
+        {
+          "id": "a4",
+          "title": "Severance",
+          "subtitle": "2022",
+          "image": { "ref": "v1.YTQ.c2lnNA", "aspect": "2:3", "alt": "Severance poster" }
+        },
+        {
+          "id": "a5",
+          "title": "Blade Runner",
+          "subtitle": "1982",
+          "image": { "ref": "v1.YTU.c2lnNQ", "aspect": "2:3", "alt": "Blade Runner poster" }
         }
-      ]
+      ],
+      "empty": "No recent items with posters"
     },
     {
       "type": "metrics",
@@ -46,11 +63,6 @@
           "label": "Shows",
           "value": 61,
           "format": "number"
-        },
-        {
-          "label": "Library",
-          "value": 8461937274,
-          "format": "bytes"
         },
         {
           "label": "Streams",
@@ -69,10 +81,6 @@
     "shows": {
       "value": 61,
       "unit": "count"
-    },
-    "library_bytes": {
-      "value": 8461937274,
-      "unit": "bytes"
     },
     "active_streams": {
       "value": 2,

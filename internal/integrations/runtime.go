@@ -16,6 +16,8 @@ import (
 type Runtime interface {
 	Name() string
 	Load(context.Context, Installed) (Instance, error)
+	// Close waits for loaded instances and releases runtime-wide resources.
+	Close(context.Context) error
 }
 
 // Instance is a loaded integration with immutable compiled operations.

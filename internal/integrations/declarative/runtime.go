@@ -32,6 +32,9 @@ func New(b capabilities.Broker) *Runtime { return &Runtime{Broker: b} }
 // Name identifies this runtime in manifests.
 func (*Runtime) Name() string { return "declarative" }
 
+// Close releases runtime-wide resources; the declarative runtime owns none.
+func (*Runtime) Close(context.Context) error { return nil }
+
 type instance struct {
 	broker   capabilities.Broker
 	manifest *manifestload.Manifest

@@ -24,6 +24,8 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"sync"
 	"syscall"
 	"time"
 
@@ -185,7 +187,6 @@ func serve(args []string) error {
 			logger.Error("storage janitor failed", "error", err)
 		})
 		manager := scheduler.New(db)
-		defer manager.Close()
 		instanceKey, err := db.Setting(ctx, "instance-key", 32)
 		if err != nil {
 			return fmt.Errorf("load instance key: %w", err)
@@ -198,13 +199,22 @@ func serve(args []string) error {
 		if err != nil {
 			return err
 		}
-		registry, _, defs, err := buildRuntime(ctx, snapshot, store.Status().Generation, *configPath, db, instanceKey, tokens, logger)
+		registry, _, runtimeGeneration, err := buildRuntime(ctx, snapshot, store.Status().Generation, *configPath, db, instanceKey, tokens, logger)
 		if err != nil {
 			return fmt.Errorf("build runtime: %w", err)
 		}
-		if err = manager.Apply(ctx, defs); err != nil {
+		if err = manager.Apply(ctx, runtimeGeneration.Definitions); err != nil {
+			closeRuntimeGeneration(runtimeGeneration, logger)
 			return fmt.Errorf("start schedules: %w", err)
 		}
+		runtimes := &runtimeHolder{current: runtimeGeneration}
+		var reloads sync.WaitGroup
+		defer func() {
+			stop()
+			manager.Close()
+			reloads.Wait()
+			runtimes.Close(logger)
+		}()
 		dynamic := connections.NewDynamic(registry)
 		cfg.Registry = dynamic
 		cfg.Scheduler = manager
@@ -216,7 +226,11 @@ func serve(args []string) error {
 			Authorize: func(callCtx context.Context, payload assettokens.Payload) (bool, error) {
 				return appcore.AssetAuthorized(callCtx, store.Snapshot(), *configPath, dynamic, payload)
 			}}
-		go reloadRuntime(ctx, store, manager, dynamic, db, instanceKey, tokens, *configPath, logger)
+		reloads.Add(1)
+		go func() {
+			defer reloads.Done()
+			reloadRuntime(ctx, store, manager, dynamic, db, instanceKey, tokens, *configPath, runtimes, logger)
+		}()
 	}
 
 	srv, err := api.New(cfg)
@@ -238,7 +252,7 @@ func serve(args []string) error {
 	return nil
 }
 
-func reloadRuntime(ctx context.Context, store *config.Store, manager *scheduler.Manager, dynamic *connections.Dynamic, db *storage.Store, instanceKey []byte, tokens *assettokens.Service, configPath string, logger *slog.Logger) {
+func reloadRuntime(ctx context.Context, store *config.Store, manager *scheduler.Manager, dynamic *connections.Dynamic, db *storage.Store, instanceKey []byte, tokens *assettokens.Service, configPath string, runtimes *runtimeHolder, logger *slog.Logger) {
 	var generation = store.Status().Generation
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
@@ -253,21 +267,52 @@ func reloadRuntime(ctx context.Context, store *config.Store, manager *scheduler.
 			continue
 		}
 		snapshot := store.Snapshot()
-		registry, _, defs, err := buildRuntime(ctx, snapshot, status.Generation, configPath, db, instanceKey, tokens, logger)
+		registry, _, next, err := buildRuntime(ctx, snapshot, status.Generation, configPath, db, instanceKey, tokens, logger)
 		if err != nil {
 			logger.Error("runtime reload rejected", "error", err)
 			continue
 		}
-		if err = manager.Apply(ctx, defs); err != nil {
+		if err = manager.Apply(ctx, next.Definitions); err != nil {
+			closeRuntimeGeneration(next, logger)
 			logger.Error("runtime reload rejected", "error", err)
 			continue
 		}
 		dynamic.Swap(registry)
+		runtimes.Swap(next, logger)
 		generation = status.Generation
 	}
 }
 
-func buildRuntime(ctx context.Context, snapshot *config.Snapshot, generation uint64, configPath string, db *storage.Store, instanceKey []byte, tokens *assettokens.Service, logger *slog.Logger) (connections.Registry, map[string]string, []scheduler.Definition, error) {
+type runtimeHolder struct {
+	mu      sync.Mutex
+	current *appcore.Generation
+}
+
+func (h *runtimeHolder) Swap(next *appcore.Generation, logger *slog.Logger) {
+	h.mu.Lock()
+	old := h.current
+	h.current = next
+	h.mu.Unlock()
+	closeRuntimeGeneration(old, logger)
+}
+
+func (h *runtimeHolder) Close(logger *slog.Logger) {
+	h.mu.Lock()
+	current := h.current
+	h.current = nil
+	h.mu.Unlock()
+	closeRuntimeGeneration(current, logger)
+}
+
+func closeRuntimeGeneration(generation *appcore.Generation, logger *slog.Logger) {
+	closeCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if err := generation.Close(closeCtx); err != nil {
+		logger.Error("close integration runtime generation", "error", err)
+	}
+}
+
+func buildRuntime(ctx context.Context, snapshot *config.Snapshot, generation uint64, configPath string, db *storage.Store, instanceKey []byte, tokens *assettokens.Service, logger *slog.Logger) (connections.Registry, map[string]string, *appcore.Generation, error) {
 	resolved, diags := secrets.ResolveAll(snapshot.SecretRefs, secrets.DefaultResolver())
 	if diags.HasErrors() {
 		return nil, nil, nil, fmt.Errorf("resolve secrets:\n%s", diags.String())
@@ -284,11 +329,11 @@ func buildRuntime(ctx context.Context, snapshot *config.Snapshot, generation uin
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	defs, err := appcore.Definitions(ctx, snapshot, generation, configPath, registry, revisions, tokens, logger)
+	built, err := appcore.BuildGeneration(ctx, snapshot, generation, configPath, registry, revisions, tokens, filepath.Join(db.DataDir(), "wasm-cache"), logger)
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	return registry, revisions, defs, nil
+	return registry, revisions, built, nil
 }
 
 // configLoader is config.Store's Loader for real (non-fixture) configuration: parse, resolve

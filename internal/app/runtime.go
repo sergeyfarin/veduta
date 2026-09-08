@@ -6,6 +6,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"path/filepath"
 	"sort"
@@ -19,20 +20,50 @@ import (
 	"veduta.dev/veduta/internal/integrations/declarative"
 	"veduta.dev/veduta/internal/integrations/httpjson"
 	"veduta.dev/veduta/internal/integrations/manifestload"
+	wasmrt "veduta.dev/veduta/internal/integrations/wasm"
 	"veduta.dev/veduta/internal/scheduler"
 	"veduta.dev/veduta/internal/state"
 	"veduta.dev/veduta/internal/storage"
 	"veduta.dev/veduta/internal/widgets"
 )
 
-func Definitions(ctx context.Context, snap *config.Snapshot, generation uint64, configPath string, reg connections.Registry, revisions map[string]string, assets *assettokens.Service, logger *slog.Logger) ([]scheduler.Definition, error) {
+// Generation owns every integration runtime used by one accepted configuration.
+// Close it only after the scheduler has cancelled the generation's invocations.
+type Generation struct {
+	Definitions []scheduler.Definition
+	runtimes    []integrations.Runtime
+}
+
+// Close releases runtime caches and waits for any bounded invocation still leaving the old generation.
+func (g *Generation) Close(ctx context.Context) error {
+	if g == nil {
+		return nil
+	}
+	var errs []error
+	for i := len(g.runtimes) - 1; i >= 0; i-- {
+		errs = append(errs, g.runtimes[i].Close(ctx))
+	}
+	g.runtimes = nil
+	return errors.Join(errs...)
+}
+
+// BuildGeneration resolves every card to an approved runtime instance and scheduler definition.
+func BuildGeneration(ctx context.Context, snap *config.Snapshot, generation uint64, configPath string, reg connections.Registry, revisions map[string]string, assets *assettokens.Service, wasmCacheDir string, logger *slog.Logger) (_ *Generation, err error) {
 	broker := capabilities.NewBrokerWithAssets(reg, capabilities.NewMemCache(), capabilities.NewMemAudit(), logger, assets)
+	built := &Generation{}
+	declarativeRuntime := declarative.New(broker)
+	built.runtimes = append(built.runtimes, declarativeRuntime)
+	var wasmRuntime integrations.Runtime
+	defer func() {
+		if err != nil {
+			_ = built.Close(context.Background())
+		}
+	}()
 	configDir := filepath.Dir(configPath)
 	lock, err := integrations.ReadLock(filepath.Join(configDir, integrations.LockFileName))
 	if err != nil {
 		return nil, err
 	}
-	defs := []scheduler.Definition{}
 	for _, section := range snap.Config.Sections {
 		for _, card := range section.Cards {
 			d := scheduler.Definition{ID: card.ID, Source: state.Source{Integration: card.Integration, Operation: card.Operation, Slots: card.Slots}}
@@ -63,13 +94,13 @@ func Definitions(ctx context.Context, snap *config.Snapshot, generation uint64, 
 				m, l, g, e := httpjson.Build(slot, connID, hc, policy)
 				if e != nil {
 					d.Disabled = state.ReasonConfigError
-					defs = append(defs, d)
+					built.Definitions = append(built.Definitions, d)
 					continue
 				}
 				g.Ident.SnapshotGen = generation
 				g.Ident.CardHash = d.Hash
 				g.Ident.SlotRevisions = slotRevisions
-				inst, e := declarative.New(broker).Load(ctx, integrations.Installed{Manifest: m, Lock: l})
+				inst, e := declarativeRuntime.Load(ctx, integrations.Installed{Manifest: m, Lock: l})
 				if e != nil {
 					return nil, e
 				}
@@ -82,60 +113,78 @@ func Definitions(ctx context.Context, snap *config.Snapshot, generation uint64, 
 					r, e := inst.Invoke(c, integrations.InvokeRequest{Operation: "request", Params: params, Grant: g.Fresh()})
 					return r.Document, e
 				}
-				defs = append(defs, d)
+				built.Definitions = append(built.Definitions, d)
 				continue
 			}
 			in, ok := snap.IntegrationByID(card.Integration)
 			if !ok {
 				d.Disabled = state.ReasonIntegrationMissing
-				defs = append(defs, d)
+				built.Definitions = append(built.Definitions, d)
 				continue
 			}
 			src, e := integrations.ResolveSource(configDir, in.Source)
 			if e != nil || src.Builtin {
 				d.Disabled = state.ReasonIntegrationMissing
-				defs = append(defs, d)
+				built.Definitions = append(built.Definitions, d)
 				continue
 			}
 			path, e := integrations.ManifestFile(src.Dir)
 			if e != nil {
 				d.Disabled = state.ReasonIntegrationMissing
-				defs = append(defs, d)
+				built.Definitions = append(built.Definitions, d)
 				continue
 			}
 			m, e := manifestload.Load(path)
 			if e != nil {
 				d.Disabled = state.ReasonConfigError
-				defs = append(defs, d)
+				built.Definitions = append(built.Definitions, d)
 				continue
 			}
 			entry := lock.Integrations[in.ID]
 			if entry == nil {
 				d.Disabled = state.ReasonUnapproved
-				defs = append(defs, d)
+				built.Definitions = append(built.Definitions, d)
 				continue
 			}
 			if entry.ManifestSHA256 != m.Digest {
 				d.Disabled = state.ReasonPermissionsChanged
-				defs = append(defs, d)
+				built.Definitions = append(built.Definitions, d)
 				continue
 			}
 			d.ApprovalRevision, err = storage.DefinitionHash(entry)
 			if err != nil {
 				return nil, err
 			}
-			inst, e := declarative.New(broker).Load(ctx, integrations.Installed{Manifest: m, Lock: entry})
-			if e != nil {
-				return nil, e
-			}
 			op := operation(m, card.Operation)
 			if op == nil {
 				d.Disabled = state.ReasonConfigError
-				defs = append(defs, d)
+				built.Definitions = append(built.Definitions, d)
 				continue
 			}
+			var runtime integrations.Runtime
+			switch m.Runtime {
+			case "declarative":
+				runtime = declarativeRuntime
+			case "wasm":
+				if wasmRuntime == nil {
+					wasmRuntime, e = wasmrt.NewWithBroker(ctx, wasmCacheDir, broker)
+					if e != nil {
+						return nil, e
+					}
+					built.runtimes = append(built.runtimes, wasmRuntime)
+				}
+				runtime = wasmRuntime
+			default:
+				d.Disabled = state.ReasonConfigError
+				built.Definitions = append(built.Definitions, d)
+				continue
+			}
+			inst, e := runtime.Load(ctx, integrations.Installed{Manifest: m, Lock: entry})
+			if e != nil {
+				return nil, e
+			}
 			g := grant(m, entry, card, reg, revisions, generation, d.ApprovalRevision, d.Hash)
-			d.Source.Runtime = state.RuntimeDeclarative
+			d.Source.Runtime = state.Runtime(m.Runtime)
 			d.Source.IntegrationVersion = m.Version
 			d.ManifestDigest = m.Digest
 			d.Key = definitionKey(m.Digest, card.Operation, card.Slots, slotRevisions, card.Params)
@@ -146,10 +195,10 @@ func Definitions(ctx context.Context, snap *config.Snapshot, generation uint64, 
 				r, e := inst.Invoke(c, integrations.InvokeRequest{Operation: operationID, Params: params, Grant: g.Fresh()})
 				return r.Document, e
 			}
-			defs = append(defs, d)
+			built.Definitions = append(built.Definitions, d)
 		}
 	}
-	return defs, nil
+	return built, nil
 }
 
 func grant(m *manifestload.Manifest, l *integrations.LockEntry, c config.Card, reg connections.Registry, revisions map[string]string, generation uint64, approvalRevision, cardHash string) capabilities.Grant {

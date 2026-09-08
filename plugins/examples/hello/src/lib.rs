@@ -6,6 +6,9 @@ use veduta_sdk::{Block, Document, Invocation, Signal};
 
 #[plugin_fn]
 pub fn invoke(Json(input): Json<Invocation>) -> FnResult<Json<Document>> {
+    if input.is_validation() {
+        return Ok(Json(Document::validation()));
+    }
     let document = Document::new("Hello from WASM")
         .block(Block::Text {
             content: format!("Operation `{}` ran at {}.", input.operation, input.now),

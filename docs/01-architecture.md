@@ -511,6 +511,7 @@ package integrations
 type Runtime interface {
     Name() string                                   // "declarative" | "wasm" | "builtin"
     Load(ctx context.Context, p Installed) (Instance, error)
+    Close(ctx context.Context) error                // waits for loaded instances, releases caches
 }
 
 type Instance interface {

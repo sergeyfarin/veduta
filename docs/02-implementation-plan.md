@@ -1327,16 +1327,18 @@ weakening the sandbox. The host-language review keeps the existing Go backend; s
 `docs/decisions/0001-backend-language.md`.
 AC: a new plugin can be scaffolded and built in under five minutes following the README.
 
-**G4 · Jellyfin plugin — VERTICAL SLICE #2** · 1 d · deps: G2, S2
+**G4 · Jellyfin plugin — VERTICAL SLICE #2** · 1 d · deps: G2, S2 · **DONE (live-server validation outstanding)**
 Chosen because it needs real logic: send the `Authorization: MediaBrowser Token="..."` header (S2's
 completed **spec** pass settled on this over the legacy `X-Emby-Authorization`/`X-Emby-Token` forms
 - F6 in `docs/spikes/s2-upstream-reality-check.md`, marked `[spec]` there, not `[live]`; S2's live
 pass against a real server is still outstanding - see `examples/veduta.yaml`'s Jellyfin connection
 for where the spec-pass decision already landed),
 resolve the user, list recently-added items, and mint poster asset refs.
-Tests: fixture test against recorded Jellyfin responses producing a golden document — **the same
-golden test must also pass if the integration is reimplemented as builtin Go**, proving the runtime
-swap is faithful.
+Tests: fixture test against the S2 specification-shaped Jellyfin responses produces the shared
+golden document through the production Wasm runtime. The golden deliberately contains no upstream
+URL because the plugin never receives one. **The same golden test must also pass if the integration
+is reimplemented as builtin Go**, proving the runtime swap is faithful. Real-server capture remains
+the external S2 backlog item.
 AC: five posters render in the same visual style as the Immich grid, with no Jellyfin key reaching
 the browser.
 

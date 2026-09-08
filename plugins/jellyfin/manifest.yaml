@@ -17,21 +17,21 @@ metadata:
 spec:
   runtime: wasm
   module: jellyfin.wasm
-  sha256: "0000000000000000000000000000000000000000000000000000000000000000"  # set by the build; the loader verifies the file against it
+  sha256: "e235fd566f38089ae2c6a14263e87b710ffc879c1c149c61b422ccbf38eb337a"
   slots:
     - name: server
       kind: http
       description: Your Jellyfin server
-  capabilities: [http, cache, assets, log]
-  limits: { memoryMB: 64, timeoutMs: 3000, outputKB: 64, httpRequests: 8, hostCalls: 64 }
+  capabilities: [http, assets]
+  limits: { memoryMB: 64, timeoutMs: 3000, outputKB: 64, httpRequests: 5, hostCalls: 10 }
   operations:
     - id: recently-added
       name: Recently added
       defaultRefresh: 5m
       routes:
         - { slot: server, method: GET, path: /Users/Me,     reason: Resolve the authenticated user }
-        - { slot: server, method: GET, path: /Items/Latest, reason: Recently added items }
-        - { slot: server, method: GET, path: /Items,        reason: Library counts by type }
+        - { slot: server, method: GET, path: /Items/Latest, queryKeys: [enableImageTypes, fields, imageTypeLimit, limit, userId], reason: Recently added items }
+        - { slot: server, method: GET, path: /Items, queryKeys: [includeItemTypes, limit, recursive, userId], reason: Library counts by type }
         - { slot: server, method: GET, path: /Sessions,     reason: Active streams }
         # Jellyfin serves item images without authentication, so this route exists for
         # caching and to keep the server's address out of the browser - not to inject a

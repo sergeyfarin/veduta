@@ -54,9 +54,11 @@ jobs:
       - run: rustup show
       - run: cargo fmt --manifest-path sdk/rust/Cargo.toml --check
       - run: cargo fmt --manifest-path plugins/examples/hello/Cargo.toml --check
+      - run: cargo fmt --manifest-path plugins/jellyfin/Cargo.toml --check
       - run: cargo test --manifest-path sdk/rust/Cargo.toml
       - run: make -C plugins verify
       - run: go run ./cmd/veduta plugin validate plugins/examples/hello/hello.wasm
+      - run: go run ./cmd/veduta plugin validate plugins/jellyfin/jellyfin.wasm
 
   web:
     name: Frontend build

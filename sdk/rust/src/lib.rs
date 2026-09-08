@@ -7,6 +7,9 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::Value;
 use std::collections::BTreeMap;
 
+/// Reserved host-free operation used by `veduta plugin validate` to smoke-test the ABI.
+pub const VALIDATION_OPERATION: &str = "__veduta_validate__";
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Invocation {
@@ -14,6 +17,13 @@ pub struct Invocation {
     #[serde(default)]
     pub params: Value,
     pub now: String,
+}
+
+impl Invocation {
+    #[must_use]
+    pub fn is_validation(&self) -> bool {
+        self.operation == VALIDATION_OPERATION
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -51,6 +61,17 @@ impl Document {
             notices: Vec::new(),
             hints: None,
         }
+    }
+
+    /// Returns the bounded, host-free document expected for the reserved validation operation.
+    #[must_use]
+    pub fn validation() -> Self {
+        Self::new("Plugin validation").block(Block::Text {
+            content: "Veduta plugin ABI is available.".into(),
+            title: None,
+            emphasis: None,
+            level: None,
+        })
     }
 
     #[must_use]

@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"net/http"
 	"net/url"
 	"time"
 
@@ -162,7 +163,11 @@ func hostHTTP(ctx context.Context, invocation invocationContext, input []byte) (
 	if err != nil {
 		return nil, err
 	}
-	value := map[string]any{"status": response.StatusCode, "headers": response.Header}
+	headers := response.Header
+	if headers == nil {
+		headers = http.Header{}
+	}
+	value := map[string]any{"status": response.StatusCode, "headers": headers}
 	if json.Valid(response.Body) {
 		value["body"] = json.RawMessage(response.Body)
 	} else {

@@ -17,12 +17,19 @@ To start a plugin, copy `plugins/examples/hello`, change the Cargo package and
 manifest metadata, and implement its exported `invoke` function. Declare every
 slot, route, capability, and signal in `manifest.yaml`; an administrator must
 approve the resulting manifest and module digests before Veduta loads it.
+Operation-strict plugins must return `Document::validation()` when
+`Invocation::is_validation()` is true so the CLI can smoke-test them without
+using broker capabilities.
 
 After a release build, calculate `sha256sum your-plugin.wasm` (or
 `shasum -a 256` on macOS), put that digest in `spec.sha256`, and run the
 validator again. The validator applies the production import policy and
 resource limits, instantiates the module without WASI, and smoke-invokes its
 ABI.
+
+`make -C plugins jellyfin` builds the first-party Jellyfin plugin. Its source
+shows multi-request broker calls, typed response mapping, asset-reference
+minting, signals, and partial-data notices.
 
 The Go core remains the supported Veduta host. The measured Go plugin toolchain
 requires WASI and does not meet the strict guest profile; its revisit criteria

@@ -35,19 +35,19 @@ integrations:
     limits: { httpRequests: 2, timeoutMs: 5000 }
 
   jellyfin:
-    manifestSha256: 4838fe23b0401a6bda6c402300632062daf730cc5323fb1c442e0a1475b46ebf
-    moduleSha256:   "0000000000000000000000000000000000000000000000000000000000000000"  # set by the build
+    manifestSha256: 8df25143dd15243f182741fb22e2f38c9e3c9d225d845084f505d14c6af33f13
+    moduleSha256: e235fd566f38089ae2c6a14263e87b710ffc879c1c149c61b422ccbf38eb337a
     version: 1.0.0
     runtime: wasm
     approvedAt: "2026-09-04T21:41:00Z"
     approvedBy: sergey
-    capabilities: [http, cache, assets, log]
+    capabilities: [http, assets]
     effectiveLimits:   # min(core maximum, manifest value-or-default, approved value-or-default)
       cacheBytesKB: 256
       cacheEntries: 64
       exprNodes: 512
-      hostCalls: 64
-      httpRequests: 8
+      hostCalls: 10
+      httpRequests: 5
       inputMB: 4
       iterations: 20000
       jsonDepth: 32
@@ -59,8 +59,8 @@ integrations:
       timeoutMs: 3000
     routes:
       - { slot: server, method: GET, path: /Users/Me }
-      - { slot: server, method: GET, path: /Items/Latest }
-      - { slot: server, method: GET, path: /Items }
+      - { slot: server, method: GET, path: /Items/Latest, queryKeys: [enableImageTypes, fields, imageTypeLimit, limit, userId] }
+      - { slot: server, method: GET, path: /Items, queryKeys: [includeItemTypes, limit, recursive, userId] }
       - { slot: server, method: GET, path: /Sessions }
       - { slot: server, method: GET, path: /Items/*/Images/Primary, use: asset }
 
