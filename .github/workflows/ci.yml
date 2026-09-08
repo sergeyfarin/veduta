@@ -59,6 +59,8 @@ jobs:
       - run: make -C plugins verify
       - run: go run ./cmd/veduta plugin validate plugins/examples/hello/hello.wasm
       - run: go run ./cmd/veduta plugin validate plugins/jellyfin/jellyfin.wasm
+      - run: go run ./cmd/veduta plugin validate plugins/examples/hello/target/wasm32-unknown-unknown/release/veduta_hello.wasm
+      - run: go run ./cmd/veduta plugin validate plugins/jellyfin/target/wasm32-unknown-unknown/release/veduta_jellyfin.wasm
 
   web:
     name: Frontend build
