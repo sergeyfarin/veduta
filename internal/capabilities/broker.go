@@ -23,7 +23,7 @@ type Broker interface {
 	CacheGet(ctx context.Context, g Grant, key string) ([]byte, bool, error)
 	CachePut(ctx context.Context, g Grant, key string, val []byte, ttl time.Duration) error
 	AssetRef(ctx context.Context, g Grant, slot, path string, query url.Values, t Transform) (string, error)
-	Log(g Grant, level, msg string, fields map[string]any)
+	Log(g Grant, level, msg string, fields map[string]any) error
 	Emit(ctx context.Context, g Grant, e Event) error
 }
 
@@ -171,14 +171,14 @@ func (b *broker) CachePut(ctx context.Context, g Grant, key string, val []byte, 
 }
 
 // Log implements Broker. No slot or route either - logging is not connection-scoped.
-func (b *broker) Log(g Grant, level, msg string, fields map[string]any) {
+func (b *broker) Log(g Grant, level, msg string, fields map[string]any) error {
 	if err := b.authorize(g, "Log", func() error {
 		if !g.Caps.Has("log") {
 			return ErrCapDenied
 		}
 		return g.consumeHostCall()
 	}); err != nil {
-		return
+		return err
 	}
 	args := make([]any, 0, len(fields)*2+2)
 	args = append(args, "plugin", g.PluginID)
@@ -195,6 +195,7 @@ func (b *broker) Log(g Grant, level, msg string, fields map[string]any) {
 		logLevel = slog.LevelDebug
 	}
 	b.logger.Log(context.Background(), logLevel, msg, args...)
+	return nil
 }
 
 // Emit implements Broker. Rules/notifications (Phase J) are the real consumer; D2 only needs

@@ -1312,7 +1312,7 @@ Tests: **the conformance suite from S1, promoted to CI** — no filesystem, no e
 native HTTP, deadline kill, memory trap, output cap, and a corrupted module rejected before compile.
 Implementation and scope: [S1 / G1 sandbox decision](spikes/s1-wasm-sandbox.md).
 
-**G2 · Host functions** · 0.5 d · deps: G1
+**G2 · Host functions** · 0.5 d · deps: G1 · **DONE**
 Bind `veduta_http`, `veduta_cache_get/put`, `veduta_asset_ref`, `veduta_log` to the broker; encode
 denials as plugin-visible errors rather than traps.
 Tests: each host function's denial path; a plugin that ignores an error and retries is budget-capped.

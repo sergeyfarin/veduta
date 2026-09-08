@@ -561,6 +561,13 @@ veduta_log(json)                          // {level, msg, fields}
 veduta_emit(json)                          // {type, severity, fields}  (0.2)
 ```
 
+G2 host calls return one envelope: `{"ok":true,"value":...}` on success, or
+`{"ok":false,"error":{"code":"route_denied","message":"..."}}` on failure. Stable error codes
+are `capability_denied`, `slot_denied`, `route_denied`, `budget_exceeded`, `deadline_exceeded`,
+`cancelled`, and `invalid_request`. Denials are values so a plugin can handle them; the broker still
+counts every attempt and caps retries through the shared `hostCalls` budget. HTTP response bodies
+are embedded as JSON when valid and exposed as `bodyBase64` otherwise. Cache values are JSON.
+
 There is no filesystem, socket, clock-setting, process, environment or database call. Wall time is
 provided in the invocation input, not as a host call, so plugin output is reproducible in tests.
 

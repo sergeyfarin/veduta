@@ -47,7 +47,7 @@ func TestImmichPipelineAppliesParamDefault(t *testing.T) {
 		t.Fatalf("unexpected document: %#v", resp.Document)
 	}
 }
-func (fixtureBroker) Log(capabilities.Grant, string, string, map[string]any)             {}
+func (fixtureBroker) Log(capabilities.Grant, string, string, map[string]any) error       { return nil }
 func (fixtureBroker) Emit(context.Context, capabilities.Grant, capabilities.Event) error { return nil }
 
 func TestGlancesGoldenPipeline(t *testing.T) {

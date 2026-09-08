@@ -25,14 +25,15 @@ receive schema defaults and validation; documents pass the existing widget valid
 and operation signal declarations. Grants and credentials are never included in
 input JSON. G2 will bind broker functions using the invocation context.
 
-G1 permits only Extism allocation, memory access, input, output and error functions.
+G1 permits only Extism allocation, memory access, input, output and error functions, plus the five
+G2 `extism:host/user` broker imports once present in a module.
 Native HTTP (both `http_request` and the legacy `extism_http_request` spelling),
 variables, configuration and native logging imports are rejected before instantiation.
 `allowed_hosts` is also explicitly empty. WASI is disabled: filesystem, environment,
 arguments, sockets and stdout/stderr imports cannot resolve. This is stricter than
 mounting an empty WASI filesystem or capturing its output, and avoids the SDK's
 `EXTISM_ENABLE_WASI_OUTPUT` environment override. Plugins must currently target a
-WASI-free Extism build. G2's `veduta_log` will provide bounded broker logging.
+WASI-free Extism build. G2's `veduta_log` provides bounded broker logging.
 
 Memory limits apply to each linear memory, including the Extism kernel and a guest's
 own memory; they are not an aggregate process RSS limit. The invocation context
@@ -49,8 +50,8 @@ a guest compiler or downloaded binaries. The tests cover forbidden imports, pin
 mismatches, corrupted/oversized modules, path escapes, deadline kills, memory and
 output ceilings, document validation, isolated concurrent calls and lifecycle.
 
-Remaining phase boundaries: broker route/denial tests belong to G2; plugin SDKs and
-build recipes to G3; Jellyfin and application runtime selection/lifecycle wiring to
+Remaining phase boundaries: plugin SDKs and build recipes belong to G3; Jellyfin and application
+runtime selection/lifecycle wiring belong to
 the G4 vertical slice. This decision does **not** claim the original S1a hardware
 acceptance: ARM cold/warm timings, Pi RSS measurements and guest toolchain size
 comparisons still require the target hardware. Cross-compilation alone cannot

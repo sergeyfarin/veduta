@@ -200,7 +200,9 @@ func TestBroker_Log_CapDenied(t *testing.T) {
 	audit := capabilities.NewMemAudit()
 	b := capabilities.NewBroker(nil, capabilities.NewMemCache(), audit, discardLogger())
 	g := capabilities.NewGrant("plug", "1.0.0", "inst1", nil, capabilities.NewCapSet("http"), nil, nil, nil, capabilities.Limits{}, capabilities.ExecutionIdentity{})
-	b.Log(g, "info", "hello", nil) // must not panic; denial is silent from Log's own signature
+	if err := b.Log(g, "info", "hello", nil); !errors.Is(err, capabilities.ErrCapDenied) {
+		t.Fatalf("Log err = %v, want ErrCapDenied", err)
+	}
 	if audit.Total("plug") != 1 {
 		t.Fatalf("Log without the log capability should still be recorded as a denial, got total=%d", audit.Total("plug"))
 	}
@@ -220,7 +222,9 @@ func TestBroker_HostCallsSharedAcrossMethods(t *testing.T) {
 	b := capabilities.NewBroker(nil, capabilities.NewMemCache(), capabilities.NewMemAudit(), discardLogger())
 	g := capabilities.NewGrant("plug", "1.0.0", "inst1", nil, capabilities.NewCapSet("log", "events"), nil, nil, nil,
 		capabilities.Limits{HostCalls: 1}, capabilities.ExecutionIdentity{})
-	b.Log(g, "info", "first", nil) // consumes the one hostCall
+	if err := b.Log(g, "info", "first", nil); err != nil { // consumes the one hostCall
+		t.Fatal(err)
+	}
 	if err := b.Emit(context.Background(), g, capabilities.Event{Type: "x"}); !errors.Is(err, capabilities.ErrBudgetExceeded) {
 		t.Fatalf("err = %v, want ErrBudgetExceeded - hostCalls is shared across Log and Emit", err)
 	}
@@ -335,7 +339,9 @@ func TestBroker_Log_LevelsAndFields(t *testing.T) {
 	b := capabilities.NewBroker(nil, capabilities.NewMemCache(), capabilities.NewMemAudit(), discardLogger())
 	g := fullGrant(nil)
 	for _, level := range []string{"info", "warn", "error", "debug", "unknown-defaults-to-info"} {
-		b.Log(g, level, "message", map[string]any{"key": "value"})
+		if err := b.Log(g, level, "message", map[string]any{"key": "value"}); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 

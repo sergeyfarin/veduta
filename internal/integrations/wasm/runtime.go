@@ -24,6 +24,7 @@ import (
 	"github.com/tetratelabs/wazero/api"
 	"github.com/tetratelabs/wazero/experimental"
 
+	"veduta.dev/veduta/internal/capabilities"
 	"veduta.dev/veduta/internal/integrations"
 	"veduta.dev/veduta/internal/widgets"
 )
@@ -36,13 +37,26 @@ const MaxModuleBytes = 32 << 20
 type Runtime struct {
 	mu        sync.RWMutex
 	cache     wazero.CompilationCache
+	broker    capabilities.Broker
 	instances []*instance
 	closed    bool
 }
 
-// New opens a persistent wazero cache in cacheDir. An empty directory selects an
-// in-memory cache. Wazero keys cached code by the module digest and engine version.
+// New opens a sandbox without broker host access. It is useful for validation and
+// G1 conformance checks. Production integrations use NewWithBroker.
 func New(ctx context.Context, cacheDir string) (*Runtime, error) {
+	return openRuntime(ctx, cacheDir, nil)
+}
+
+// NewWithBroker opens a sandbox whose host functions delegate to broker.
+func NewWithBroker(ctx context.Context, cacheDir string, broker capabilities.Broker) (*Runtime, error) {
+	if broker == nil {
+		return nil, errors.New("wasm: capability broker is required")
+	}
+	return openRuntime(ctx, cacheDir, broker)
+}
+
+func openRuntime(ctx context.Context, cacheDir string, broker capabilities.Broker) (*Runtime, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -56,7 +70,7 @@ func New(ctx context.Context, cacheDir string) (*Runtime, error) {
 	} else {
 		cache = wazero.NewCompilationCache()
 	}
-	return &Runtime{cache: cache}, nil
+	return &Runtime{cache: cache, broker: broker}, nil
 }
 
 // Name identifies the manifest runtime.
@@ -90,6 +104,7 @@ type instance struct {
 	compiled   *extism.CompiledPlugin
 	operations []operation
 	limits     integrations.EffectiveLimits
+	broker     capabilities.Broker
 	closed     bool
 }
 
@@ -158,7 +173,7 @@ func (r *Runtime) Load(ctx context.Context, p integrations.Installed) (integrati
 	if !bytes.Equal(digest[:], expected) {
 		return nil, errors.New("wasm: module sha256 mismatch")
 	}
-	in := &instance{limits: l}
+	in := &instance{limits: l, broker: r.broker}
 	for _, op := range m.Operations {
 		o := operation{spec: integrations.OperationSpec{ID: op.ID, Name: op.Name, DefaultRefresh: op.DefaultRefresh, Signals: slices.Clone(op.Signals)}}
 		if op.Params != nil {
@@ -194,7 +209,7 @@ func (r *Runtime) Load(ctx context.Context, p integrations.Installed) (integrati
 		Wasm:         []extism.Wasm{extism.WasmData{Data: code}},
 		AllowedHosts: []string{},
 		Memory:       &extism.ManifestMemory{MaxPages: uint32(l.MemoryMB) * 16, MaxVarBytes: 0},
-	}, extism.PluginConfig{RuntimeConfig: config, EnableWasi: false}, nil)
+	}, extism.PluginConfig{RuntimeConfig: config, EnableWasi: false}, hostFunctions())
 	if err != nil {
 		return nil, fmt.Errorf("wasm: compile: %w", err)
 	}
@@ -217,6 +232,9 @@ func preflight(ctx context.Context, code []byte, config wazero.RuntimeConfig) er
 		"output_set": true, "error_set": true}
 	for _, f := range m.ImportedFunctions() {
 		module, name, _ := f.Import()
+		if module == hostNamespace && hostFunctionNames[name] {
+			continue
+		}
 		if module != "extism:host/env" || !allowed[name] {
 			return fmt.Errorf("wasm: forbidden import %s.%s", module, name)
 		}
@@ -322,6 +340,7 @@ func (i *instance) Invoke(ctx context.Context, req integrations.InvokeRequest) (
 	guest.SetLogger(func(extism.LogLevel, string) {})
 	// #nosec G115 -- Load requires OutputKB in [1, 256]; limits are private and immutable.
 	ctx = context.WithValue(ctx, outputLimitKey{}, uint64(i.limits.OutputKB)<<10)
+	ctx = context.WithValue(ctx, invocationKey{}, invocationContext{broker: i.broker, grant: req.Grant})
 	status, output, err := guest.CallWithContext(ctx, "invoke", input)
 	if err != nil {
 		return empty, fmt.Errorf("wasm: invoke: %w", err)
