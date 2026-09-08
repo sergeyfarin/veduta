@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -20,6 +21,7 @@ import (
 )
 
 const reloadDebounce = 300 * time.Millisecond
+const defaultSecretDir = "/run/secrets"
 
 // Loader performs the complete load-time pipeline. Callers may wrap LoadPath to add steps such
 // as secret resolution; a failed step must return a nil snapshot and diagnostics.
@@ -102,6 +104,36 @@ func (s *Store) Watch(ctx context.Context) error {
 		}
 	}
 	watchConfDir()
+	watchedIntegrationDirs := map[string]bool{}
+	watchIntegrationDirs := func() {
+		snapshot := s.Snapshot()
+		if snapshot == nil {
+			return
+		}
+		for _, integration := range snapshot.Config.Integrations {
+			relative, ok := strings.CutPrefix(integration.Source, "path:")
+			if !ok || relative == "" {
+				continue
+			}
+			dir := relative
+			if !filepath.IsAbs(dir) {
+				dir = filepath.Join(parent, dir)
+			}
+			dir = filepath.Clean(dir)
+			if watchedIntegrationDirs[dir] {
+				continue
+			}
+			if err := w.Add(dir); err != nil {
+				s.log.Warn("could not watch integration directory", "path", dir, "error", err)
+				continue
+			}
+			watchedIntegrationDirs[dir] = true
+		}
+	}
+	watchIntegrationDirs()
+	if err := w.Add(defaultSecretDir); err != nil && !errors.Is(err, os.ErrNotExist) {
+		s.log.Warn("could not watch file-secret directory", "path", defaultSecretDir, "error", err)
+	}
 
 	var timer *time.Timer
 	var timerC <-chan time.Time
@@ -147,6 +179,7 @@ func (s *Store) Watch(ctx context.Context) error {
 		case <-timerC:
 			timerC = nil
 			s.reload()
+			watchIntegrationDirs()
 		}
 	}
 }
@@ -156,8 +189,36 @@ func (s *Store) relevant(name string) bool {
 	if name == s.path {
 		return true
 	}
+	if filepath.Dir(name) == filepath.Dir(s.path) && filepath.Base(name) == "veduta.lock.yaml" {
+		return true
+	}
 	confDir := filepath.Join(filepath.Dir(s.path), "conf.d")
-	return filepath.Dir(name) == confDir && filepath.Ext(name) == ".yaml"
+	if filepath.Dir(name) == confDir && filepath.Ext(name) == ".yaml" {
+		return true
+	}
+	if filepath.Dir(name) == defaultSecretDir {
+		// Secret mounts commonly rotate an internal `..data` symlink rather than emitting an
+		// event named after the referenced file. Any event in the small secrets directory is
+		// therefore relevant when this config uses at least one file-capable reference.
+		return len(s.Snapshot().SecretRefs) > 0
+	}
+	base := filepath.Base(name)
+	if base == "manifest.yaml" || base == "manifest.yml" {
+		for _, integration := range s.Snapshot().Config.Integrations {
+			relative, ok := strings.CutPrefix(integration.Source, "path:")
+			if !ok {
+				continue
+			}
+			dir := relative
+			if !filepath.IsAbs(dir) {
+				dir = filepath.Join(filepath.Dir(s.path), dir)
+			}
+			if filepath.Clean(dir) == filepath.Dir(name) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (s *Store) reload() {

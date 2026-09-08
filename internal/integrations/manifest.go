@@ -107,6 +107,9 @@ func findManifestFile(dir string) (string, error) {
 	return "", &ErrManifestNotFound{Dir: dir}
 }
 
+// ManifestFile locates either supported manifest filename for runtime callers.
+func ManifestFile(dir string) (string, error) { return findManifestFile(dir) }
+
 // maxManifestBytes bounds LoadManifest's read the same way manifestload.Load bounds its own -
 // found in a second review pass that a manifest this large would otherwise be fully allocated
 // before any check could reject it (see readBoundedFile's own doc comment). Kept as its own

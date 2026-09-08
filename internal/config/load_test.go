@@ -36,13 +36,8 @@ auth:
 // small synthetic fixtures - if a schema change ever breaks examples/veduta.yaml, this is where
 // that shows up, not silently in production.
 //
-// It also documents a real, found-not-hypothesised gap rather than silently accepting it: the
-// Jellyfin connection's auth value needs `${secret:JELLYFIN_KEY}` embedded inside
-// `MediaBrowser Token="..."` (docs/spikes/s2-upstream-reality-check.md's F6), which the current
-// whole-scalar-only secretRef design cannot express - see docs/03-backlog.md. Load still succeeds
-// (a real fix needs a template-aware SecretRef, out of scope here), but suspiciousSecretRefs
-// catches it as a warning, so this stays visible instead of silently sending a literal
-// placeholder string as a Jellyfin credential once Phase D exists.
+// It also covers Jellyfin's composed Authorization value: embedded references are collected as
+// real secret locations, not left as literal placeholder text.
 func TestLoad_RealExampleConfig(t *testing.T) {
 	snap, diags := config.LoadPath("../../examples/veduta.yaml")
 	if diags.HasErrors() {
@@ -57,22 +52,18 @@ func TestLoad_RealExampleConfig(t *testing.T) {
 	if _, ok := snap.IntegrationByID("jellyfin"); !ok {
 		t.Error("expected integration jellyfin")
 	}
-	assertContains(t, diags, `JELLYFIN_KEY`)
 	found := false
-	for _, d := range diags {
-		if d.Severity == config.SeverityWarning {
+	for _, ref := range snap.SecretRefs {
+		if ref.Name == "JELLYFIN_KEY" {
 			found = true
 		}
 	}
 	if !found {
-		t.Error("want at least one warning-severity diagnostic (the Jellyfin embedded-secret gap)")
+		t.Error("embedded Jellyfin secret was not collected")
 	}
 }
 
-// TestLoad_SuspiciousSecretRef_Warns proves suspiciousSecretRefs fires for the exact class of
-// mistake found in examples/veduta.yaml: ${secret:NAME} embedded in a larger string. It is a
-// warning, not an error - Load must still succeed.
-func TestLoad_SuspiciousSecretRef_Warns(t *testing.T) {
+func TestLoad_EmbeddedSecretIsRecognised(t *testing.T) {
 	dir := t.TempDir()
 	path := write(t, dir, "veduta.yaml", minimalValid+`
 connections:
@@ -86,22 +77,24 @@ connections:
 `)
 	snap, diags := config.Load(path)
 	if diags.HasErrors() {
-		t.Fatalf("an embedded secret reference should warn, not fail: %s", diags)
+		t.Fatalf("an embedded secret reference should load: %s", diags)
 	}
 	if snap == nil {
 		t.Fatal("nil snapshot despite no errors")
 	}
 	found := false
-	for _, d := range diags {
-		if d.Severity == config.SeverityWarning && strings.Contains(d.Message, "not recognised as a secret reference") {
+	for _, ref := range snap.SecretRefs {
+		if ref.Name == "JELLYFIN_KEY" {
 			found = true
-			if d.Line == 0 || d.File == "" {
-				t.Errorf("warning missing position: %s", d)
-			}
 		}
 	}
 	if !found {
-		t.Fatalf("want a warning about the embedded ${secret:...}, got: %s", diags)
+		t.Fatal("embedded reference not collected")
+	}
+	for _, d := range diags {
+		if d.Severity == config.SeverityWarning {
+			t.Fatalf("valid embedded reference warned: %s", d)
+		}
 	}
 }
 

@@ -5,6 +5,7 @@ package connections
 import (
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"veduta.dev/veduta/internal/config"
@@ -126,6 +127,17 @@ func buildDockerConfig(id string, cfg *config.DockerConnection) (*DockerConfig, 
 func resolveRef(id, field string, ref config.SecretRef, resolved map[string]secrets.Value) (secrets.Value, error) {
 	if !ref.IsSecret() {
 		return secrets.New(ref.Literal), nil
+	}
+	if ref.Template != "" {
+		composed := ref.Template
+		for _, name := range ref.Names {
+			v, ok := resolved[name]
+			if !ok {
+				return secrets.Value{}, fmt.Errorf("connection %q: %s references secret %q, which was not resolved", id, field, name)
+			}
+			composed = strings.Replace(composed, "${secret:"+name+"}", v.Reveal(), 1)
+		}
+		return secrets.New(composed), nil
 	}
 	v, ok := resolved[ref.Name]
 	if !ok {

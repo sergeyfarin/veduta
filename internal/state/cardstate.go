@@ -88,7 +88,7 @@ type RunError struct {
 }
 
 // Execution is core-owned. Nothing in this package accepts one from untrusted input - it is only
-// ever produced by the five constructors below, each of which corresponds to exactly one legal
+// ever produced by the constructors below, each of which corresponds to exactly one legal
 // (state, field) combination from the schema's conditional validation, so an invalid combination
 // cannot be constructed by calling code, correct or otherwise. This is what makes "an integration
 // cannot influence any field under execution" a property of the type system, not a convention.
@@ -169,6 +169,24 @@ func Stale(cardID string, doc widgets.Document, src Source, generatedAt time.Tim
 func StaleWithOpenCircuit(cardID string, doc widgets.Document, src Source, generatedAt time.Time,
 	staleSince time.Time, consecutiveFailures int, circuitOpenUntil time.Time) CardState {
 	cs := Stale(cardID, doc, src, generatedAt, staleSince, consecutiveFailures, circuitOpenUntil)
+	cs.Execution.CircuitOpenUntil = circuitOpenUntil.UTC().Format(time.RFC3339Nano)
+	return cs
+}
+
+// StaleAfterError retains the last good document while recording why the latest refresh failed.
+func StaleAfterError(cardID string, doc widgets.Document, src Source, generatedAt, staleSince time.Time,
+	consecutiveFailures int, nextRunAt time.Time, runErr RunError) CardState {
+	cs := Stale(cardID, doc, src, generatedAt, staleSince, consecutiveFailures, nextRunAt)
+	if runErr.At == "" {
+		runErr.At = nowRFC3339()
+	}
+	cs.Execution.Error = &runErr
+	return cs
+}
+
+func StaleAfterErrorWithOpenCircuit(cardID string, doc widgets.Document, src Source, generatedAt, staleSince time.Time,
+	consecutiveFailures int, circuitOpenUntil time.Time, runErr RunError) CardState {
+	cs := StaleAfterError(cardID, doc, src, generatedAt, staleSince, consecutiveFailures, circuitOpenUntil, runErr)
 	cs.Execution.CircuitOpenUntil = circuitOpenUntil.UTC().Format(time.RFC3339Nano)
 	return cs
 }

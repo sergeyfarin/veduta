@@ -24,13 +24,19 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"veduta.dev/veduta/internal/api"
+	appcore "veduta.dev/veduta/internal/app"
 	"veduta.dev/veduta/internal/canonical"
+	assettokens "veduta.dev/veduta/internal/capabilities/assets"
 	"veduta.dev/veduta/internal/config"
 	"veduta.dev/veduta/internal/connections"
 	"veduta.dev/veduta/internal/fixtures"
+	"veduta.dev/veduta/internal/scheduler"
 	"veduta.dev/veduta/internal/secrets"
+	"veduta.dev/veduta/internal/storage"
+	"veduta.dev/veduta/internal/storage/assetcache"
 	"veduta.dev/veduta/internal/version"
 )
 
@@ -115,6 +121,7 @@ func serve(args []string) error {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
 	listen := fs.String("listen", "", "address to listen on (overrides server.listen in config)")
 	configPath := fs.String("config", "veduta.yaml", "path to the primary config file")
+	dataDir := fs.String("data-dir", "", "directory for Veduta's persistent database and caches (overrides server.dataDir)")
 	override := fs.Bool("i-know-what-im-doing", false,
 		"allow a non-loopback bind before authentication exists")
 	logFormat := fs.String("log-format", "text", "log format: text or json")
@@ -134,6 +141,8 @@ func serve(args []string) error {
 	// site - defence in depth (docs/01-architecture.md section 2), active from the first log line
 	// even before any config exists to resolve a secret from.
 	logger := slog.New(secrets.NewHandler(handler, secrets.DefaultRegistry()))
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
 	cfg := api.Config{
 		Logger:                 logger,
@@ -159,23 +168,52 @@ func serve(args []string) error {
 			cfg.Listen = *listen
 		}
 
-		// Re-resolved once more here, not reused from the loader closure above: that call
-		// discards its resolved map (it only needed the diagnostics), and config.Loader's own
-		// signature has no room to smuggle one out. Resolution is idempotent (env/file reads),
-		// so a second call is correct, if not free. Known, disclosed limitation (D5, see
-		// docs/03-backlog.md): this registry is built once, matching the snapshot at startup,
-		// and does not rebuild if the config hot-reloads with different connections - Phase F's
-		// scheduler is where a live-reloading registry actually matters, and does not exist yet.
 		snapshot := store.Snapshot()
-		resolved, secretDiags := secrets.ResolveAll(snapshot.SecretRefs, secrets.DefaultResolver())
-		if secretDiags.HasErrors() {
-			return fmt.Errorf("resolve secrets:\n%s", secretDiags.String())
+		dir := snapshot.Config.Server.DataDir
+		if *dataDir != "" {
+			dir = *dataDir
 		}
-		registry, err := connections.New(snapshot.Config.Connections, resolved, logger)
+		db, err := storage.Open(ctx, dir)
 		if err != nil {
-			return fmt.Errorf("build connection registry: %w", err)
+			return fmt.Errorf("open storage: %w", err)
 		}
-		cfg.Registry = registry
+		defer db.Close()
+		go db.RunJanitor(ctx, 30*24*time.Hour, time.Hour, func(err error) {
+			logger.Error("storage janitor failed", "error", err)
+		})
+		manager := scheduler.New(db)
+		defer manager.Close()
+		instanceKey, err := db.Setting(ctx, "instance-key", 32)
+		if err != nil {
+			return fmt.Errorf("load instance key: %w", err)
+		}
+		signingKey, err := db.Setting(ctx, "asset-signing-key", 32)
+		if err != nil {
+			return fmt.Errorf("load asset signing key: %w", err)
+		}
+		tokens, err := assettokens.New(signingKey)
+		if err != nil {
+			return err
+		}
+		registry, _, defs, err := buildRuntime(ctx, snapshot, store.Status().Generation, *configPath, db, instanceKey, tokens, logger)
+		if err != nil {
+			return fmt.Errorf("build runtime: %w", err)
+		}
+		if err = manager.Apply(ctx, defs); err != nil {
+			return fmt.Errorf("start schedules: %w", err)
+		}
+		dynamic := connections.NewDynamic(registry)
+		cfg.Registry = dynamic
+		cfg.Scheduler = manager
+		assetCache, err := assetcache.New(db, 512<<20)
+		if err != nil {
+			return fmt.Errorf("open asset cache: %w", err)
+		}
+		cfg.AssetProxy = &api.AssetProxy{Tokens: tokens, Store: db, Cache: assetCache, Registry: dynamic,
+			Authorize: func(callCtx context.Context, payload assettokens.Payload) (bool, error) {
+				return appcore.AssetAuthorized(callCtx, store.Snapshot(), *configPath, dynamic, payload)
+			}}
+		go reloadRuntime(ctx, store, manager, dynamic, db, instanceKey, tokens, *configPath, logger)
 	}
 
 	srv, err := api.New(cfg)
@@ -183,8 +221,6 @@ func serve(args []string) error {
 		return err
 	}
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
 	if cfg.ConfigStore != nil {
 		go func() {
 			if err := cfg.ConfigStore.Watch(ctx); err != nil && !errors.Is(err, context.Canceled) {
@@ -197,6 +233,59 @@ func serve(args []string) error {
 		return err
 	}
 	return nil
+}
+
+func reloadRuntime(ctx context.Context, store *config.Store, manager *scheduler.Manager, dynamic *connections.Dynamic, db *storage.Store, instanceKey []byte, tokens *assettokens.Service, configPath string, logger *slog.Logger) {
+	var generation = store.Status().Generation
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+		status := store.Status()
+		if !status.OK || status.Generation == generation {
+			continue
+		}
+		snapshot := store.Snapshot()
+		registry, _, defs, err := buildRuntime(ctx, snapshot, status.Generation, configPath, db, instanceKey, tokens, logger)
+		if err != nil {
+			logger.Error("runtime reload rejected", "error", err)
+			continue
+		}
+		if err = manager.Apply(ctx, defs); err != nil {
+			logger.Error("runtime reload rejected", "error", err)
+			continue
+		}
+		dynamic.Swap(registry)
+		generation = status.Generation
+	}
+}
+
+func buildRuntime(ctx context.Context, snapshot *config.Snapshot, generation uint64, configPath string, db *storage.Store, instanceKey []byte, tokens *assettokens.Service, logger *slog.Logger) (connections.Registry, map[string]string, []scheduler.Definition, error) {
+	resolved, diags := secrets.ResolveAll(snapshot.SecretRefs, secrets.DefaultResolver())
+	if diags.HasErrors() {
+		return nil, nil, nil, fmt.Errorf("resolve secrets:\n%s", diags.String())
+	}
+	registry, err := connections.New(snapshot.Config.Connections, resolved, logger)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("build connection registry: %w", err)
+	}
+	material, err := connections.MaterialHMACs(snapshot.Config.Connections, resolved, instanceKey)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	revisions, err := db.SyncConnectionRevisions(ctx, material)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	defs, err := appcore.Definitions(ctx, snapshot, generation, configPath, registry, revisions, tokens, logger)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return registry, revisions, defs, nil
 }
 
 // configLoader is config.Store's Loader for real (non-fixture) configuration: parse, resolve

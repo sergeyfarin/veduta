@@ -1,0 +1,398 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
+// Package scheduler refreshes configured cards independently of connected viewers.
+package scheduler
+
+import (
+	"context"
+	"errors"
+	"hash/fnv"
+	"sort"
+	"strconv"
+	"sync"
+	"time"
+
+	"veduta.dev/veduta/internal/state"
+	"veduta.dev/veduta/internal/storage"
+	"veduta.dev/veduta/internal/widgets"
+)
+
+type RunFunc func(context.Context) (widgets.Document, error)
+
+type Definition struct {
+	ID, Hash, Key, ManifestDigest, ApprovalRevision, SlotRevisions string
+	Refresh, Timeout                                               time.Duration
+	Source                                                         state.Source
+	Run                                                            RunFunc
+	Disabled                                                       state.DisabledReason
+	generation                                                     uint64
+}
+
+type Event struct {
+	ID    uint64
+	State state.CardState
+}
+
+type flight struct {
+	done     chan struct{}
+	doc      widgets.Document
+	err      error
+	duration time.Duration
+}
+
+type Manager struct {
+	store      *storage.Store
+	mu         sync.RWMutex
+	defs       map[string]Definition
+	states     map[string]state.CardState
+	failures   map[string]int
+	openUntil  map[string]time.Time
+	manualAt   map[string]time.Time
+	flights    map[string]*flight
+	subs       map[chan Event]struct{}
+	workers    chan struct{}
+	nextID     uint64
+	generation uint64
+	cancel     context.CancelFunc
+}
+
+var (
+	ErrUnknownCard = errors.New("scheduler: unknown card")
+	ErrRateLimited = errors.New("scheduler: refresh rate limited")
+	ErrSuperseded  = errors.New("scheduler: invocation superseded by a newer configuration")
+)
+
+func New(store *storage.Store) *Manager {
+	return &Manager{store: store, defs: map[string]Definition{}, states: map[string]state.CardState{}, failures: map[string]int{}, openUntil: map[string]time.Time{}, manualAt: map[string]time.Time{}, flights: map[string]*flight{}, subs: map[chan Event]struct{}{}, workers: make(chan struct{}, 8)}
+}
+
+func (m *Manager) Apply(parent context.Context, defs []Definition) error {
+	preparedDefs := make(map[string]Definition, len(defs))
+	preparedStates := make(map[string]state.CardState, len(defs))
+	preparedFailures := make(map[string]int, len(defs))
+	preparedOpen := make(map[string]time.Time, len(defs))
+	for i := range defs {
+		d := defs[i]
+		if d.Refresh <= 0 {
+			d.Refresh = time.Minute
+		}
+		if d.Timeout <= 0 {
+			d.Timeout = 10 * time.Second
+		}
+		if d.ID == "" {
+			return errors.New("scheduler: card id is empty")
+		}
+		if _, exists := preparedDefs[d.ID]; exists {
+			return errors.New("scheduler: duplicate card id " + d.ID)
+		}
+		defs[i] = d
+		preparedDefs[d.ID] = d
+		preparedStates[d.ID] = state.Pending(d.ID)
+		if m.store != nil {
+			if old, ok, err := m.store.GetCardFor(parent, d.ID, storage.CardRecord{CardHash: d.Hash, ManifestDigest: d.ManifestDigest, ApprovalRevision: d.ApprovalRevision, SlotRevisions: d.SlotRevisions}); err != nil {
+				return err
+			} else if ok {
+				preparedStates[d.ID] = restored(old, d.Source)
+				preparedFailures[d.ID] = old.Execution.ConsecutiveFailures
+				preparedOpen[d.ID] = parseTime(old.Execution.CircuitOpenUntil)
+			}
+		}
+	}
+	m.mu.Lock()
+	if m.cancel != nil {
+		m.cancel()
+	}
+	ctx, cancel := context.WithCancel(parent)
+	m.cancel = cancel
+	m.generation++
+	generation := m.generation
+	for id, d := range preparedDefs {
+		d.generation = generation
+		preparedDefs[id] = d
+	}
+	m.defs = preparedDefs
+	m.states = preparedStates
+	m.failures = preparedFailures
+	m.openUntil = preparedOpen
+	m.manualAt = map[string]time.Time{}
+	m.mu.Unlock()
+	for _, d := range preparedDefs {
+		go m.loop(ctx, d)
+	}
+	return nil
+}
+
+func (m *Manager) Close() {
+	m.mu.Lock()
+	if m.cancel != nil {
+		m.cancel()
+	}
+	for ch := range m.subs {
+		close(ch)
+		delete(m.subs, ch)
+	}
+	m.mu.Unlock()
+}
+func (m *Manager) loop(ctx context.Context, d Definition) {
+	for {
+		err := m.refresh(ctx, d)
+		wait := jitter(d.ID, d.Refresh)
+		if err == nil {
+			m.mu.RLock()
+			cs := m.states[d.ID]
+			m.mu.RUnlock()
+			if next := parseTime(cs.Execution.NextRunAt); !next.IsZero() && time.Until(next) < wait {
+				wait = time.Until(next)
+			}
+		}
+		if wait < 0 {
+			wait = 0
+		}
+		t := time.NewTimer(wait)
+		select {
+		case <-ctx.Done():
+			t.Stop()
+			return
+		case <-t.C:
+		}
+	}
+}
+
+func (m *Manager) Refresh(ctx context.Context, id string) error {
+	m.mu.RLock()
+	d, ok := m.defs[id]
+	m.mu.RUnlock()
+	if !ok {
+		return ErrUnknownCard
+	}
+	return m.refresh(ctx, d)
+}
+
+// RefreshNow is the operator-facing refresh path. It is single-flighted by Refresh and also
+// throttled so a browser cannot turn the endpoint into an upstream request loop.
+func (m *Manager) RefreshNow(ctx context.Context, id string) error {
+	m.mu.Lock()
+	d, ok := m.defs[id]
+	if !ok {
+		m.mu.Unlock()
+		return ErrUnknownCard
+	}
+	now := time.Now()
+	if last := m.manualAt[id]; !last.IsZero() && now.Sub(last) < time.Second {
+		m.mu.Unlock()
+		return ErrRateLimited
+	}
+	m.manualAt[id] = now
+	m.mu.Unlock()
+	return m.refresh(ctx, d)
+}
+
+func (m *Manager) refresh(ctx context.Context, d Definition) error {
+	id := d.ID
+	m.mu.RLock()
+	current, exists := m.defs[id]
+	open := m.openUntil[id]
+	m.mu.RUnlock()
+	if !exists || current.generation != d.generation {
+		return ErrSuperseded
+	}
+	if d.Disabled != "" {
+		return m.commit(ctx, d, state.Disabled(id, nil, d.Disabled))
+	}
+	if time.Now().Before(open) {
+		return nil
+	}
+	if d.Run == nil {
+		return m.commit(ctx, d, state.Disabled(id, nil, state.ReasonConfigError))
+	}
+	doc, runErr, dur := m.runShared(ctx, d)
+	if runErr == nil {
+		ttl := d.Refresh
+		if doc.Hints != nil && doc.Hints.TTLSeconds > 0 && time.Duration(doc.Hints.TTLSeconds)*time.Second < ttl {
+			ttl = time.Duration(doc.Hints.TTLSeconds) * time.Second
+		}
+		if ttl < time.Second {
+			ttl = time.Second
+		}
+		m.mu.Lock()
+		m.failures[id] = 0
+		delete(m.openUntil, id)
+		m.mu.Unlock()
+		return m.commit(ctx, d, state.OK(id, doc, d.Source, ttl, dur))
+	}
+	m.mu.Lock()
+	m.failures[id]++
+	failures := m.failures[id]
+	previous := m.states[id]
+	m.mu.Unlock()
+	retry := time.Now().Add(backoff(failures, d.Refresh))
+	re := state.RunError{Code: classify(runErr), Message: runErr.Error(), Retryable: true}
+	if failures >= 3 {
+		open := time.Now().Add(minDuration(5*time.Minute, backoff(failures, d.Refresh)))
+		m.mu.Lock()
+		m.openUntil[id] = open
+		m.mu.Unlock()
+		if previous.Document != nil {
+			return m.commit(ctx, d, state.StaleAfterErrorWithOpenCircuit(id, *previous.Document, d.Source, parseTime(previous.Execution.GeneratedAt), time.Now(), failures, open, re))
+		}
+		return m.commit(ctx, d, state.ErrorWithOpenCircuit(id, d.Source, re, open))
+	}
+	if previous.Document != nil {
+		return m.commit(ctx, d, state.StaleAfterError(id, *previous.Document, d.Source, parseTime(previous.Execution.GeneratedAt), time.Now(), failures, retry, re))
+	}
+	cs := state.Error(id, d.Source, re)
+	cs.Execution.ConsecutiveFailures = failures
+	cs.Execution.NextRunAt = retry.UTC().Format(time.RFC3339Nano)
+	return m.commit(ctx, d, cs)
+}
+
+func (m *Manager) runShared(ctx context.Context, d Definition) (widgets.Document, error, time.Duration) {
+	key := d.Key
+	if key == "" {
+		key = d.ID
+	}
+	key = strconv.FormatUint(d.generation, 10) + ":" + key
+	m.mu.Lock()
+	if f := m.flights[key]; f != nil {
+		m.mu.Unlock()
+		select {
+		case <-ctx.Done():
+			return widgets.Document{}, ctx.Err(), 0
+		case <-f.done:
+			return f.doc, f.err, f.duration
+		}
+	}
+	f := &flight{done: make(chan struct{})}
+	m.flights[key] = f
+	m.mu.Unlock()
+	select {
+	case m.workers <- struct{}{}:
+		defer func() { <-m.workers }()
+	case <-ctx.Done():
+		m.mu.Lock()
+		delete(m.flights, key)
+		f.err = ctx.Err()
+		close(f.done)
+		m.mu.Unlock()
+		return widgets.Document{}, ctx.Err(), 0
+	}
+	start := time.Now()
+	runCtx, cancel := context.WithTimeout(ctx, d.Timeout)
+	f.doc, f.err = d.Run(runCtx)
+	cancel()
+	f.duration = time.Since(start)
+	m.mu.Lock()
+	delete(m.flights, key)
+	close(f.done)
+	m.mu.Unlock()
+	return f.doc, f.err, f.duration
+}
+
+func (m *Manager) commit(ctx context.Context, d Definition, cs state.CardState) error {
+	if err := cs.Validate(); err != nil {
+		return err
+	}
+	m.mu.Lock()
+	current, ok := m.defs[d.ID]
+	if !ok || current.generation != d.generation {
+		m.mu.Unlock()
+		return ErrSuperseded
+	}
+	if m.store != nil {
+		if err := m.store.PutCard(ctx, storage.CardRecord{CardHash: d.Hash, ManifestDigest: d.ManifestDigest, ApprovalRevision: d.ApprovalRevision, SlotRevisions: d.SlotRevisions, State: cs}); err != nil {
+			m.mu.Unlock()
+			return err
+		}
+	}
+	m.states[d.ID] = cs
+	m.nextID++
+	ev := Event{ID: m.nextID, State: cs}
+	for ch := range m.subs {
+		select {
+		case ch <- ev:
+		default:
+			close(ch)
+			delete(m.subs, ch)
+		}
+	}
+	m.mu.Unlock()
+	return nil
+}
+
+func (m *Manager) States() []state.CardState {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	out := make([]state.CardState, 0, len(m.defs))
+	for id := range m.defs {
+		out = append(out, m.states[id])
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].CardID < out[j].CardID })
+	return out
+}
+func (m *Manager) State(id string) (state.CardState, bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	v, ok := m.states[id]
+	return v, ok
+}
+func (m *Manager) Subscribe(buffer int) (<-chan Event, func()) {
+	if buffer < 1 {
+		buffer = 1
+	}
+	ch := make(chan Event, buffer)
+	m.mu.Lock()
+	m.subs[ch] = struct{}{}
+	m.mu.Unlock()
+	return ch, func() {
+		m.mu.Lock()
+		if _, ok := m.subs[ch]; ok {
+			delete(m.subs, ch)
+			close(ch)
+		}
+		m.mu.Unlock()
+	}
+}
+
+func backoff(n int, base time.Duration) time.Duration {
+	if base <= 0 {
+		base = time.Second
+	}
+	for i := 1; i < n && base < time.Hour; i++ {
+		base *= 2
+	}
+	return minDuration(base, time.Hour)
+}
+func minDuration(a, b time.Duration) time.Duration {
+	if a < b {
+		return a
+	}
+	return b
+}
+func parseTime(v string) time.Time { t, _ := time.Parse(time.RFC3339Nano, v); return t }
+func restored(cs state.CardState, source state.Source) state.CardState {
+	if cs.Execution.State == state.StateOK {
+		expires := parseTime(cs.Execution.ExpiresAt)
+		if !expires.IsZero() && !time.Now().Before(expires) && cs.Document != nil {
+			return state.Stale(cs.CardID, *cs.Document, source, parseTime(cs.Execution.GeneratedAt), expires, 0, time.Now())
+		}
+	}
+	return cs
+}
+func classify(err error) state.ErrorCode {
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+		return state.ErrorTimeout
+	}
+	return state.ErrorUpstream
+}
+
+func jitter(id string, base time.Duration) time.Duration {
+	if base <= 0 {
+		return time.Minute
+	}
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(id))
+	// Stable +/-5% jitter avoids a synchronized herd after restart while keeping tests and
+	// operator expectations reproducible.
+	percent := int(h.Sum32()%11) - 5
+	return base + time.Duration(int64(base)*int64(percent)/100)
+}

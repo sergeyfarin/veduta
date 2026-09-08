@@ -87,7 +87,7 @@ func sampleDoc() widgets.Document {
 	return doc
 }
 
-// TestConstructorsProduceSchemaValidEnvelopes is the core B2 guarantee: every one of the seven
+// TestConstructorsProduceSchemaValidEnvelopes is the core B2 guarantee: every public constructor
 // ways to build a CardState produces something that satisfies BOTH card-state.v1's structural
 // schema (including its conditional allOf branches) and the type-level Validate() self-check -
 // two independent enforcements of the same five-state invariant.
@@ -104,7 +104,9 @@ func TestConstructorsProduceSchemaValidEnvelopes(t *testing.T) {
 			2, now.Add(30*time.Second)),
 		"stale-open-circuit": state.StaleWithOpenCircuit("card-1", sampleDoc(), src, now.Add(-10*time.Minute),
 			now.Add(-5*time.Minute), 6, now.Add(2*time.Minute)),
-		"error": state.Error("card-1", src, state.RunError{Code: state.ErrorUpstream, Message: "502", Retryable: true}),
+		"stale-after-error":              state.StaleAfterError("card-1", sampleDoc(), src, now.Add(-10*time.Minute), now.Add(-5*time.Minute), 2, now.Add(time.Minute), state.RunError{Code: state.ErrorUpstream, Message: "down", Retryable: true}),
+		"stale-after-error-open-circuit": state.StaleAfterErrorWithOpenCircuit("card-1", sampleDoc(), src, now.Add(-10*time.Minute), now.Add(-5*time.Minute), 3, now.Add(time.Minute), state.RunError{Code: state.ErrorUpstream, Message: "down", Retryable: true}),
+		"error":                          state.Error("card-1", src, state.RunError{Code: state.ErrorUpstream, Message: "502", Retryable: true}),
 		"error-open-circuit": state.ErrorWithOpenCircuit("card-1", src,
 			state.RunError{Code: state.ErrorUpstream, Message: "502", Retryable: true}, now.Add(2*time.Minute)),
 		"disabled-no-doc": state.Disabled("card-1", nil, state.ReasonUnapproved),

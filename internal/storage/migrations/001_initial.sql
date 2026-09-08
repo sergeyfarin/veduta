@@ -1,0 +1,23 @@
+-- SPDX-License-Identifier: AGPL-3.0-or-later
+CREATE TABLE settings (key TEXT PRIMARY KEY, value BLOB NOT NULL, updated_at TEXT NOT NULL);
+CREATE TABLE users (id TEXT PRIMARY KEY, username TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL, created_at TEXT NOT NULL, last_login_at TEXT);
+CREATE TABLE sessions (id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, csrf_token TEXT NOT NULL, created_at TEXT NOT NULL, expires_at TEXT NOT NULL, last_seen_at TEXT, user_agent TEXT, ip TEXT);
+CREATE INDEX sessions_expires ON sessions(expires_at);
+CREATE TABLE card_state (card_id TEXT PRIMARY KEY, card_hash TEXT NOT NULL, manifest_digest TEXT, approval_revision TEXT, slot_revisions TEXT, envelope BLOB NOT NULL, state TEXT NOT NULL, generated_at TEXT, expires_at TEXT, next_run_at TEXT, updated_at TEXT NOT NULL);
+CREATE INDEX card_state_next_run ON card_state(next_run_at);
+CREATE TABLE signal_history (card_id TEXT NOT NULL, signal TEXT NOT NULL, ts TEXT NOT NULL, value REAL NOT NULL, PRIMARY KEY(card_id,signal,ts)) WITHOUT ROWID;
+CREATE INDEX signal_history_ts ON signal_history(ts);
+CREATE TABLE events (id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT NOT NULL, type TEXT NOT NULL, severity TEXT NOT NULL, source TEXT, card_id TEXT, message TEXT, data BLOB);
+CREATE INDEX events_ts ON events(ts);
+CREATE TABLE plugin_kv (plugin_id TEXT NOT NULL, manifest_digest TEXT NOT NULL, instance_id TEXT NOT NULL, key TEXT NOT NULL, value BLOB NOT NULL, expires_at TEXT, PRIMARY KEY(plugin_id,manifest_digest,instance_id,key)) WITHOUT ROWID;
+CREATE INDEX plugin_kv_expires ON plugin_kv(expires_at);
+CREATE TABLE connection_state (connection_id TEXT PRIMARY KEY, revision TEXT NOT NULL, material_hmac BLOB NOT NULL, rotated_at TEXT NOT NULL, last_health TEXT, last_health_at TEXT);
+CREATE TABLE asset_cache (hash TEXT PRIMARY KEY, connection_id TEXT NOT NULL, content_type TEXT NOT NULL, bytes INTEGER NOT NULL, created_at TEXT NOT NULL, last_access_at TEXT NOT NULL);
+CREATE INDEX asset_cache_lru ON asset_cache(last_access_at);
+CREATE TABLE rule_state (rule_id TEXT PRIMARY KEY, rule_hash TEXT NOT NULL, since TEXT, deadline_at TEXT, last_result TEXT NOT NULL, fired_at TEXT, resolved_at TEXT, suppressed_until TEXT);
+CREATE INDEX rule_state_deadline ON rule_state(deadline_at);
+CREATE TABLE notifications (id INTEGER PRIMARY KEY AUTOINCREMENT, created_at TEXT NOT NULL, channel TEXT NOT NULL, dedupe_key TEXT, payload BLOB NOT NULL, state TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, next_attempt_at TEXT, last_error TEXT);
+CREATE INDEX notifications_pending ON notifications(state,next_attempt_at);
+CREATE UNIQUE INDEX notifications_dedupe ON notifications(dedupe_key) WHERE dedupe_key IS NOT NULL AND state IN ('pending','sending');
+CREATE TABLE audit_log (id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT NOT NULL, actor TEXT, ip TEXT, action TEXT NOT NULL, target TEXT, outcome TEXT NOT NULL, detail BLOB);
+CREATE INDEX audit_ts ON audit_log(ts);

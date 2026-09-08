@@ -1,11 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // Package api serves the HTTP surface. Milestone A3 supplied the foundation - health, build
-// identity, timeouts, structured logging, panic recovery and graceful shutdown. Milestone B5
-// adds GET /dashboard, /cards and /assets/{token}, but only behind the --fixtures dev flag
-// (Config.Fixtures): they serve the checked-in showcase, not real configuration or integrations,
-// which arrive in Phases C to F. Those phases replace the data source behind the same paths;
-// they do not change this file's route table.
+// identity, timeouts, structured logging, panic recovery and graceful shutdown. The same route
+// table serves either checked-in fixtures or the production config/scheduler/asset pipeline.
 package api
 
 import (
@@ -23,6 +20,7 @@ import (
 	"veduta.dev/veduta/internal/config"
 	"veduta.dev/veduta/internal/connections"
 	"veduta.dev/veduta/internal/fixtures"
+	"veduta.dev/veduta/internal/scheduler"
 	"veduta.dev/veduta/internal/state"
 	"veduta.dev/veduta/internal/version"
 	"veduta.dev/veduta/web"
@@ -57,14 +55,11 @@ type Config struct {
 	// Mutually exclusive with Fixtures.
 	ConfigStore *config.Store
 
-	// Registry is the credential boundary (internal/connections, milestone D1) built once from
-	// the snapshot ConfigStore held at startup - milestone D5's admin endpoints are the first
-	// production caller. Known, disclosed limitation: unlike ConfigStore itself, this does not
-	// currently rebuild when the config hot-reloads with different connections (see
-	// docs/03-backlog.md) - Phase F's scheduler is where a live-reloading registry actually
-	// matters, and does not exist yet either. nil disables GET /connections and
-	// POST /connections/{id}/test entirely, the same way a nil ConfigStore disables /dashboard.
-	Registry connections.Registry
+	// Registry is the credential boundary. Production passes a connections.Dynamic whose whole
+	// resolved registry is replaced on accepted config generations. nil disables connection APIs.
+	Registry   connections.Registry
+	Scheduler  *scheduler.Manager
+	AssetProxy *AssetProxy
 }
 
 // errBothFixturesAndConfigStore documents why New refuses to build a server with both set: they
@@ -88,6 +83,7 @@ type Server struct {
 	// in-process race; a concurrent writer in a different process (the CLI, running at the same
 	// moment) is a separate, recorded gap - see docs/03-backlog.md.
 	approveMu sync.Mutex
+	hub       *sseHub
 }
 
 // ErrPublicWithoutAuth is returned when a non-loopback bind is attempted before authentication
@@ -116,6 +112,9 @@ func New(cfg Config) (*Server, error) {
 	}
 
 	s := &Server{cfg: cfg, log: cfg.Logger}
+	if cfg.Scheduler != nil {
+		s.hub = newSSEHub(cfg.Scheduler)
+	}
 	s.http = &http.Server{
 		Addr:              cfg.Listen,
 		Handler:           s.routes(),
@@ -167,9 +166,15 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("GET /api/v1/version", s.handleVersion)
 	if s.cfg.ConfigStore != nil {
 		s.routeConfig(mux)
+		if s.hub != nil {
+			s.routeSSE(mux)
+		}
 		s.routeIntegrations(mux)
 		if s.cfg.Registry != nil {
 			s.routeConnections(mux)
+		}
+		if s.cfg.AssetProxy != nil {
+			s.routeAssets(mux)
 		}
 	}
 
@@ -227,6 +232,10 @@ func (s *Server) routeConfig(mux *http.ServeMux) {
 		writeJSON(w, http.StatusOK, map[string]any{"sections": sections})
 	})
 	mux.HandleFunc("GET /api/v1/cards", func(w http.ResponseWriter, r *http.Request) {
+		if s.cfg.Scheduler != nil {
+			writeJSON(w, http.StatusOK, s.cfg.Scheduler.States())
+			return
+		}
 		snapshot := store.Snapshot()
 		cards := make([]state.CardState, 0)
 		if snapshot != nil {
@@ -238,6 +247,30 @@ func (s *Server) routeConfig(mux *http.ServeMux) {
 		}
 		writeJSON(w, http.StatusOK, cards)
 	})
+	if s.cfg.Scheduler != nil {
+		mux.HandleFunc("GET /api/v1/cards/{id}", func(w http.ResponseWriter, r *http.Request) {
+			cs, ok := s.cfg.Scheduler.State(r.PathValue("id"))
+			if !ok {
+				writeJSON(w, http.StatusNotFound, map[string]string{"error": "no such card"})
+				return
+			}
+			writeJSON(w, http.StatusOK, cs)
+		})
+		mux.HandleFunc("POST /api/v1/cards/{id}/refresh", func(w http.ResponseWriter, r *http.Request) {
+			if err := s.cfg.Scheduler.RefreshNow(r.Context(), r.PathValue("id")); err != nil {
+				status := http.StatusInternalServerError
+				if errors.Is(err, scheduler.ErrUnknownCard) {
+					status = http.StatusNotFound
+				} else if errors.Is(err, scheduler.ErrRateLimited) {
+					status = http.StatusTooManyRequests
+				}
+				writeJSON(w, status, map[string]string{"error": err.Error()})
+				return
+			}
+			cs, _ := s.cfg.Scheduler.State(r.PathValue("id"))
+			writeJSON(w, http.StatusOK, cs)
+		})
+	}
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {

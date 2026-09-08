@@ -13,9 +13,13 @@ priority (which milestone should absorb it, or "before X" for a hard blocker).
 
 ---
 
-## Open
+## Resolved in Phase F/E
 
 ### `api.Config.Registry` is built once at startup and does not follow config hot-reload
+
+Resolved by Phase F: `connections.Dynamic` now swaps a newly resolved registry together with
+new scheduler definitions after every accepted config generation. Old invocations are cancelled
+and generation-fenced, so they cannot publish after the swap.
 
 Found while building D5, which is the first thing to actually construct
 `internal/connections.Registry` in production code at all (D1 through D4 only built and tested it
@@ -36,6 +40,8 @@ registry still do not reload as one coherent generation, and that is this entry,
 Priority: Phase F - a live scheduler is the first thing that actually needs connections to reload
 correctly (a card bound to a newly-added connection has to work without a restart), so building
 the atomic-swap mechanism belongs there rather than being spot-fixed here ahead of a real need.
+
+## Open
 
 ### `manifestload.Limits.CacheEntries` can't represent an explicit zero
 
@@ -125,7 +131,13 @@ path - that part still needs one test per limit, the way `TestBroker_HTTP_Respon
 completed, permanent mitigation, recorded here (per this file's own stated purpose) so the
 trade-off and its reasoning survive even though nothing further is scheduled.
 
+## Resolved in Phase F/E (continued)
+
 ### AssetRef tokens are missing the connection-revision field ("cf") that makes revocation enforceable
+
+Resolved by E1 (the remaining text is the historical finding): the signing key and private material-HMAC key are persisted in `settings`;
+`connection_state` holds opaque random revisions which rotate on resolved material changes; tokens
+carry only that revision; and serving rechecks revision plus current approval.
 
 `internal/capabilities.AssetRef` (D2) mints a token structurally matching
 docs/01-architecture.md section 7's payload, but deliberately omits `cf` (the connection
@@ -138,6 +150,8 @@ memory on every process start, per `NewBroker`'s own doc comment) rather than th
 acceptable for D2's own scope (authorisation), not for E1's (the asset proxy's actual lifecycle).
 Priority: **E1** - `Broker.AssetRef`'s signature does not need to change, only its
 implementation, once `connection_state` and the persisted signing key exist.
+
+## Open (continued)
 
 ### Config: `httpConnection.headers` values are plain strings, not secret-capable
 
@@ -162,7 +176,13 @@ passed. "Any action... configured" remains blocked: `ActionsBlock` renders perma
 until Phase H gives actions a real execution path. Priority: Phase H; extend the same startup guard
 once an enabled action has a real configuration representation.
 
+## Resolved in Phase F/E (continued)
+
 ### `${secret:NAME}` cannot be embedded in a larger string - but Jellyfin's real auth header needs exactly that
+
+Resolved while implementing E/F (the remaining text is the historical finding): `config.SecretRef` is template-aware, every embedded occurrence
+is resolved, and `internal/connections` composes the whole result into one opaque `secrets.Value`.
+The shipped Jellyfin authorization value now sends the resolved token and remains fully redacted.
 
 Found for real, not hypothesised, while smoke-testing C2's resolver against the actual shipped
 `examples/veduta.yaml` end to end for the first time (`config.LoadPath` → `secrets.ResolveAll`).
@@ -194,6 +214,8 @@ work, or replace the shipped Jellyfin example with a connection shape the curren
 actually execute (e.g. a case where the whole auth value is one secret reference) until that
 composition work happens.
 
+## Open (continued)
+
 ### The lock-write race is closed only within one process, not against a concurrent CLI approval
 
 Found in the D2b/D3/D4/D5 review (2026-09), fixed partially: `internal/api.Server` now serialises
@@ -210,6 +232,48 @@ worth closing whenever the lock file gains a real writer abstraction - an OS fil
 ultimately call would close it without either caller needing to know about the other.
 
 ---
+
+### Config publication precedes the rebuilt runtime generation by up to one debounce poll
+
+Phase F now rebuilds resolved secrets, connection revisions, the registry and scheduler definitions
+as one runtime generation, then swaps them. `config.Store` publishes the accepted configuration
+first, however, and `reloadRuntime` observes it on a 500 ms poll. During that short interval the
+dashboard layout can describe the new config while card/connection execution still belongs to the
+previous generation. No old invocation can publish after the scheduler swap (generation fencing),
+and asset checks fail closed, but the API view is not a single atomic config+runtime snapshot yet.
+If runtime composition (for example, lock parsing) fails after config validation, `/config/status`
+also still reports the config generation as valid while the error is present only in logs.
+Priority: before multi-user/auth work makes reload observability more important; replace polling
+with a post-validation generation callback or publish a composed application snapshot.
+
+### Asset format coverage is narrower than the architecture's final allowlist
+
+E1 deliberately trusts byte sniffing plus `image.DecodeConfig`, never an upstream Content-Type.
+The standard-library decoders cover PNG, JPEG and GIF; WebP and AVIF are therefore rejected rather
+than accepted without dimension validation. Allowed transform tokens are validated but 0.1 remains
+pass-through as the architecture permits. Priority: the 0.2 transform milestone - add audited
+decoders/fuzz cases for WebP and AVIF, then implement resize/re-encode for the existing allowlist.
+
+### Asset-cache startup does not reconcile orphan files
+
+E2 detects a corrupt/missing file on lookup and refetches it, but a crash after atomic rename and
+before the SQLite metadata write can leave an unreferenced file in the cache directory. It is
+unreachable and not a correctness/security issue, but it is not counted by LRU eviction. Priority:
+low; add a startup sweep comparing directory names with `asset_cache` rows.
+
+### SSE has a global cap but cannot enforce a per-session cap before sessions exist
+
+F4 caps the process at 128 streams and drops slow consumers without blocking publication. A
+per-session cap requires the session identity introduced by H1; before then there is no honest key
+to count. Priority: H1 - add a session-keyed counter around stream registration.
+
+### S2 real-server validation and the Immich cold-latency acceptance check remain external
+
+The fixture-backed Immich vertical slice now exercises the production declarative scheduler,
+signed proxy and disk cache, and asset safety does not depend on the upstream Content-Type header.
+The repository still has no credentials or live Immich/Jellyfin instances, so
+`hack/capture-upstream-fixtures.sh` and E3's “under 2 s cold” measurement have not been run against
+real servers. Priority: deployment validation before calling the demo production-proven.
 
 ## Resolved
 

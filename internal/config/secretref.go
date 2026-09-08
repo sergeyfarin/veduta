@@ -9,25 +9,27 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// secretRefPattern matches the whole scalar, not a substring: a value is either entirely a
-// secret reference or entirely a literal - "${secret:X} suffix" is a literal string containing
-// that text, not a partial reference, because there is no defined way to redact half a string.
+// secretRefPattern recognises the compact whole-value form; secretRefOccurrencePattern also
+// supports composed credentials such as Jellyfin's `MediaBrowser Token="${secret:KEY}"`.
 var secretRefPattern = regexp.MustCompile(`^\$\{secret:([A-Za-z0-9_]+)\}$`)
+var secretRefOccurrencePattern = regexp.MustCompile(`\$\{secret:([A-Za-z0-9_]+)\}`)
 
-// SecretRef is a config-time reference to a secret: either a literal string or
-// ${secret:NAME}. Resolving NAME to an actual value is milestone C2's job
+// SecretRef is a literal, a whole-value ${secret:NAME}, or a template containing references.
+// Resolving names to actual values is milestone C2's job
 // (internal/secrets) - this package only recognises the syntax and carries it through
 // unresolved, per docs/01-architecture.md section 2 ("values NOT inlined").
 type SecretRef struct {
-	Literal string // set when the scalar was not a ${secret:...} reference
-	Name    string // set when it was; Literal is empty in that case
+	Literal  string   // set when the scalar was not a ${secret:...} reference
+	Name     string   // set when it was; Literal is empty in that case
+	Template string   // set when one or more references are embedded in a larger value
+	Names    []string // referenced names in occurrence order for Template
 }
 
 // IsSecret reports whether this reference names a secret rather than carrying a literal value.
-func (r SecretRef) IsSecret() bool { return r.Name != "" }
+func (r SecretRef) IsSecret() bool { return r.Name != "" || len(r.Names) > 0 }
 
-// UnmarshalYAML recognises ${secret:NAME} in any scalar field typed as SecretRef; everything
-// else is carried through as a literal. A non-scalar node (a mapping or sequence where a string
+// UnmarshalYAML recognises whole or embedded references in any SecretRef scalar; everything else
+// is carried through as a literal. A non-scalar node (a mapping or sequence where a string
 // was expected) is a decode error, same as decoding a bare string field would give.
 func (r *SecretRef) UnmarshalYAML(value *yaml.Node) error {
 	if value.Kind != yaml.ScalarNode {
@@ -39,6 +41,15 @@ func (r *SecretRef) UnmarshalYAML(value *yaml.Node) error {
 	}
 	if m := secretRefPattern.FindStringSubmatch(s); m != nil {
 		*r = SecretRef{Name: m[1]}
+		return nil
+	}
+	matches := secretRefOccurrencePattern.FindAllStringSubmatch(s, -1)
+	if len(matches) > 0 {
+		names := make([]string, 0, len(matches))
+		for _, match := range matches {
+			names = append(names, match[1])
+		}
+		*r = SecretRef{Template: s, Names: names}
 		return nil
 	}
 	*r = SecretRef{Literal: s}

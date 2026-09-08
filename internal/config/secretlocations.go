@@ -31,7 +31,7 @@ func secretLocations(root *yaml.Node, m *merger) []SecretLocation {
 			return
 		}
 		if n.Kind == yaml.ScalarNode {
-			if match := secretRefPattern.FindStringSubmatch(n.Value); match != nil {
+			for _, match := range secretRefOccurrencePattern.FindAllStringSubmatch(n.Value, -1) {
 				out = append(out, SecretLocation{
 					Name: match[1], File: m.fileOf(n), Line: n.Line, Column: n.Column,
 				})

@@ -82,6 +82,24 @@ func TestStoreRapidEditsCoalesce(t *testing.T) {
 	}
 }
 
+func TestStoreReloadsWhenApprovalLockChanges(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "veduta.yaml")
+	writeWatchConfig(t, path, "initial")
+	store, diags := Open(path, nil, nil)
+	if diags.HasErrors() {
+		t.Fatal(diags.String())
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { _ = store.Watch(ctx) }()
+	time.Sleep(50 * time.Millisecond)
+	if err := os.WriteFile(filepath.Join(dir, "veduta.lock.yaml"), []byte("version: 1\nintegrations: {}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	waitForStatus(t, store, func(s Status) bool { return s.Generation == 2 })
+}
+
 func waitForStatus(t *testing.T, store *Store, ready func(Status) bool) {
 	t.Helper()
 	deadline := time.Now().Add(time.Second)

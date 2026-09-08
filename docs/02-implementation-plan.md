@@ -78,7 +78,8 @@ The original plan put this first *and* on the demo critical path while describin
 by security policy rather than by sandbox ergonomics, the broker interface no longer waits on it.
 S1a keeps the early warning; S1b moves next to the code it serves.
 
-### S2 — Upstream reality check: Immich + Jellyfin · 0.5 d · **blocks E1, E3, G4** · **spec pass DONE, live pass outstanding**
+### S2 — Upstream reality check: Immich + Jellyfin · 0.5 d · **blocks real-server E3/G4
+acceptance, not E1 implementation** · **spec pass DONE, live pass outstanding**
 
 Findings and consequences: [docs/spikes/s2-upstream-reality-check.md](spikes/s2-upstream-reality-check.md).
 The specification pass found two defects that would have surfaced in E3 and G4: Immich's
@@ -86,11 +87,11 @@ The specification pass found two defects that would have surfaced in E3 and G4: 
 manifests are corrected. The live pass runs
 [`hack/capture-upstream-fixtures.sh`](../hack/capture-upstream-fixtures.sh) against real servers to
 answer what a specification cannot — chiefly the actual `Content-Type` of an Immich thumbnail,
-which decides whether the asset proxy can compare headers at all. **E1 added to `blocks` in the
-D2b/D3/D4/D5 review (2026-09):** the asset proxy whose content-type guard this line describes is
-E1, not E3 - E1's own Tests line ("non-image content type refused") needs the live pass's finding
-to know whether that guard can compare headers or must sniff exclusively, so E1 depends on the
-live pass having run, not just on E3 (which was the only place this was previously wired).
+which originally appeared to decide whether the asset proxy could compare headers at all.
+**Corrected during E1 implementation:** architecture §7 already says content type is sniffed and
+not trusted. E1 therefore uses bytes plus `image.DecodeConfig` exclusively and safely rejects a
+lying or absent upstream header. The live pass remains essential compatibility/latency validation,
+but is not a sound reason to block the security implementation.
 
 Original scope — against real servers, capture as `testdata/`: Immich `/api/server/statistics`, the metadata search
 payload, and the exact thumbnail endpoint + auth mechanism; Jellyfin's `X-Emby-Authorization`
@@ -1188,7 +1189,9 @@ recorded in docs/03-backlog.md, since nothing before Phase F actually depends on
 
 ### Phase E — Assets and vertical slice #1 (2.5 d)
 
-**E1 · Asset token and proxy endpoint** · 1 d · deps: D2, F1, S2 (F1: see note below - Phase E is
+**E1 · Asset token and proxy endpoint** · 1 d · deps: D2, F1, S2 · **DONE** (the live S2 check is
+still deployment validation, but no longer blocks correctness because response type is always
+sniffed from bytes and never trusted from the upstream header). (F1: see note below - Phase E is
 written before Phase F in this document, but F1's own dependency, A3, only needs A3's
 already-landed HTTP-server portion (F1 adds its own `--data-dir` layout rather than needing A3's
 still-open config-flags work first - see the note below for why this distinction matters), so F1
@@ -1220,7 +1223,7 @@ A3 to add it. `docs/03-backlog.md`'s existing entries for the asset-token signin
 `connection_state` already say "Priority: E1" for this reason; this note makes the dependency
 explicit in the plan itself rather than leaving it implied only in the backlog.
 
-**E2 · Asset disk cache** · 0.5 d · deps: E1, F1
+**E2 · Asset disk cache** · 0.5 d · deps: E1, F1 · **DONE**
 Creates: `internal/storage/assetcache/` (sha256-addressed files, LRU eviction to a byte budget,
 metadata in `asset_cache`). `asset_cache` is one of F1's own §10 tables; now that E1 formally pulls
 F1 forward (see E1's note above), F1 is available by the time E2 starts and the earlier
@@ -1228,7 +1231,8 @@ in-memory-cache fallback is unnecessary.
 Tests: cache hit avoids upstream; eviction respects the budget; corrupt file is re-fetched;
 concurrent requests for the same asset coalesce.
 
-**E3 · Immich integration — VERTICAL SLICE #1** · 1 d · deps: D3, E1, S2, F1 (transitively, via E1 -
+**E3 · Immich integration — VERTICAL SLICE #1** · 1 d · deps: D3, E1, S2, F1 · **DONE in the
+fixture-backed production path; real-server cold-latency validation remains the S2 live pass** (transitively, via E1 -
 not F2/F3: this vertical slice invokes the integration synchronously per request, as the critical
 path in Part 3 already implies by reaching E3 without F2/F3 in the chain; the scheduler's
 single-flight/backoff/circuit-breaker machinery formalises this once F2 lands, it is not a
@@ -1254,7 +1258,7 @@ nowhere in the page source, network tab, or logs.
 
 ### Phase F — Persistence, scheduling, live updates (4 d)
 
-**F1 · SQLite storage and migrations** · 1 d · deps: A3
+**F1 · SQLite storage and migrations** · 1 d · deps: A3 · **DONE**
 Creates: `internal/storage/` (open with WAL/pragmas, embedded forward-only migrations, the thirteen
 tables from §10), `--data-dir` layout.
 Tests: migrations apply on an empty DB and are idempotent; **changing a card's integration,
@@ -1262,7 +1266,7 @@ operation, params or slot bindings changes its `card_hash` and discards the reta
 than displaying the previous card's data; editing a rule expression resets its debounce window**; concurrent readers during a write;
 corrupted DB reports a clear error; the janitor prunes `signal_history` and `events` to their retention.
 
-**F2 · Scheduler** · 1 d · deps: D3, F1
+**F2 · Scheduler** · 1 d · deps: D3, F1 · **DONE**
 Creates: `internal/scheduler/` (per-card jobs, jitter, worker pool, exponential backoff, circuit
 breaker, `ExecutionIdentity` fencing), single-flight keyed by
 `sha256(integration id + version/digest, operation, sorted slot→(connection id + revision) map, canonical params)`.
@@ -1276,7 +1280,7 @@ schedules rebuild on a config swap without losing state; deadline overrun cancel
 **a card referenced by a rule keeps its schedule with no SSE client connected for an hour** — the
 regression test for the round-2 idle-pause contradiction (T1).
 
-**F3 · Card state and stale-while-revalidate** · 1 d · deps: F1, F2, B2
+**F3 · Card state and stale-while-revalidate** · 1 d · deps: F1, F2, B2 · **DONE**
 Creates: `internal/state/` persisting the `CardState` envelope, `GET /api/v1/cards`,
 `GET /api/v1/cards/{id}`, `POST /cards/{id}/refresh` (rate-limited, single-flighted).
 Tests: a failed run keeps the previous document and sets `execution.state=stale` with the new error;
@@ -1288,7 +1292,8 @@ always core-stamped even when the document contains a conflicting value; **a pro
 every state the store can emit satisfies the state-combination invariants** in the schema.
 AC: after a restart the dashboard renders last-known-good data immediately, visibly marked stale.
 
-**F4 · SSE hub and live frontend** · 1.5 d · deps: F3, B3
+**F4 · SSE hub and live frontend** · 1.5 d · deps: F3, B3 · **DONE except the per-session
+cap, which is deferred to H1 because no session identity exists yet**
 Creates: `internal/api/sse.go` (hub, per-session and global caps, 20 s heartbeat, 256-entry replay
 ring, `Last-Event-ID`, `X-Accel-Buffering: no`), `web/src/lib/stream.ts` (store, backoff reconnect,
 connection indicator).

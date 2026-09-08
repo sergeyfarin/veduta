@@ -4,10 +4,7 @@ package capabilities
 
 import (
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/base64"
-	"encoding/json"
+	"encoding/hex"
 	"fmt"
 	"net/url"
 	"regexp"
@@ -15,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	assettokens "veduta.dev/veduta/internal/capabilities/assets"
 	"veduta.dev/veduta/internal/connections/routepath"
 )
 
@@ -23,21 +21,6 @@ const defaultAssetRefTTL = 24 * time.Hour
 
 // transformPattern is docs/01-architecture.md section 7's own grammar for the "t" payload field.
 var transformPattern = regexp.MustCompile(`^(w=(160|320|640|1280))?(,f=(webp|jpeg))?$`)
-
-// assetRefPayload mirrors docs/01-architecture.md section 7's mint payload. Deliberately missing
-// "cf" (connection revision): that field is what makes "reject tokens for materially changed
-// connections" enforceable, and it depends on connection_state - persisted revisions this
-// package cannot create yet, because no storage layer exists before milestone E1. Recorded here,
-// not silently done without: docs/03-backlog.md carries the gap.
-type assetRefPayload struct {
-	V   int    `json:"v"`
-	C   string `json:"c"`
-	P   string `json:"p"`
-	Q   string `json:"q,omitempty"`
-	T   string `json:"t,omitempty"`
-	PL  string `json:"pl"`
-	Exp int64  `json:"exp"`
-}
 
 // AssetRef implements Broker. Preamble: capability, slot, route authorisation against UseAsset
 // specifically (never UseData - see the type's own doc comment: without this split, a route
@@ -70,16 +53,16 @@ func (b *broker) AssetRef(ctx context.Context, g Grant, slot, path string, query
 		return "", err
 	}
 
-	payload := assetRefPayload{
-		V:   1,
-		C:   connID,
-		P:   canonicalPath,
-		Q:   canonicalQuery(query),
-		T:   transformString(t),
-		PL:  g.PluginID + "@" + g.Version,
-		Exp: time.Now().Add(defaultAssetRefTTL).Unix(),
+	revision := g.Ident.SlotRevisions[slot]
+	if revision == "" {
+		revision = hex.EncodeToString(b.fallbackRevision[:])
 	}
-	return b.signToken(payload)
+	payload := assettokens.Payload{
+		V: 1, Connection: connID, ConnectionRevision: revision, Path: canonicalPath,
+		Query: canonicalQuery(query), Transform: transformString(t),
+		Plugin: g.PluginID + "@" + g.Version, Expires: time.Now().Add(defaultAssetRefTTL).Unix(),
+	}
+	return b.assets.Mint(payload)
 }
 
 func firstValues(q url.Values) map[string]string {
@@ -134,18 +117,4 @@ func validateTransform(t Transform) error {
 		return fmt.Errorf("capabilities: transform %+v is not in the allowlist (widths 160/320/640/1280, formats webp/jpeg)", t)
 	}
 	return nil
-}
-
-// signToken implements docs/01-architecture.md section 7's token format exactly:
-// base64url(payload) + "." + base64url(HMAC-SHA256(key, base64url(payload))).
-func (b *broker) signToken(payload assetRefPayload) (string, error) {
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return "", err
-	}
-	encodedPayload := base64.RawURLEncoding.EncodeToString(body)
-	mac := hmac.New(sha256.New, b.signingKey[:])
-	mac.Write([]byte(encodedPayload))
-	sig := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
-	return encodedPayload + "." + sig, nil
 }

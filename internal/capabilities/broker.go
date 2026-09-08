@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"time"
 
+	assettokens "veduta.dev/veduta/internal/capabilities/assets"
 	"veduta.dev/veduta/internal/connections"
 )
 
@@ -27,25 +28,32 @@ type Broker interface {
 }
 
 type broker struct {
-	registry   connections.Registry
-	cache      Cache
-	audit      Audit
-	logger     *slog.Logger
-	signingKey [32]byte // ephemeral, process-lifetime only - see AssetRef's own doc comment
+	registry         connections.Registry
+	cache            Cache
+	audit            Audit
+	logger           *slog.Logger
+	assets           *assettokens.Service
+	fallbackRevision [16]byte
 }
 
-// NewBroker builds a Broker. The asset-ref signing key is generated fresh on every process
-// start, in memory only: a persisted, instance-keyed one (so tokens survive a restart) is
-// milestone E1's job, once settings/connection_state storage exists at all
-// (docs/01-architecture.md section 7). Until then, every restart invalidates outstanding asset
-// refs - acceptable for D2's own scope, which is authorisation, not the asset proxy's lifecycle.
+// NewBroker builds a standalone Broker with an ephemeral asset authority for tests and isolated
+// runtimes. Production uses NewBrokerWithAssets with the key persisted by storage.
 func NewBroker(registry connections.Registry, cache Cache, audit Audit, logger *slog.Logger) Broker {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	b := &broker{registry: registry, cache: cache, audit: audit, logger: logger}
-	if _, err := rand.Read(b.signingKey[:]); err != nil {
+	b := &broker{registry: registry, cache: cache, audit: audit, logger: logger, assets: assettokens.NewEphemeral()}
+	if _, err := rand.Read(b.fallbackRevision[:]); err != nil {
 		panic("capabilities: could not generate a signing key: " + err.Error()) // no crypto/rand means nothing here can be trusted
+	}
+	return b
+}
+
+// NewBrokerWithAssets uses the persisted asset-token authority owned by the application.
+func NewBrokerWithAssets(registry connections.Registry, cache Cache, audit Audit, logger *slog.Logger, service *assettokens.Service) Broker {
+	b := NewBroker(registry, cache, audit, logger).(*broker)
+	if service != nil {
+		b.assets = service
 	}
 	return b
 }

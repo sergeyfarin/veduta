@@ -9,6 +9,7 @@
   import { isStale, isError, isDisabled, isPending, type CardState as CardEnvelope } from './lib/types/cardstate';
   import type { Dashboard } from './lib/types/dashboard';
   import type { BuildInfo, CardState as CardVisualState } from './lib/types';
+  import { connectCardStream, type StreamStatus } from './lib/stream';
 
   /**
    * The real render path (milestone B5): GET /dashboard supplies layout (sections, card
@@ -22,6 +23,7 @@
   let dashboard = $state<Dashboard | null>(null);
   let cardsById = $state<Map<string, CardEnvelope>>(new Map());
   let loadError = $state<string | null>(null);
+  let streamStatus = $state<StreamStatus>('connecting');
 
   $effect(() => {
     apply(theme);
@@ -53,6 +55,25 @@
       });
   });
 
+  async function reloadCards() {
+    const response = await fetch('/api/v1/cards');
+    if (!response.ok) throw new Error(`GET /cards: HTTP ${response.status}`);
+    const cards = (await response.json()) as CardEnvelope[];
+    cardsById = new Map(cards.map((card) => [card.cardId, card]));
+  }
+
+  $effect(() => connectCardStream(
+    (card) => {
+      const nextCards = new Map(cardsById);
+      nextCards.set(card.cardId, card);
+      cardsById = nextCards;
+    },
+    () => { void reloadCards().catch((error: unknown) => {
+      loadError = error instanceof Error ? error.message : String(error);
+    }); },
+    (status) => { streamStatus = status; }
+  ));
+
   // disabledReason is core-owned and machine-readable (schemas/card-state.v1); this is the one
   // place it becomes the sentence a person reads on the card.
   const disabledReasonText: Record<string, string> = {
@@ -71,6 +92,7 @@
 <div class="page">
   <header class="topbar">
     <h1>Home</h1>
+    <span class="connection" data-status={streamStatus}>{streamStatus}</span>
     <span class="spacer"></span>
     <button onclick={() => (theme = next(theme))}>
       Theme: {theme}
@@ -152,6 +174,10 @@
   }
   .spacer {
     flex: 1;
+  }
+  .connection {
+    color: var(--v-muted);
+    font-size: 11px;
   }
   button {
     border: 1px solid var(--v-border);

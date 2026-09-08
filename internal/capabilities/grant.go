@@ -46,6 +46,13 @@ func NewGrant(pluginID, version, instanceID string, slots map[string]string, cap
 	}
 }
 
+// Fresh returns the same immutable authority with new per-invocation counters. A scheduler may
+// retain a Grant template between runs, but budgets are never allowed to leak across invocations.
+func (g Grant) Fresh() Grant {
+	g.budget = &budgetState{}
+	return g
+}
+
 // budgetState is the mutable per-invocation counters a Grant's pointer shares across every
 // broker call made with it. Guarded by a mutex: a single invocation is normally sequential, but
 // nothing here assumes it can never be called concurrently (a future async pipeline step, say).

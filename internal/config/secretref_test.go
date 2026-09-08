@@ -42,16 +42,10 @@ func TestSecretRef_Reference(t *testing.T) {
 	}
 }
 
-// TestSecretRef_PartialIsLiteral: the pattern must match the WHOLE scalar. A value that merely
-// contains the syntax as a substring is a literal string, because there is no defined way to
-// redact half a string - see the comment on secretRefPattern.
-func TestSecretRef_PartialIsLiteral(t *testing.T) {
+func TestSecretRef_EmbeddedTemplate(t *testing.T) {
 	r := decodeSecretRef(t, `"prefix ${secret:X} suffix"`)
-	if r.IsSecret() {
-		t.Fatal("a partial match must be a literal, not a secret reference")
-	}
-	if r.Literal != "prefix ${secret:X} suffix" {
-		t.Fatalf("Literal = %q", r.Literal)
+	if !r.IsSecret() || r.Template != "prefix ${secret:X} suffix" || len(r.Names) != 1 || r.Names[0] != "X" {
+		t.Fatalf("template = %#v", r)
 	}
 }
 

@@ -25,14 +25,18 @@ var pathHandlingCalls = regexp.MustCompile(`\b(path\.(?:Join|Clean|Split)|filepa
 // files - a completely different kind of "path"), or the embedded SPA's own static-file
 // traversal guard (serving this binary's OWN bundled frontend assets, not a connection).
 var routepathAllowlist = map[string]string{
-	filepath.Join("internal", "api", "static.go"):            "SPA static file serving (embedded frontend assets) - not a connection's route",
-	filepath.Join("internal", "config", "load.go"):           "local filesystem paths: the config file and its conf.d directory",
-	filepath.Join("internal", "config", "watch.go"):          "local filesystem paths: the watched config file and conf.d directory",
-	filepath.Join("internal", "secrets", "provider.go"):      "local filesystem path: the file: secret provider's own directory",
-	filepath.Join("internal", "integrations", "manifest.go"): "local filesystem path: an integration's manifest.yaml/.yml on disk",
-	filepath.Join("internal", "integrations", "source.go"):   "local filesystem path: resolving a `path:` integration source against the config directory",
-	filepath.Join("internal", "api", "integrations.go"):      "local filesystem paths: veduta.lock.yaml's location next to the primary config file",
-	filepath.Join("cmd", "veduta", "integration.go"):         "local filesystem paths: veduta.lock.yaml's location next to the primary config file",
+	filepath.Join("internal", "api", "static.go"):                  "SPA static file serving (embedded frontend assets) - not a connection's route",
+	filepath.Join("internal", "config", "load.go"):                 "local filesystem paths: the config file and its conf.d directory",
+	filepath.Join("internal", "config", "watch.go"):                "local filesystem paths: the watched config file and conf.d directory",
+	filepath.Join("internal", "secrets", "provider.go"):            "local filesystem path: the file: secret provider's own directory",
+	filepath.Join("internal", "integrations", "manifest.go"):       "local filesystem path: an integration's manifest.yaml/.yml on disk",
+	filepath.Join("internal", "integrations", "source.go"):         "local filesystem path: resolving a `path:` integration source against the config directory",
+	filepath.Join("internal", "api", "integrations.go"):            "local filesystem paths: veduta.lock.yaml's location next to the primary config file",
+	filepath.Join("cmd", "veduta", "integration.go"):               "local filesystem paths: veduta.lock.yaml's location next to the primary config file",
+	filepath.Join("internal", "storage", "storage.go"):             "local filesystem path: the SQLite data directory and database file",
+	filepath.Join("internal", "app", "runtime.go"):                 "local filesystem paths: integration manifest and lock files next to the config",
+	filepath.Join("internal", "app", "assets.go"):                  "local filesystem paths: current integration manifest and lock files used for revocation checks",
+	filepath.Join("internal", "storage", "assetcache", "cache.go"): "local filesystem path: content-addressed asset cache files",
 }
 
 // TestRoutepathBoundary is D1b's own AC: "no other package in the tree performs path comparison

@@ -1,0 +1,186 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
+package scheduler_test
+
+import (
+	"context"
+	"errors"
+	"sync/atomic"
+	"testing"
+	"time"
+	"veduta.dev/veduta/internal/scheduler"
+	"veduta.dev/veduta/internal/state"
+	"veduta.dev/veduta/internal/widgets"
+)
+
+func TestSharedFlightAndViewerIndependentScheduling(t *testing.T) {
+	m := scheduler.New(nil)
+	defer m.Close()
+	var calls atomic.Int32
+	release := make(chan struct{})
+	run := func(context.Context) (widgets.Document, error) {
+		calls.Add(1)
+		<-release
+		return widgets.Document{Blocks: []widgets.Block{}}, nil
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	defs := make([]scheduler.Definition, 10)
+	for i := range defs {
+		defs[i] = scheduler.Definition{ID: string(rune('a' + i)), Hash: string(rune('a' + i)), Key: "same", Refresh: time.Hour, Timeout: time.Second, Source: state.Source{}, Run: run}
+	}
+	if err := m.Apply(ctx, defs); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(30 * time.Millisecond)
+	close(release)
+	time.Sleep(30 * time.Millisecond)
+	if calls.Load() != 1 {
+		t.Fatalf("calls=%d want 1", calls.Load())
+	}
+}
+
+func TestFailureKeepsLastGoodThenOpensCircuit(t *testing.T) {
+	m := scheduler.New(nil)
+	defer m.Close()
+	var fail atomic.Bool
+	run := func(context.Context) (widgets.Document, error) {
+		if fail.Load() {
+			return widgets.Document{}, errors.New("down")
+		}
+		return widgets.Document{Blocks: []widgets.Block{}}, nil
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := m.Apply(ctx, []scheduler.Definition{{ID: "a", Hash: "a", Refresh: time.Hour, Timeout: time.Second, Run: run}}); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(20 * time.Millisecond)
+	fail.Store(true)
+	for range 3 {
+		_ = m.Refresh(ctx, "a")
+	}
+	cs, _ := m.State("a")
+	if cs.Execution.State != state.StateStale || cs.Execution.CircuitOpenUntil == "" {
+		t.Fatalf("state=%+v", cs.Execution)
+	}
+	if cs.Execution.Error == nil || cs.Execution.Error.Message != "down" {
+		t.Fatalf("latest error missing from stale state: %+v", cs.Execution.Error)
+	}
+}
+
+func TestConfigSwapFencesAnOldInvocation(t *testing.T) {
+	m := scheduler.New(nil)
+	defer m.Close()
+	ctx := context.Background()
+	started := make(chan struct{})
+	release := make(chan struct{})
+	oldRun := func(context.Context) (widgets.Document, error) {
+		close(started)
+		<-release
+		return widgets.Document{Blocks: []widgets.Block{}}, nil
+	}
+	if err := m.Apply(ctx, []scheduler.Definition{{ID: "a", Hash: "old", Key: "old", Refresh: time.Hour, Run: oldRun}}); err != nil {
+		t.Fatal(err)
+	}
+	<-started
+	if err := m.Apply(ctx, []scheduler.Definition{{ID: "a", Hash: "new", Key: "new", Refresh: time.Hour, Run: func(context.Context) (widgets.Document, error) {
+		return widgets.Document{Blocks: []widgets.Block{}}, nil
+	}}}); err != nil {
+		t.Fatal(err)
+	}
+	close(release)
+	deadline := time.Now().Add(time.Second)
+	for {
+		cs, _ := m.State("a")
+		if cs.Execution.State == state.StateOK {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("new invocation did not commit: %+v", cs)
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
+func TestDeadlineCancelsInvocation(t *testing.T) {
+	m := scheduler.New(nil)
+	defer m.Close()
+	ctx := context.Background()
+	if err := m.Apply(ctx, []scheduler.Definition{{ID: "a", Hash: "a", Refresh: time.Hour, Timeout: 10 * time.Millisecond, Run: func(ctx context.Context) (widgets.Document, error) {
+		<-ctx.Done()
+		return widgets.Document{}, ctx.Err()
+	}}}); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(time.Second)
+	for {
+		cs, _ := m.State("a")
+		if cs.Execution.State == state.StateError {
+			if cs.Execution.Error.Code != state.ErrorTimeout {
+				t.Fatalf("code=%s", cs.Execution.Error.Code)
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("deadline did not surface")
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
+func TestManualRefreshIsRateLimited(t *testing.T) {
+	m := scheduler.New(nil)
+	defer m.Close()
+	ctx := context.Background()
+	release := make(chan struct{})
+	var once atomic.Bool
+	if err := m.Apply(ctx, []scheduler.Definition{{ID: "a", Hash: "a", Refresh: time.Hour, Run: func(context.Context) (widgets.Document, error) {
+		if !once.Swap(true) {
+			<-release
+		}
+		return widgets.Document{Blocks: []widgets.Block{}}, nil
+	}}}); err != nil {
+		t.Fatal(err)
+	}
+	close(release)
+	time.Sleep(5 * time.Millisecond)
+	if err := m.RefreshNow(ctx, "a"); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.RefreshNow(ctx, "a"); !errors.Is(err, scheduler.ErrRateLimited) {
+		t.Fatalf("err=%v", err)
+	}
+}
+
+func TestCircuitActuallyRunsHalfOpenProbeAndCloses(t *testing.T) {
+	m := scheduler.New(nil)
+	defer m.Close()
+	var calls atomic.Int32
+	if err := m.Apply(context.Background(), []scheduler.Definition{{ID: "probe", Hash: "probe", Refresh: time.Millisecond, Timeout: time.Second, Run: func(context.Context) (widgets.Document, error) {
+		if calls.Add(1) <= 3 {
+			return widgets.Document{}, errors.New("down")
+		}
+		return widgets.Document{Blocks: []widgets.Block{}}, nil
+	}}}); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(time.Second)
+	sawOpen := false
+	for {
+		cs, _ := m.State("probe")
+		if cs.Execution.CircuitOpenUntil != "" {
+			sawOpen = true
+		}
+		if sawOpen && cs.Execution.State == state.StateOK {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("half-open probe did not recover: calls=%d state=%+v", calls.Load(), cs.Execution)
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if calls.Load() < 4 {
+		t.Fatalf("calls=%d want three failures plus a probe", calls.Load())
+	}
+}
