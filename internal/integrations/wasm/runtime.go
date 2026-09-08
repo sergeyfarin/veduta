@@ -15,6 +15,8 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -230,14 +232,19 @@ func preflight(ctx context.Context, code []byte, config wazero.RuntimeConfig) er
 		"load_u8": true, "load_u64": true, "store_u8": true, "store_u64": true,
 		"input_length": true, "input_load_u8": true, "input_load_u64": true,
 		"output_set": true, "error_set": true}
+	var forbidden []string
 	for _, f := range m.ImportedFunctions() {
 		module, name, _ := f.Import()
 		if module == hostNamespace && hostFunctionNames[name] {
 			continue
 		}
 		if module != "extism:host/env" || !allowed[name] {
-			return fmt.Errorf("wasm: forbidden import %s.%s", module, name)
+			forbidden = append(forbidden, module+"."+name)
 		}
+	}
+	if len(forbidden) > 0 {
+		sort.Strings(forbidden)
+		return fmt.Errorf("wasm: forbidden imports: %s", strings.Join(forbidden, ", "))
 	}
 	if len(m.ImportedMemories()) != 0 {
 		return errors.New("wasm: imported memory is forbidden")

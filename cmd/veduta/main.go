@@ -8,6 +8,7 @@
 //	veduta integration list             show every declared integration's lock status
 //	veduta integration diff <id>        print the permission diff since the last approval
 //	veduta integration approve <id>     review the diff and record approval in veduta.lock.yaml
+//	veduta plugin validate <file.wasm>   run sandbox and ABI conformance checks
 //	veduta --check-config [--config path]   validate a config file and print diagnostics
 //
 // Until authentication lands (milestone H1) the server refuses to bind a non-loopback address,
@@ -66,8 +67,10 @@ func run(args []string) error {
 		return manifestCmd(args)
 	case "integration":
 		return integrationCmd(args)
+	case "plugin":
+		return pluginCmd(args)
 	default:
-		return fmt.Errorf("unknown command %q (try: serve, version, manifest, integration)", cmd)
+		return fmt.Errorf("unknown command %q (try: serve, version, manifest, integration, plugin)", cmd)
 	}
 }
 

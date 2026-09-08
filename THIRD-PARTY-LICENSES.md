@@ -61,4 +61,16 @@ Build-time only; nothing here is shipped inside the Go binary except the compile
 | `concurrently` | MIT |
 | `@playwright/test` | Apache-2.0 |
 
-A generated `THIRD-PARTY-NOTICES.md` covering the shipped frontend bundle is a release task (L4).
+## Rust plugin SDK and first-party plugins
+
+These dependencies are compiled into the Apache-2.0 WASM examples and
+first-party plugins, not into the Go host.
+
+| Crate | Licence |
+| --- | --- |
+| `extism-pdk` | BSD-3-Clause |
+| `serde` | MIT OR Apache-2.0 |
+| `serde_json` | MIT OR Apache-2.0 |
+
+A generated `THIRD-PARTY-NOTICES.md` covering the shipped frontend bundle and
+the complete locked Rust dependency graph is a release task (L4).

@@ -42,6 +42,22 @@ jobs:
           version: v2.13.2
           install-mode: goinstall
 
+  plugin-sdk:
+    name: Rust plugin SDK and example
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.27'
+      # rust-toolchain.toml pins the compiler and installs the WASM target.
+      - run: rustup show
+      - run: cargo fmt --manifest-path sdk/rust/Cargo.toml --check
+      - run: cargo fmt --manifest-path plugins/examples/hello/Cargo.toml --check
+      - run: cargo test --manifest-path sdk/rust/Cargo.toml
+      - run: make -C plugins verify
+      - run: go run ./cmd/veduta plugin validate plugins/examples/hello/hello.wasm
+
   web:
     name: Frontend build
     runs-on: ubuntu-latest

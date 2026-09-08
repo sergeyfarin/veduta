@@ -50,8 +50,16 @@ a guest compiler or downloaded binaries. The tests cover forbidden imports, pin
 mismatches, corrupted/oversized modules, path escapes, deadline kills, memory and
 output ceilings, document validation, isolated concurrent calls and lifecycle.
 
-Remaining phase boundaries: plugin SDKs and build recipes belong to G3; Jellyfin and application
-runtime selection/lifecycle wiring belong to
+G3 resolved the remaining guest-language question in favor of Rust. The stock Go Extism guest
+measured 4.3 MiB, took about five seconds to cold-validate on the development host, and required
+17 WASI imports. The Rust guest measured about 250 KiB, validated in under a second, and required
+no WASI imports. Veduta therefore keeps the strict no-WASI profile, ships the Rust SDK, and defers
+a Go guest SDK until a maintained WASI-free toolchain meets the same limits. Restricted WASI and a
+custom Go PDK were both rejected as extra sandbox or maintenance surface. This guest decision does
+not justify rewriting the host; `docs/decisions/0001-backend-language.md` records that separate
+review.
+
+Remaining phase boundaries: Jellyfin and application runtime selection/lifecycle wiring belong to
 the G4 vertical slice. This decision does **not** claim the original S1a hardware
 acceptance: ARM cold/warm timings, Pi RSS measurements and guest toolchain size
 comparisons still require the target hardware. Cross-compilation alone cannot

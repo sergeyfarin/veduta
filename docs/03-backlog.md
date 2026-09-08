@@ -43,6 +43,19 @@ the atomic-swap mechanism belongs there rather than being spot-fixed here ahead 
 
 ## Open
 
+### Go plugin SDK requires a maintained WASI-free toolchain
+
+Found during G3. The stock Go Extism guest was 4.3 MiB, took about five seconds
+to cold-validate on the development host, and imported 17 WASI functions. That
+conflicts with S1's strict no-WASI sandbox and the size/latency goals for
+Pi-class hosts. Enabling WASI only for this toolchain would widen the sandbox,
+while owning a custom PDK would create an ongoing compiler/ABI maintenance
+burden. G3 therefore ships Rust as the supported guest language. Priority: low,
+revisit when an official or maintained Go PDK can emit `wasm32-unknown-unknown`
+with no forbidden imports and passes the G1 conformance suite plus S1a ARM
+budgets. The Go backend is a separate decision and remains in place; see
+`docs/decisions/0001-backend-language.md`.
+
 ### `manifestload.Limits.CacheEntries` can't represent an explicit zero
 
 Found reviewing D3. `manifestload.Limits` (and the `rawManifest`/lock-derived construction in

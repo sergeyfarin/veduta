@@ -16,6 +16,7 @@ import (
 var expectedSPDX = map[string]string{
 	"cmd":      "AGPL-3.0-or-later",
 	"internal": "AGPL-3.0-or-later",
+	"plugins":  "Apache-2.0",
 	"sdk":      "Apache-2.0",
 }
 
@@ -27,8 +28,17 @@ func TestSourceFilesCarrySPDXHeaders(t *testing.T) {
 			continue
 		}
 		err := filepath.WalkDir(base, func(path string, d os.DirEntry, err error) error {
-			if err != nil || d.IsDir() || !strings.HasSuffix(path, ".go") {
+			if err != nil {
 				return err
+			}
+			if d.IsDir() {
+				if d.Name() == "target" {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			if ext := filepath.Ext(path); ext != ".go" && ext != ".rs" {
+				return nil
 			}
 			body, err := os.ReadFile(path)
 			if err != nil {

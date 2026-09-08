@@ -1,0 +1,15 @@
+[package]
+name = "veduta-hello"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+extism-pdk = "=1.4.1"
+serde_json = "1.0"
+veduta-sdk = { path = "../../../sdk/rust" }
+
+[workspace]
