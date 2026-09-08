@@ -8,6 +8,7 @@ import (
 	"sync"
 	"testing"
 	"time"
+
 	"veduta.dev/veduta/internal/scheduler"
 	"veduta.dev/veduta/internal/state"
 	"veduta.dev/veduta/internal/widgets"

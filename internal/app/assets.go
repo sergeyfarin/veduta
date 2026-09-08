@@ -53,7 +53,7 @@ func AssetAuthorized(_ context.Context, snap *config.Snapshot, configPath string
 	}
 	query, err := url.ParseQuery(p.Query)
 	if err != nil {
-		return false, nil
+		return false, err
 	}
 	for _, section := range snap.Config.Sections {
 		for _, card := range section.Cards {

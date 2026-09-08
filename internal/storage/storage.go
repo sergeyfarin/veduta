@@ -29,11 +29,13 @@ import (
 //go:embed migrations/*.sql
 var migrations embed.FS
 
+// Store owns Veduta's SQLite database and data directory.
 type Store struct {
 	db      *sql.DB
 	dataDir string
 }
 
+// Open creates or opens a store and applies all pending migrations.
 func Open(ctx context.Context, dataDir string) (*Store, error) {
 	if dataDir == "" {
 		dataDir = "data"
@@ -66,8 +68,13 @@ func Open(ctx context.Context, dataDir string) (*Store, error) {
 	return s, nil
 }
 
-func (s *Store) Close() error    { return s.db.Close() }
-func (s *Store) DB() *sql.DB     { return s.db }
+// Close closes the database.
+func (s *Store) Close() error { return s.db.Close() }
+
+// DB returns the underlying database for specialised package-level stores.
+func (s *Store) DB() *sql.DB { return s.db }
+
+// DataDir returns the directory that contains persistent Veduta data.
 func (s *Store) DataDir() string { return s.dataDir }
 
 func (s *Store) migrate(ctx context.Context) error {
@@ -116,6 +123,7 @@ func (s *Store) migrate(ctx context.Context) error {
 	return nil
 }
 
+// DefinitionHash returns the stable SHA-256 identity of a JSON-marshalable definition.
 func DefinitionHash(v any) (string, error) {
 	b, err := json.Marshal(v)
 	if err != nil {
@@ -129,11 +137,13 @@ func sha256sum(b []byte) [32]byte { // kept here so definition hashes share one 
 	return sha256.Sum256(b)
 }
 
+// CardRecord combines rendered state with every input that controls its validity.
 type CardRecord struct {
 	CardHash, ManifestDigest, ApprovalRevision, SlotRevisions string
 	State                                                     state.CardState
 }
 
+// PutCard validates and persists a card state.
 func (s *Store) PutCard(ctx context.Context, r CardRecord) error {
 	if err := r.State.Validate(); err != nil {
 		return err
@@ -147,6 +157,7 @@ func (s *Store) PutCard(ctx context.Context, r CardRecord) error {
 	return err
 }
 
+// GetCard restores a card only when its configuration hash still matches.
 func (s *Store) GetCard(ctx context.Context, id, cardHash string) (state.CardState, bool, error) {
 	return s.GetCardFor(ctx, id, CardRecord{CardHash: cardHash})
 }
@@ -183,6 +194,7 @@ func (s *Store) GetCardFor(ctx context.Context, id string, expected CardRecord) 
 	return out, true, nil
 }
 
+// Setting returns a persistent random byte setting, creating it when absent.
 func (s *Store) Setting(ctx context.Context, key string, size int) ([]byte, error) {
 	var value []byte
 	err := s.db.QueryRowContext(ctx, `SELECT value FROM settings WHERE key=?`, key).Scan(&value)
@@ -263,6 +275,7 @@ func (s *Store) SyncConnectionRevisions(ctx context.Context, materialHMACs map[s
 	return out, nil
 }
 
+// ConnectionRevision returns the current public revision for a connection.
 func (s *Store) ConnectionRevision(ctx context.Context, id string) (string, bool, error) {
 	var revision string
 	err := s.db.QueryRowContext(ctx, `SELECT revision FROM connection_state WHERE connection_id=?`, id).Scan(&revision)
@@ -272,6 +285,7 @@ func (s *Store) ConnectionRevision(ctx context.Context, id string) (string, bool
 	return revision, err == nil, err
 }
 
+// Prune removes retention-bound records older than before.
 func (s *Store) Prune(ctx context.Context, before time.Time) error {
 	for _, q := range []string{`DELETE FROM signal_history WHERE ts < ?`, `DELETE FROM events WHERE ts < ?`, `DELETE FROM plugin_kv WHERE expires_at IS NOT NULL AND expires_at < ?`} {
 		if _, err := s.db.ExecContext(ctx, q, before.UTC().Format(time.RFC3339Nano)); err != nil {
@@ -304,6 +318,7 @@ func (s *Store) RuleSince(ctx context.Context, id, ruleHash string) (time.Time, 
 	return parsed, err == nil, err
 }
 
+// PutRuleSince records when the current rule definition first remained true.
 func (s *Store) PutRuleSince(ctx context.Context, id, ruleHash string, since time.Time) error {
 	_, err := s.db.ExecContext(ctx, `INSERT INTO rule_state(rule_id,rule_hash,since,last_result) VALUES(?,?,?,?) ON CONFLICT(rule_id) DO UPDATE SET rule_hash=excluded.rule_hash,since=excluded.since,last_result=excluded.last_result`, id, ruleHash, since.UTC().Format(time.RFC3339Nano), "pending")
 	return err

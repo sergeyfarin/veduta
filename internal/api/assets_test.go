@@ -83,7 +83,7 @@ func TestAssetProxyServesSniffedImageWithoutUpstreamHeadersAndCaches(t *testing.
 	token := mintedAsset(t, tokens, db, nil)
 	for range 2 {
 		rec := httptest.NewRecorder()
-		mux.ServeHTTP(rec, httptest.NewRequest("GET", "/api/v1/assets/"+token, nil))
+		mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/assets/"+token, nil))
 		if rec.Code != 200 {
 			t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 		}
@@ -126,7 +126,7 @@ func TestAssetProxyRejectsRevokedChangedUnsafeAndForgedTokens(t *testing.T) {
 				token = "A" + token[1:]
 			}
 			rec := httptest.NewRecorder()
-			mux.ServeHTTP(rec, httptest.NewRequest("GET", "/api/v1/assets/"+token, nil))
+			mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/assets/"+token, nil))
 			if rec.Code != 404 {
 				t.Fatalf("status=%d want 404", rec.Code)
 			}
@@ -139,7 +139,7 @@ func TestAssetProxyRejectsHeaderLyingNonImage(t *testing.T) {
 	reg.body = []byte("<html>credential prompt</html>")
 	reg.header.Set("Content-Type", "image/png")
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, httptest.NewRequest("GET", "/api/v1/assets/"+mintedAsset(t, tokens, db, nil), nil))
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/assets/"+mintedAsset(t, tokens, db, nil), nil))
 	if rec.Code != http.StatusBadGateway {
 		t.Fatalf("status=%d", rec.Code)
 	}

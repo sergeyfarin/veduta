@@ -10,7 +10,7 @@ metadata:
 spec:
   runtime: wasm
   module: hello.wasm
-  sha256: "9226bc6a3d1d51faa80f634a59c72e5b5130e8da7b1eb9bd6f964e2fa52f50e6"
+  sha256: "a73b48a7910282937eb7c6647c24259028253058d833aeadc7547cd7768dec0a"
   slots: []
   capabilities: []
   limits: { memoryMB: 32, timeoutMs: 1000, outputKB: 16 }

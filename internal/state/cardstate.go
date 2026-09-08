@@ -184,6 +184,7 @@ func StaleAfterError(cardID string, doc widgets.Document, src Source, generatedA
 	return cs
 }
 
+// StaleAfterErrorWithOpenCircuit retains the last good document and records an open circuit.
 func StaleAfterErrorWithOpenCircuit(cardID string, doc widgets.Document, src Source, generatedAt, staleSince time.Time,
 	consecutiveFailures int, circuitOpenUntil time.Time, runErr RunError) CardState {
 	cs := StaleAfterError(cardID, doc, src, generatedAt, staleSince, consecutiveFailures, circuitOpenUntil, runErr)

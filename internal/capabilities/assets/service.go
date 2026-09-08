@@ -14,8 +14,10 @@ import (
 	"time"
 )
 
+// ErrInvalidToken is returned when an asset reference is malformed, expired, or has a bad signature.
 var ErrInvalidToken = errors.New("assets: invalid token")
 
+// Payload describes the upstream asset authorised by a signed browser-safe reference.
 type Payload struct {
 	V                  int    `json:"v"`
 	Connection         string `json:"c"`
@@ -27,11 +29,13 @@ type Payload struct {
 	Expires            int64  `json:"exp"`
 }
 
+// Service signs and verifies asset references with an instance-local key.
 type Service struct {
 	key []byte
 	now func() time.Time
 }
 
+// New creates a signing service from a key of at least 32 bytes.
 func New(key []byte) (*Service, error) {
 	if len(key) < 32 {
 		return nil, errors.New("assets: signing key must be at least 32 bytes")
@@ -39,6 +43,7 @@ func New(key []byte) (*Service, error) {
 	return &Service{key: append([]byte(nil), key...), now: time.Now}, nil
 }
 
+// NewEphemeral creates a signing service with a process-local random key.
 func NewEphemeral() *Service {
 	key := make([]byte, 32)
 	if _, err := rand.Read(key); err != nil {
@@ -48,6 +53,7 @@ func NewEphemeral() *Service {
 	return s
 }
 
+// Mint returns a signed reference for payload.
 func (s *Service) Mint(payload Payload) (string, error) {
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -57,6 +63,7 @@ func (s *Service) Mint(payload Payload) (string, error) {
 	return "v1." + encoded + "." + s.signature(encoded), nil
 }
 
+// Verify authenticates token and returns its unexpired payload.
 func (s *Service) Verify(token string) (Payload, error) {
 	var out Payload
 	parts := strings.Split(token, ".")

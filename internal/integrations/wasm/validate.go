@@ -38,8 +38,8 @@ func ValidateFile(ctx context.Context, path string) error {
 	defer func() { _ = cache.Close(context.Background()) }()
 	config := wazero.NewRuntimeConfig().WithCompilationCache(cache).
 		WithMemoryLimitPages(64 * 16).WithCloseOnContextDone(true)
-	if err := preflight(ctx, code, config); err != nil {
-		return err
+	if preflightErr := preflight(ctx, code, config); preflightErr != nil {
+		return preflightErr
 	}
 	ctx = experimental.WithFunctionListenerFactory(ctx, outputLimiter{})
 	compiled, err := extism.NewCompiledPlugin(ctx, extism.Manifest{

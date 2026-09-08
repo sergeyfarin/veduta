@@ -27,6 +27,7 @@ import (
 
 const maxAssetBytes = 8 << 20
 
+// AssetProxy contains the services required to authorise and serve signed assets.
 type AssetProxy struct {
 	Tokens    *assettokens.Service
 	Store     *storage.Store
@@ -73,9 +74,9 @@ func (s *Server) routeAssets(mux *http.ServeMux) {
 			return
 		}
 		result, err := p.Cache.GetOrFetch(r.Context(), assettokens.CacheKey(payload), payload.Connection, func(ctx context.Context) (assetcache.Result, error) {
-			resp, err := p.Registry.Do(ctx, payload.Connection, connections.Request{Method: "GET", Path: payload.Path, Query: firstQueryValues(query), MaxResponseBytes: maxAssetBytes})
-			if err != nil {
-				return assetcache.Result{}, err
+			resp, requestErr := p.Registry.Do(ctx, payload.Connection, connections.Request{Method: "GET", Path: payload.Path, Query: firstQueryValues(query), MaxResponseBytes: maxAssetBytes})
+			if requestErr != nil {
+				return assetcache.Result{}, requestErr
 			}
 			if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 				return assetcache.Result{}, fmt.Errorf("upstream returned HTTP %d", resp.StatusCode)

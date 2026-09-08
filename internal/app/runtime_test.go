@@ -124,8 +124,8 @@ func TestImmichDefinitionProducesSignedCredentialFreeDocument(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Symlink(repoPlugin, pluginDir); err != nil {
-		t.Fatal(err)
+	if symlinkErr := os.Symlink(repoPlugin, pluginDir); symlinkErr != nil {
+		t.Fatal(symlinkErr)
 	}
 	m, err := integrations.LoadManifest(pluginDir)
 	if err != nil {

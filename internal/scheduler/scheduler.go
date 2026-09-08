@@ -17,8 +17,10 @@ import (
 	"veduta.dev/veduta/internal/widgets"
 )
 
+// RunFunc produces the next document for a card.
 type RunFunc func(context.Context) (widgets.Document, error)
 
+// Definition is the immutable scheduling and execution identity of one card.
 type Definition struct {
 	ID, Hash, Key, ManifestDigest, ApprovalRevision, SlotRevisions string
 	Refresh, Timeout                                               time.Duration
@@ -28,6 +30,7 @@ type Definition struct {
 	generation                                                     uint64
 }
 
+// Event reports a committed card-state change.
 type Event struct {
 	ID    uint64
 	State state.CardState
@@ -40,6 +43,7 @@ type flight struct {
 	duration time.Duration
 }
 
+// Manager schedules card refreshes, persists results, and publishes state changes.
 type Manager struct {
 	store      *storage.Store
 	mu         sync.RWMutex
@@ -57,15 +61,20 @@ type Manager struct {
 }
 
 var (
+	// ErrUnknownCard indicates that no active definition has the requested ID.
 	ErrUnknownCard = errors.New("scheduler: unknown card")
+	// ErrRateLimited indicates that manual refresh was requested too frequently.
 	ErrRateLimited = errors.New("scheduler: refresh rate limited")
-	ErrSuperseded  = errors.New("scheduler: invocation superseded by a newer configuration")
+	// ErrSuperseded indicates that a newer configuration replaced an in-flight definition.
+	ErrSuperseded = errors.New("scheduler: invocation superseded by a newer configuration")
 )
 
+// New creates a scheduler backed by store. A nil store disables persistence.
 func New(store *storage.Store) *Manager {
 	return &Manager{store: store, defs: map[string]Definition{}, states: map[string]state.CardState{}, failures: map[string]int{}, openUntil: map[string]time.Time{}, manualAt: map[string]time.Time{}, flights: map[string]*flight{}, subs: map[chan Event]struct{}{}, workers: make(chan struct{}, 8)}
 }
 
+// Apply atomically replaces all definitions and starts their refresh loops.
 func (m *Manager) Apply(parent context.Context, defs []Definition) error {
 	preparedDefs := make(map[string]Definition, len(defs))
 	preparedStates := make(map[string]state.CardState, len(defs))
@@ -122,6 +131,7 @@ func (m *Manager) Apply(parent context.Context, defs []Definition) error {
 	return nil
 }
 
+// Close stops refresh loops and closes all subscriptions.
 func (m *Manager) Close() {
 	m.mu.Lock()
 	if m.cancel != nil {
@@ -158,6 +168,7 @@ func (m *Manager) loop(ctx context.Context, d Definition) {
 	}
 }
 
+// Refresh executes a named card through the shared-flight path.
 func (m *Manager) Refresh(ctx context.Context, id string) error {
 	m.mu.RLock()
 	d, ok := m.defs[id]
@@ -205,7 +216,7 @@ func (m *Manager) refresh(ctx context.Context, d Definition) error {
 	if d.Run == nil {
 		return m.commit(ctx, d, state.Disabled(id, nil, state.ReasonConfigError))
 	}
-	doc, runErr, dur := m.runShared(ctx, d)
+	doc, dur, runErr := m.runShared(ctx, d)
 	if runErr == nil {
 		ttl := d.Refresh
 		if doc.Hints != nil && doc.Hints.TTLSeconds > 0 && time.Duration(doc.Hints.TTLSeconds)*time.Second < ttl {
@@ -246,7 +257,7 @@ func (m *Manager) refresh(ctx context.Context, d Definition) error {
 	return m.commit(ctx, d, cs)
 }
 
-func (m *Manager) runShared(ctx context.Context, d Definition) (widgets.Document, error, time.Duration) {
+func (m *Manager) runShared(ctx context.Context, d Definition) (widgets.Document, time.Duration, error) {
 	key := d.Key
 	if key == "" {
 		key = d.ID
@@ -257,9 +268,9 @@ func (m *Manager) runShared(ctx context.Context, d Definition) (widgets.Document
 		m.mu.Unlock()
 		select {
 		case <-ctx.Done():
-			return widgets.Document{}, ctx.Err(), 0
+			return widgets.Document{}, 0, ctx.Err()
 		case <-f.done:
-			return f.doc, f.err, f.duration
+			return f.doc, f.duration, f.err
 		}
 	}
 	f := &flight{done: make(chan struct{})}
@@ -274,7 +285,7 @@ func (m *Manager) runShared(ctx context.Context, d Definition) (widgets.Document
 		f.err = ctx.Err()
 		close(f.done)
 		m.mu.Unlock()
-		return widgets.Document{}, ctx.Err(), 0
+		return widgets.Document{}, 0, ctx.Err()
 	}
 	start := time.Now()
 	runCtx, cancel := context.WithTimeout(ctx, d.Timeout)
@@ -285,7 +296,7 @@ func (m *Manager) runShared(ctx context.Context, d Definition) (widgets.Document
 	delete(m.flights, key)
 	close(f.done)
 	m.mu.Unlock()
-	return f.doc, f.err, f.duration
+	return f.doc, f.duration, f.err
 }
 
 func (m *Manager) commit(ctx context.Context, d Definition, cs state.CardState) error {
@@ -319,6 +330,7 @@ func (m *Manager) commit(ctx context.Context, d Definition, cs state.CardState) 
 	return nil
 }
 
+// States returns a card-ID-sorted snapshot of every current state.
 func (m *Manager) States() []state.CardState {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -329,12 +341,16 @@ func (m *Manager) States() []state.CardState {
 	sort.Slice(out, func(i, j int) bool { return out[i].CardID < out[j].CardID })
 	return out
 }
+
+// State returns the current state for id.
 func (m *Manager) State(id string) (state.CardState, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	v, ok := m.states[id]
 	return v, ok
 }
+
+// Subscribe returns a bounded state-event stream and its cancellation function.
 func (m *Manager) Subscribe(buffer int) (<-chan Event, func()) {
 	if buffer < 1 {
 		buffer = 1
@@ -391,7 +407,7 @@ func jitter(id string, base time.Duration) time.Duration {
 	}
 	h := fnv.New32a()
 	_, _ = h.Write([]byte(id))
-	// Stable +/-5% jitter avoids a synchronized herd after restart while keeping tests and
+	// Stable +/-5% jitter avoids a synchronised herd after restart while keeping tests and
 	// operator expectations reproducible.
 	percent := int(h.Sum32()%11) - 5
 	return base + time.Duration(int64(base)*int64(percent)/100)

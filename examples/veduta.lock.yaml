@@ -35,8 +35,8 @@ integrations:
     limits: { httpRequests: 2, timeoutMs: 5000 }
 
   jellyfin:
-    manifestSha256: 8df25143dd15243f182741fb22e2f38c9e3c9d225d845084f505d14c6af33f13
-    moduleSha256: e235fd566f38089ae2c6a14263e87b710ffc879c1c149c61b422ccbf38eb337a
+    manifestSha256: 6dfa1974b030fc7bd3544694775f353d4fc6c7e44f57e5d36f9eb42686638b73
+    moduleSha256: 943038ecc026329cad35e5d76672257b11bb3cacb71bd5f8def189e2367b401d
     version: 1.0.0
     runtime: wasm
     approvedAt: "2026-09-04T21:41:00Z"

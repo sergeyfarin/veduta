@@ -18,10 +18,13 @@ import (
 	"veduta.dev/veduta/internal/storage"
 )
 
+// Result is a cached upstream response safe for browser delivery.
 type Result struct {
 	Body        []byte
 	ContentType string
 }
+
+// FetchFunc retrieves an asset after a cache miss.
 type FetchFunc func(context.Context) (Result, error)
 type flight struct {
 	done   chan struct{}
@@ -29,6 +32,7 @@ type flight struct {
 	err    error
 }
 
+// Cache stores authenticated assets on disk and coalesces concurrent misses.
 type Cache struct {
 	store   *storage.Store
 	dir     string
@@ -37,6 +41,7 @@ type Cache struct {
 	flights map[string]*flight
 }
 
+// New creates an asset cache with the supplied byte budget.
 func New(store *storage.Store, budget int64) (*Cache, error) {
 	if budget <= 0 {
 		budget = 512 << 20
@@ -48,6 +53,7 @@ func New(store *storage.Store, budget int64) (*Cache, error) {
 	return &Cache{store: store, dir: dir, budget: budget, flights: map[string]*flight{}}, nil
 }
 
+// GetOrFetch returns a cached asset or invokes fetch once for concurrent callers.
 func (c *Cache) GetOrFetch(ctx context.Context, key, connectionID string, fetch FetchFunc) (Result, error) {
 	if fetch == nil {
 		return Result{}, errors.New("assetcache: nil fetch function")
@@ -96,7 +102,14 @@ func (c *Cache) get(ctx context.Context, key string) (Result, bool, error) {
 		return Result{}, false, err
 	}
 	data, err := os.ReadFile(c.path(key))
-	if err != nil || int64(len(data)) != size+sha256.Size {
+	if errors.Is(err, os.ErrNotExist) {
+		_ = c.remove(ctx, key)
+		return Result{}, false, nil
+	}
+	if err != nil {
+		return Result{}, false, err
+	}
+	if int64(len(data)) != size+sha256.Size {
 		_ = c.remove(ctx, key)
 		return Result{}, false, nil
 	}

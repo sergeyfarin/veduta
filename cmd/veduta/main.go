@@ -182,7 +182,7 @@ func serve(args []string) error {
 		if err != nil {
 			return fmt.Errorf("open storage: %w", err)
 		}
-		defer db.Close()
+		defer func() { _ = db.Close() }()
 		go db.RunJanitor(ctx, 30*24*time.Hour, time.Hour, func(err error) {
 			logger.Error("storage janitor failed", "error", err)
 		})

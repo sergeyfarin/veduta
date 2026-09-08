@@ -99,19 +99,19 @@ func (h *sseHub) subscribe(last string) ([]sseEvent, chan sseEvent, bool, bool, 
 }
 func writeSSE(w http.ResponseWriter, event, id string, data []byte) {
 	if id != "" {
-		fmt.Fprintf(w, "id: %s\n", id)
+		_, _ = fmt.Fprintf(w, "id: %s\n", id)
 	}
-	fmt.Fprintf(w, "event: %s\n", event)
+	_, _ = fmt.Fprintf(w, "event: %s\n", event)
 	for _, line := range strings.Split(string(data), "\n") {
-		fmt.Fprintf(w, "data: %s\n", line)
+		_, _ = fmt.Fprintf(w, "data: %s\n", line)
 	}
-	fmt.Fprint(w, "\n")
+	_, _ = fmt.Fprint(w, "\n")
 }
 func (s *Server) routeSSE(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/stream", func(w http.ResponseWriter, r *http.Request) {
 		f, ok := w.(http.Flusher)
 		if !ok {
-			http.Error(w, "stream unsupported", 500)
+			http.Error(w, "stream unsupported", http.StatusInternalServerError)
 			return
 		}
 		w.Header().Set("Content-Type", "text/event-stream")

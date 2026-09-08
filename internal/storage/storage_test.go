@@ -198,8 +198,8 @@ func TestConcurrentReadersDuringWrite(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for range 20 {
-				if _, ok, err := s.GetCard(ctx, "card", "hash"); err != nil || !ok {
-					t.Errorf("read ok=%v err=%v", ok, err)
+				if _, ok, readErr := s.GetCard(ctx, "card", "hash"); readErr != nil || !ok {
+					t.Errorf("read ok=%v err=%v", ok, readErr)
 					return
 				}
 			}

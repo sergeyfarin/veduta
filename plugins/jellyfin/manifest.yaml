@@ -17,7 +17,7 @@ metadata:
 spec:
   runtime: wasm
   module: jellyfin.wasm
-  sha256: "e235fd566f38089ae2c6a14263e87b710ffc879c1c149c61b422ccbf38eb337a"
+  sha256: "943038ecc026329cad35e5d76672257b11bb3cacb71bd5f8def189e2367b401d"
   slots:
     - name: server
       kind: http
