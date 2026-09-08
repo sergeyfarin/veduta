@@ -27,12 +27,13 @@ policies, never a computed intersection; header/query allowlisting; shared per-i
 budgets), and D2b (the integration lock and approval flow: canonical manifest digest, permission
 diff, `veduta integration list|diff|approve`, and the matching
 `GET/POST /api/v1/integrations...` endpoints - a sudo-window gate and audit trail are deferred to
-H1/H2, which do not exist yet), D3 (the bounded declarative runtime), D4 (the generic
+H2), D3 (the bounded declarative runtime), D4 (the generic
 HTTP/JSON card - a card's `view:` block synthesises a manifest reused wholesale through D3, not a
 second execution engine), and D5 (connection health and admin endpoints: `GET /api/v1/connections`,
 `POST /api/v1/connections/{id}/test`, DNS/TCP/TLS/auth/HTTP-status classified separately) are done
 and green in CI, closing out Phase D; spikes S2 (upstream API reality check), S3 (expr vs cel
-bake-off), and S4 (visual prototype) are done. Next up: E1 (asset token and proxy endpoint). See
+bake-off), S4 (visual prototype), Phases E–G, and H1 (password sessions and login UI) are done.
+Next up: H2 (forward auth, privileged-operation gating, and audit). See
 [docs/02-implementation-plan.md](docs/02-implementation-plan.md) for the full
 milestone table and what's marked **DONE**, and [docs/03-backlog.md](docs/03-backlog.md) for
 open gaps found along the way (currently: a config/schema asymmetry, and how Jellyfin's real auth
@@ -62,8 +63,8 @@ Frontend dependencies are pinned to exact versions — `.npmrc` sets `save-exact
 and `pnpm update` write `1.2.3`, never `^1.2.3`. A dependency change should be a reviewable
 commit, not something a fresh install decides.
 
-Until authentication lands (milestone H1) the server refuses to bind anything but loopback: it
-holds service credentials from Phase D onward.
+Password mode now permits a non-loopback listener with Argon2id-backed sessions. `auth: none` and
+the not-yet-implemented forward mode remain loopback-only unless the explicit override is passed.
 
 This repository currently contains:
 

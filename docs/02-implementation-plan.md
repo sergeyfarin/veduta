@@ -1292,8 +1292,8 @@ always core-stamped even when the document contains a conflicting value; **a pro
 every state the store can emit satisfies the state-combination invariants** in the schema.
 AC: after a restart the dashboard renders last-known-good data immediately, visibly marked stale.
 
-**F4 · SSE hub and live frontend** · 1.5 d · deps: F3, B3 · **DONE except the per-session
-cap, which is deferred to H1 because no session identity exists yet**
+**F4 · SSE hub and live frontend** · 1.5 d · deps: F3, B3 · **DONE, including the H1
+per-session cap**
 Creates: `internal/api/sse.go` (hub, per-session and global caps, 20 s heartbeat, 256-entry replay
 ring, `Last-Event-ID`, `X-Accel-Buffering: no`), `web/src/lib/stream.ts` (store, backoff reconnect,
 connection indicator).
@@ -1371,11 +1371,13 @@ for a team optimising for "safe to expose early," which is a different optimisat
 the critical path's "fastest to a demo" - stated as two different answers to two different
 questions here, rather than left for a reader to reconcile as one.
 
-**H1 · Sessions** · 1 d · deps: F1
+**H1 · Sessions** · 1 d · deps: F1 · **DONE**
 Creates: `internal/auth/` (argon2id via `x/crypto`, session store, cookie flags, CSRF double-submit,
 login rate limiting and lockout), login UI, `POST/DELETE /auth/session`, `GET /auth/me`.
 Tests: wrong password is constant-time-ish and rate-limited; session fixation prevented by rotation;
 CSRF rejected on a cross-origin mutation; expired session cleaned up; logout revokes server-side.
+Landed with SHA-256-only session identifiers in SQLite, strict/HttpOnly cookie flags, a four-stream
+per-session SSE ceiling, and the API under `/api/v1/auth/*` as specified by the versioned API table.
 
 **H2 · Forward-auth, `auth: none` gating, audit log** · 1 d · deps: H1
 Creates: trusted-header mode with a trusted-proxy CIDR allowlist, `internal/audit/`, a persistent UI

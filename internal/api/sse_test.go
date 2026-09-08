@@ -4,6 +4,7 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -18,7 +19,7 @@ func TestSSEUnknownIDResetsAndSlowConsumerDrops(t *testing.T) {
 	m := scheduler.New(nil)
 	defer m.Close()
 	h := newSSEHub(m)
-	_, ch, reset, accepted, done := h.subscribe("unknown")
+	_, ch, reset, accepted, done := h.subscribe("unknown", "session")
 	if !accepted {
 		t.Fatal("subscriber refused")
 	}
@@ -75,7 +76,7 @@ func TestSSEOneHundredSubscribersAndReplay(t *testing.T) {
 	}
 	subs := make([]subscriber, 0, 100)
 	for range 100 {
-		_, ch, _, accepted, done := h.subscribe("")
+		_, ch, _, accepted, done := h.subscribe("", fmt.Sprintf("session-%d", len(subs)))
 		if !accepted {
 			t.Fatal("subscriber refused")
 		}
@@ -100,7 +101,7 @@ func TestSSEOneHundredSubscribersAndReplay(t *testing.T) {
 	last := h.ring[len(h.ring)-1].id
 	h.mu.Unlock()
 	h.publish(scheduler.Event{State: schedulerState("y")})
-	replay, _, reset, accepted, done := h.subscribe(last)
+	replay, _, reset, accepted, done := h.subscribe(last, "replay-session")
 	defer done()
 	if !accepted || reset || len(replay) != 1 || !strings.Contains(string(replay[0].data), `"cardId":"y"`) {
 		t.Fatalf("accepted=%v reset=%v replay=%q", accepted, reset, replay)
@@ -115,7 +116,7 @@ func TestSSEGlobalCapRefusesExcessStream(t *testing.T) {
 	h := newSSEHub(m)
 	dones := make([]func(), 0, maxSSEClients)
 	for range maxSSEClients {
-		_, _, _, accepted, done := h.subscribe("")
+		_, _, _, accepted, done := h.subscribe("", fmt.Sprintf("session-%d", len(dones)))
 		if !accepted {
 			t.Fatal("client below cap refused")
 		}
@@ -126,8 +127,31 @@ func TestSSEGlobalCapRefusesExcessStream(t *testing.T) {
 			done()
 		}
 	}()
-	_, _, _, accepted, _ := h.subscribe("")
+	_, _, _, accepted, _ := h.subscribe("", "overflow-session")
 	if accepted {
 		t.Fatal("client above global cap accepted")
+	}
+}
+
+func TestSSEPerSessionCapRefusesExcessStream(t *testing.T) {
+	m := scheduler.New(nil)
+	defer m.Close()
+	h := newSSEHub(m)
+	dones := make([]func(), 0, maxSSEClientsPerSession)
+	for range maxSSEClientsPerSession {
+		_, _, _, accepted, done := h.subscribe("", "same-session")
+		if !accepted {
+			t.Fatal("stream below per-session cap refused")
+		}
+		dones = append(dones, done)
+	}
+	defer func() {
+		for _, done := range dones {
+			done()
+		}
+	}()
+	_, _, _, accepted, _ := h.subscribe("", "same-session")
+	if accepted {
+		t.Fatal("stream above per-session cap accepted")
 	}
 }

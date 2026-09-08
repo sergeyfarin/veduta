@@ -75,18 +75,12 @@ owns this) - fix by making `manifestload.Limits` pointer-fielded like D2b's, or 
 
 `docs/02-implementation-plan.md`'s D2b entry calls for `POST /api/v1/auth/sudo`, a fresh
 re-authentication window gating `POST /api/v1/integrations/{id}/approve`, and every approval
-audited with actor, IP and diff. None of that exists: sessions are milestone H1 (deps: F1, which
-does not exist either) and `internal/audit/` is H2 (deps: H1) - D2b's own listed deps are only
-`D2, C1`, so the plan itself asks for machinery from milestones that have not been reached yet.
-Building a fake sudo window with no real session to gate would be worse than not building one, so
-`internal/api/integrations.go`'s `POST .../approve` handler currently has no additional gate
-beyond whatever reaches it at all (bounded today by the same loopback-only bind every other
-unauthenticated endpoint relies on - see `Config.AllowPublicWithoutAuth`). `veduta integration
-approve` (the CLI) is unaffected, since docs/01-architecture.md already documents CLI approval as
-available unconditionally regardless of auth mode.
+audited with actor, IP and diff. H1 now supplies sessions and request identity; `internal/audit/`
+and the fresh sudo window remain H2 work. `veduta integration approve` (the CLI) is unaffected,
+since docs/01-architecture.md documents CLI approval as available regardless of auth mode.
 Priority: **H2** - wire a sudo-window check and an audit write into
-`internal/api/integrations.go`'s approve handler once `internal/auth` (H1) and `internal/audit`
-(H2) exist; the handler's own logic (digest check, grant-subset check, lock write) does not need
+`internal/api/integrations.go`'s approve handler using the H1 identity once `internal/audit` exists;
+the handler's own logic (digest check, grant-subset check, lock write) does not need
 to change.
 
 ### The documented approve flow has no way to grant a limit above its documented default
@@ -274,11 +268,11 @@ before the SQLite metadata write can leave an unreferenced file in the cache dir
 unreachable and not a correctness/security issue, but it is not counted by LRU eviction. Priority:
 low; add a startup sweep comparing directory names with `asset_cache` rows.
 
-### SSE has a global cap but cannot enforce a per-session cap before sessions exist
+### Resolved in H1: SSE per-session cap
 
-F4 caps the process at 128 streams and drops slow consumers without blocking publication. A
-per-session cap requires the session identity introduced by H1; before then there is no honest key
-to count. Priority: H1 - add a session-keyed counter around stream registration.
+F4 capped the process at 128 streams and dropped slow consumers without blocking publication.
+H1 now keys a second counter by the hashed server-side session ID and permits four streams per
+session; disconnect removes both counters atomically.
 
 ### S2 real-server validation and the Immich cold-latency acceptance check remain external
 

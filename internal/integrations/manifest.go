@@ -6,11 +6,9 @@
 // is recorded in veduta.lock.yaml.
 //
 // Scope note: docs/02-implementation-plan.md's D2b entry also names sudo-window enforcement and
-// an audited approval trail, both of which need sessions (H1) and internal/audit (H2) - neither
-// exists yet (H1 depends on F1, which does not exist either). This package implements the part
-// that has no such dependency: the canonical digest, the lock file, the permission diff, and CLI
-// plus REST access to approve. The sudo/audit gap is recorded in docs/03-backlog.md rather than
-// silently built against non-existent sessions or silently dropped.
+// an audited approval trail. H1 sessions now exist; the sudo endpoint and internal/audit remain
+// H2 work. This package owns the canonical digest, lock file, permission diff, and CLI plus REST
+// access to approve. The remaining sudo/audit gap is recorded in docs/03-backlog.md.
 package integrations
 
 import (

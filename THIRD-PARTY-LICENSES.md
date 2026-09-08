@@ -18,6 +18,7 @@ Veduta's core is AGPL-3.0-or-later. Apache-2.0, BSD and MIT code is one-way comp
 | `github.com/expr-lang/expr` | MIT | Parses and evaluates the deliberately constrained declarative integration expression language; D3 supplies resource accounting |
 | `github.com/santhosh-tekuri/jsonschema/v6` | Apache-2.0 | One JSON Schema implementation validates configuration, manifests, lock records and widget documents — the same schema files the editor and the frontend use |
 | `golang.org/x/time` | BSD-3-Clause | Token-bucket rate limiting per connection (`internal/connections`) — the canonical implementation, not one hand-rolled here |
+| `golang.org/x/crypto` | BSD-3-Clause | Argon2id verification for administrator passwords without implementing password hashing primitives locally |
 | `gopkg.in/yaml.v3` | Apache-2.0 / MIT | YAML parsing with node positions, so configuration errors can carry `file:line:col` |
 | `modernc.org/sqlite` | BSD-3-Clause | Pure-Go SQLite driver for persistent card state, scheduling, sessions, events, and caches |
 

@@ -4,6 +4,7 @@
   import Grid from './lib/Grid.svelte';
   import Section from './lib/Section.svelte';
   import Skeleton from './lib/Skeleton.svelte';
+  import Login from './lib/Login.svelte';
   import { apply, next, stored, type Theme } from './lib/theme';
   import { formatRelativeTime } from './lib/format';
   import { isStale, isError, isDisabled, isPending, type CardState as CardEnvelope } from './lib/types/cardstate';
@@ -24,6 +25,7 @@
   let cardsById = $state<Map<string, CardEnvelope>>(new Map());
   let loadError = $state<string | null>(null);
   let streamStatus = $state<StreamStatus>('connecting');
+  let authState = $state<'checking' | 'required' | 'ready'>('checking');
 
   $effect(() => {
     apply(theme);
@@ -37,6 +39,15 @@
   });
 
   $effect(() => {
+    fetch('/api/v1/auth/me').then((response) => {
+      authState = response.ok || response.status === 404 ? 'ready' : 'required';
+    }).catch(() => {
+      authState = 'ready';
+    });
+  });
+
+  $effect(() => {
+    if (authState !== 'ready') return;
     Promise.all([
       fetch('/api/v1/dashboard').then((r) =>
         r.ok ? (r.json() as Promise<Dashboard>) : Promise.reject(new Error(`GET /dashboard: HTTP ${r.status}`))
@@ -62,17 +73,32 @@
     cardsById = new Map(cards.map((card) => [card.cardId, card]));
   }
 
-  $effect(() => connectCardStream(
-    (card) => {
-      const nextCards = new Map(cardsById);
-      nextCards.set(card.cardId, card);
-      cardsById = nextCards;
-    },
-    () => { void reloadCards().catch((error: unknown) => {
-      loadError = error instanceof Error ? error.message : String(error);
-    }); },
-    (status) => { streamStatus = status; }
-  ));
+  $effect(() => {
+    if (authState !== 'ready') return;
+    return connectCardStream(
+      (card) => {
+        const nextCards = new Map(cardsById);
+        nextCards.set(card.cardId, card);
+        cardsById = nextCards;
+      },
+      () => { void reloadCards().catch((error: unknown) => {
+        loadError = error instanceof Error ? error.message : String(error);
+      }); },
+      (status) => { streamStatus = status; }
+    );
+  });
+
+  function cookie(name: string): string {
+    const prefix = `${name}=`;
+    return document.cookie.split(';').map((part) => part.trim()).find((part) => part.startsWith(prefix))?.slice(prefix.length) ?? '';
+  }
+
+  async function logout() {
+    await fetch('/api/v1/auth/session', { method: 'DELETE', headers: { 'X-CSRF-Token': decodeURIComponent(cookie('veduta_csrf')) } });
+    dashboard = null;
+    cardsById = new Map();
+    authState = 'required';
+  }
 
   // disabledReason is core-owned and machine-readable (schemas/card-state.v1); this is the one
   // place it becomes the sentence a person reads on the card.
@@ -89,11 +115,15 @@
   }
 </script>
 
+{#if authState === 'required'}
+  <Login onAuthenticated={() => (authState = 'ready')} />
+{:else if authState === 'ready'}
 <div class="page">
   <header class="topbar">
     <h1>Home</h1>
     <span class="connection" data-status={streamStatus}>{streamStatus}</span>
     <span class="spacer"></span>
+    <button onclick={() => void logout()}>Sign out</button>
     <button onclick={() => (theme = next(theme))}>
       Theme: {theme}
     </button>
@@ -153,6 +183,7 @@
     {/if}
   </footer>
 </div>
+{/if}
 
 <style>
   .page {

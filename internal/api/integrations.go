@@ -20,14 +20,9 @@ import (
 // approval transaction `veduta integration approve` performs (cmd/veduta/integration.go).
 //
 // Scope note: docs/02-implementation-plan.md's D2b entry also asks for a sudo-window
-// re-authentication gate on the approve endpoint and an audited approval trail. Neither exists:
-// sessions are milestone H1 (deps: F1, not built) and internal/audit is H2 (deps: H1). Gating
-// approval on a sudo window that cannot exist yet would either be unbuildable or fake, so this
-// endpoint currently has no additional gate beyond whatever reaches it at all - unauthenticated
-// access is already bounded by the loopback-only bind this server refuses to lift before
-// authentication exists (see Config.AllowPublicWithoutAuth). The real gap - wiring a sudo check
-// and an audit write here - is recorded in docs/03-backlog.md with this file named as the hook
-// point for H1/H2 to extend.
+// re-authentication gate on the approve endpoint and an audited approval trail. H1 sessions now
+// authenticate this route, while the fresh sudo window and audit write remain H2 work recorded in
+// docs/03-backlog.md with this file named as the hook point.
 //
 // integrationSummary is one row of GET /api/v1/integrations - docs/01-architecture.md section 9:
 // "installed integrations: version, runtime, lock status (approved/unapproved/changed), granted
@@ -61,17 +56,15 @@ type approvalPreview struct {
 // section 6: "the client sends the exact grants it is approving, not a bare yes." Deliberately
 // has no approvedBy field: found in review that a client-supplied actor string was passed
 // straight through to the audit-trail attribution with no authentication behind it at all - not
-// this endpoint's own mistake so much as a real limitation of having no session system yet (H1),
-// but "attribute this approval to whatever string the request happened to include" is worse than
-// an honest, fixed sentinel until one exists. See unauthenticatedApprovedBy below.
+// this endpoint's own mistake so much as a former limitation of having no session system. H2 will
+// replace the fixed sentinel with the authenticated identity when it adds the audit transaction.
 type approveRequest struct {
 	ExpectedManifestSHA256 string              `json:"expectedManifestSha256"`
 	Grants                 integrations.Grants `json:"grants"`
 }
 
-// unauthenticatedApprovedBy is what every REST approval is attributed to until H1 (sessions)
-// exists to derive a real actor from an authenticated request. The CLI's own `--by` flag (default
-// the OS username) is a different, more trustworthy channel and is unaffected by this.
+// unauthenticatedApprovedBy remains the REST attribution until H2 wires the authenticated H1
+// identity through the approval audit transaction. The CLI's own `--by` flag is unaffected.
 const unauthenticatedApprovedBy = "rest-api (unauthenticated)"
 
 // errIntegrationNotDeclared and errIntegrationBuiltin distinguish "there is nothing to approve

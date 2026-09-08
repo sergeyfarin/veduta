@@ -18,23 +18,25 @@ import (
 
 const replaySize = 256
 const maxSSEClients = 128
+const maxSSEClientsPerSession = 4
 
 type sseEvent struct {
 	id   string
 	data []byte
 }
 type sseHub struct {
-	mu      sync.Mutex
-	nonce   string
-	next    uint64
-	ring    []sseEvent
-	clients map[chan sseEvent]struct{}
+	mu       sync.Mutex
+	nonce    string
+	next     uint64
+	ring     []sseEvent
+	clients  map[chan sseEvent]struct{}
+	sessions map[string]int
 }
 
 func newSSEHub(m *scheduler.Manager) *sseHub {
 	b := make([]byte, 8)
 	_, _ = rand.Read(b)
-	h := &sseHub{nonce: hex.EncodeToString(b), clients: map[chan sseEvent]struct{}{}}
+	h := &sseHub{nonce: hex.EncodeToString(b), clients: map[chan sseEvent]struct{}{}, sessions: map[string]int{}}
 	ch, _ := m.Subscribe(32)
 	go func() {
 		for ev := range ch {
@@ -62,10 +64,10 @@ func (h *sseHub) publish(ev scheduler.Event) {
 		}
 	}
 }
-func (h *sseHub) subscribe(last string) ([]sseEvent, chan sseEvent, bool, bool, func()) {
+func (h *sseHub) subscribe(last, sessionID string) ([]sseEvent, chan sseEvent, bool, bool, func()) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if len(h.clients) >= maxSSEClients {
+	if len(h.clients) >= maxSSEClients || sessionID != "" && h.sessions[sessionID] >= maxSSEClientsPerSession {
 		return nil, nil, false, false, func() {}
 	}
 	// A fresh stream has no event id tying its earlier GET /cards snapshot to the replay ring.
@@ -88,10 +90,19 @@ func (h *sseHub) subscribe(last string) ([]sseEvent, chan sseEvent, bool, bool, 
 	replay := append([]sseEvent(nil), h.ring[start:]...)
 	ch := make(chan sseEvent, 32)
 	h.clients[ch] = struct{}{}
+	if sessionID != "" {
+		h.sessions[sessionID]++
+	}
 	return replay, ch, reset, true, func() {
 		h.mu.Lock()
 		if _, ok := h.clients[ch]; ok {
 			delete(h.clients, ch)
+			if sessionID != "" {
+				h.sessions[sessionID]--
+				if h.sessions[sessionID] == 0 {
+					delete(h.sessions, sessionID)
+				}
+			}
 			close(ch)
 		}
 		h.mu.Unlock()
@@ -117,7 +128,8 @@ func (s *Server) routeSSE(mux *http.ServeMux) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("Cache-Control", "no-cache")
 		w.Header().Set("X-Accel-Buffering", "no")
-		replay, ch, reset, accepted, done := s.hub.subscribe(r.Header.Get("Last-Event-ID"))
+		identity, _ := identityFromContext(r.Context())
+		replay, ch, reset, accepted, done := s.hub.subscribe(r.Header.Get("Last-Event-ID"), identity.SessionID)
 		if !accepted {
 			http.Error(w, "too many streams", http.StatusServiceUnavailable)
 			return

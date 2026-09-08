@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"veduta.dev/veduta/internal/auth"
 	"veduta.dev/veduta/internal/config"
 	"veduta.dev/veduta/internal/connections"
 	"veduta.dev/veduta/internal/fixtures"
@@ -37,6 +38,8 @@ type Config struct {
 	AuthConfigured bool
 	// AllowPublicWithoutAuth is the operator's explicit override for that refusal.
 	AllowPublicWithoutAuth bool
+	// Auth enforces password sessions when non-nil.
+	Auth *auth.Service
 
 	// Assets overrides the embedded frontend. Left nil it uses the build compiled into the
 	// binary; tests set it so their results do not depend on whether anyone ran `pnpm build`.
@@ -103,6 +106,9 @@ func New(cfg Config) (*Server, error) {
 	if cfg.Listen == "" {
 		cfg.Listen = "127.0.0.1:8099"
 	}
+	if cfg.Auth != nil {
+		cfg.AuthConfigured = true
+	}
 	public, err := isPublicAddr(cfg.Listen)
 	if err != nil {
 		return nil, fmt.Errorf("listen address %q: %w", cfg.Listen, err)
@@ -164,6 +170,9 @@ func (s *Server) routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/v1/health", s.handleHealth)
 	mux.HandleFunc("GET /api/v1/version", s.handleVersion)
+	if s.cfg.Auth != nil {
+		s.routeAuth(mux)
+	}
 	if s.cfg.ConfigStore != nil {
 		s.routeConfig(mux)
 		if s.hub != nil {
@@ -192,7 +201,7 @@ func (s *Server) routes() http.Handler {
 	}
 	mux.Handle("/", s.staticHandler(assets, present))
 
-	return s.recoverPanics(s.limitBody(mux))
+	return s.recoverPanics(s.limitBody(s.authenticate(mux)))
 }
 
 func (s *Server) routeConfig(mux *http.ServeMux) {

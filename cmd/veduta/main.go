@@ -11,8 +11,7 @@
 //	veduta plugin validate <file.wasm>   run sandbox and ABI conformance checks
 //	veduta --check-config [--config path]   validate a config file and print diagnostics
 //
-// Until authentication lands (milestone H1) the server refuses to bind a non-loopback address,
-// because it holds service credentials from Phase D onward. See docs/01-architecture.md D46.
+// Password authentication permits a non-loopback bind; other modes remain gated until H2.
 package main
 
 import (
@@ -31,6 +30,7 @@ import (
 
 	"veduta.dev/veduta/internal/api"
 	appcore "veduta.dev/veduta/internal/app"
+	"veduta.dev/veduta/internal/auth"
 	"veduta.dev/veduta/internal/canonical"
 	assettokens "veduta.dev/veduta/internal/capabilities/assets"
 	"veduta.dev/veduta/internal/config"
@@ -128,7 +128,7 @@ func serve(args []string) error {
 	configPath := fs.String("config", "veduta.yaml", "path to the primary config file")
 	dataDir := fs.String("data-dir", "", "directory for Veduta's persistent database and caches (overrides server.dataDir)")
 	override := fs.Bool("i-know-what-im-doing", false,
-		"allow a non-loopback bind before authentication exists")
+		"allow a non-loopback bind without active authentication")
 	logFormat := fs.String("log-format", "text", "log format: text or json")
 	serveFixtures := fs.Bool("fixtures", false,
 		"serve the checked-in showcase dashboard instead of real configuration (dev only)")
@@ -183,6 +183,19 @@ func serve(args []string) error {
 			return fmt.Errorf("open storage: %w", err)
 		}
 		defer func() { _ = db.Close() }()
+		resolvedSecrets, secretDiags := secrets.ResolveAll(snapshot.SecretRefs, secrets.DefaultResolver())
+		if secretDiags.HasErrors() {
+			return fmt.Errorf("resolve authentication secrets:\n%s", secretDiags.String())
+		}
+		if snapshot.Config.Auth.Mode == config.AuthPassword {
+			admin := snapshot.Config.Auth.Admin
+			authService, authErr := auth.New(ctx, auth.Config{Store: db, Username: admin.Username, PasswordHash: admin.PasswordHash, ResolvedSecrets: resolvedSecrets, SessionTTL: snapshot.Config.Auth.SessionTTL})
+			if authErr != nil {
+				return fmt.Errorf("configure authentication: %w", authErr)
+			}
+			cfg.Auth = authService
+			cfg.AuthConfigured = true
+		}
 		go db.RunJanitor(ctx, 30*24*time.Hour, time.Hour, func(err error) {
 			logger.Error("storage janitor failed", "error", err)
 		})
@@ -229,7 +242,7 @@ func serve(args []string) error {
 		reloads.Add(1)
 		go func() {
 			defer reloads.Done()
-			reloadRuntime(ctx, store, manager, dynamic, db, instanceKey, tokens, *configPath, runtimes, logger)
+			reloadRuntime(ctx, store, manager, dynamic, db, instanceKey, tokens, cfg.Auth, *configPath, runtimes, logger)
 		}()
 	}
 
@@ -252,7 +265,7 @@ func serve(args []string) error {
 	return nil
 }
 
-func reloadRuntime(ctx context.Context, store *config.Store, manager *scheduler.Manager, dynamic *connections.Dynamic, db *storage.Store, instanceKey []byte, tokens *assettokens.Service, configPath string, runtimes *runtimeHolder, logger *slog.Logger) {
+func reloadRuntime(ctx context.Context, store *config.Store, manager *scheduler.Manager, dynamic *connections.Dynamic, db *storage.Store, instanceKey []byte, tokens *assettokens.Service, authService *auth.Service, configPath string, runtimes *runtimeHolder, logger *slog.Logger) {
 	var generation = store.Status().Generation
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
@@ -271,6 +284,20 @@ func reloadRuntime(ctx context.Context, store *config.Store, manager *scheduler.
 		if err != nil {
 			logger.Error("runtime reload rejected", "error", err)
 			continue
+		}
+		if authService != nil && snapshot.Config.Auth.Mode == config.AuthPassword {
+			resolvedSecrets, secretDiags := secrets.ResolveAll(snapshot.SecretRefs, secrets.DefaultResolver())
+			if secretDiags.HasErrors() {
+				closeRuntimeGeneration(next, logger)
+				logger.Error("authentication reload rejected", "error", secretDiags.String())
+				continue
+			}
+			admin := snapshot.Config.Auth.Admin
+			if err = authService.Reconfigure(ctx, auth.Config{Username: admin.Username, PasswordHash: admin.PasswordHash, ResolvedSecrets: resolvedSecrets, SessionTTL: snapshot.Config.Auth.SessionTTL}); err != nil {
+				closeRuntimeGeneration(next, logger)
+				logger.Error("authentication reload rejected", "error", err)
+				continue
+			}
 		}
 		if err = manager.Apply(ctx, next.Definitions); err != nil {
 			closeRuntimeGeneration(next, logger)
