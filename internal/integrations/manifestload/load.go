@@ -106,29 +106,38 @@ func Load(path string) (*Manifest, error) {
 	if err != nil {
 		return nil, err
 	}
+	return loadBytes(path, raw)
+}
+
+// loadBytes contains every parser and validator step after the single bounded file read. Keeping
+// it separate lets the fuzz target exercise arbitrary bytes without creating a file per input.
+func loadBytes(path string, raw []byte) (*Manifest, error) {
+	if len(raw) > maxManifestBytes {
+		return nil, fmt.Errorf("%s: manifest exceeds %d bytes", path, maxManifestBytes)
+	}
 	var root yaml.Node
-	if err = yaml.Unmarshal(raw, &root); err != nil {
+	if err := yaml.Unmarshal(raw, &root); err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
 	if root.Content == nil {
 		return nil, fmt.Errorf("%s: empty manifest", path)
 	}
 	stats := yamlStats{}
-	if err = walkYAML(root.Content[0], 1, &stats); err != nil {
+	if err := walkYAML(root.Content[0], 1, &stats); err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
 	if stats.nodes > 20000 || stats.depth > 32 {
 		return nil, fmt.Errorf("%s: YAML exceeds node/depth limit", path)
 	}
 	var generic any
-	if err = root.Content[0].Decode(&generic); err != nil {
+	if err := root.Content[0].Decode(&generic); err != nil {
 		return nil, err
 	}
-	if err = validateSchema(generic); err != nil {
+	if err := validateSchema(generic); err != nil {
 		return nil, fmt.Errorf("%s does not match manifest schema: %w", path, err)
 	}
 	var doc rawManifest
-	if err = root.Content[0].Decode(&doc); err != nil {
+	if err := root.Content[0].Decode(&doc); err != nil {
 		return nil, err
 	}
 	digest, err := canonical.DigestBytes(raw, filepath.Ext(path))

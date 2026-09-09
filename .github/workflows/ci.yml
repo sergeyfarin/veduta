@@ -26,7 +26,28 @@ jobs:
       # the cross-document semantic checks with their negative fixtures, and the SPDX and
       # dependency-licence guards.
       - run: go test -race ./...
+      - name: Fuzz untrusted document, manifest and token inputs
+        run: |
+          go test -run=^$ -fuzz=FuzzValidate -fuzztime=3s ./internal/widgets
+          go test -run=^$ -fuzz=FuzzManifestParser -fuzztime=3s ./internal/integrations/manifestload
+          go test -run=^$ -fuzz=FuzzTokenVerifier -fuzztime=3s ./internal/capabilities/assets
+      - name: Scan HTTP responses for configured secrets
+        run: go test ./internal/api -run=^TestConfiguredSecretsAppearInNoHTTPResponse$ -count=1
+      - name: Check reachable Go vulnerabilities
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
       - run: test -z "$(gofmt -l cmd hack internal web)"
+
+  arm-load:
+    name: 50-card load gate (native ARM64)
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.27'
+      # Four execution threads, real SQLite persistence, 50 cards and eight logical connection
+      # revisions exercise the Raspberry Pi 4 class release workload on native ARM64.
+      - run: go test ./internal/scheduler -run=^TestFiftyCardPiClassLoadBudget$ -count=1 -v
 
   lint:
     name: golangci-lint

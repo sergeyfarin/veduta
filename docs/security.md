@@ -24,6 +24,11 @@ External integrations start only when the loaded manifest and module match an ap
 
 Integration output is untrusted data. The core validates the Widget Document, the frontend renders a fixed block vocabulary, markdown is parsed into a restricted AST, and unknown block types fail closed. Actions are declared and approved separately from read-only data routes.
 
+Every HTTP response carries MIME-sniffing, framing, referrer, browser-permission, cross-origin, and
+baseline content-security headers. The SPA replaces the baseline with a restrictive application
+policy; proxied images use `default-src 'none'; sandbox`. HSTS is emitted only when Veduta directly
+receives TLS, so a TLS-terminating reverse proxy must set it on the public response.
+
 ## Persistence, events, and notifications
 
 SQLite holds sessions, settings, cached state, event history, rule state, and the notification outbox. Rule state, its transition event, outbox rows, and flood-suspension event commit in one transaction. Notification delivery happens afterward and is at least once, so receivers should tolerate duplicates. Back up the database before upgrades and restrict filesystem access to the Veduta process account.
@@ -40,3 +45,4 @@ Logs use structured secret scrubbing, but service payloads can still contain pri
 - Run with a dedicated user, a writable private data directory, and read-only application/config mounts where practical.
 - Keep the binary, web assets, integrations, and lock file from one reviewed release together.
 - Back up configuration, the lock file, and SQLite data before upgrades; test restore procedures.
+- Keep CI's fuzz, import-boundary, secret-response, vulnerability, and native ARM load gates enabled.

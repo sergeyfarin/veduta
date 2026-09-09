@@ -220,7 +220,30 @@ func (s *Server) routes() http.Handler {
 	}
 	mux.Handle("/", s.staticHandler(assets, present))
 
-	return s.recoverPanics(s.limitBody(s.authenticate(mux)))
+	return s.securityHeaders(s.recoverPanics(s.limitBody(s.authenticate(mux))))
+}
+
+// securityHeaders applies browser hardening to every response, including authentication errors,
+// API 404s and panic recovery. Handlers may replace Cache-Control and CSP with a narrower policy
+// for immutable images or the SPA document.
+func (s *Server) securityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("X-Frame-Options", "DENY")
+		h.Set("Referrer-Policy", "no-referrer")
+		h.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(), usb=()")
+		h.Set("Cross-Origin-Opener-Policy", "same-origin")
+		h.Set("Cross-Origin-Resource-Policy", "same-origin")
+		h.Set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'; base-uri 'none'")
+		if isAPIPath(r.URL.Path) {
+			h.Set("Cache-Control", "no-store")
+		}
+		if r.TLS != nil {
+			h.Set("Strict-Transport-Security", "max-age=31536000")
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (s *Server) routeConfig(mux *http.ServeMux) {

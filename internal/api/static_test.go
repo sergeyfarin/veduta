@@ -150,3 +150,41 @@ func TestPathTraversal(t *testing.T) {
 		}
 	}
 }
+
+func TestSecurityHeadersCoverEveryResponseClass(t *testing.T) {
+	h := testServer(t).Handler()
+	for _, requestPath := range []string{"/", "/assets/index-abc123.js", "/api/v1/health", "/api/v1/nope"} {
+		rec := get(t, h, requestPath)
+		for name, want := range map[string]string{
+			"X-Content-Type-Options":       "nosniff",
+			"X-Frame-Options":              "DENY",
+			"Referrer-Policy":              "no-referrer",
+			"Cross-Origin-Opener-Policy":   "same-origin",
+			"Cross-Origin-Resource-Policy": "same-origin",
+		} {
+			if got := rec.Header().Get(name); got != want {
+				t.Errorf("GET %s: %s=%q, want %q", requestPath, name, got, want)
+			}
+		}
+		if got := rec.Header().Get("Permissions-Policy"); !strings.Contains(got, "camera=()") {
+			t.Errorf("GET %s: Permissions-Policy=%q", requestPath, got)
+		}
+		if got := rec.Header().Get("Content-Security-Policy"); !strings.Contains(got, "frame-ancestors 'none'") {
+			t.Errorf("GET %s: Content-Security-Policy=%q", requestPath, got)
+		}
+	}
+}
+
+func TestHSTSOnlyOnDirectTLSRequests(t *testing.T) {
+	h := testServer(t).Handler()
+	plain := get(t, h, "/")
+	if got := plain.Header().Get("Strict-Transport-Security"); got != "" {
+		t.Fatalf("plain HTTP received HSTS: %q", got)
+	}
+	request := httptest.NewRequest(http.MethodGet, "https://veduta.example/", nil)
+	response := httptest.NewRecorder()
+	h.ServeHTTP(response, request)
+	if got := response.Header().Get("Strict-Transport-Security"); got != "max-age=31536000" {
+		t.Fatalf("TLS HSTS=%q", got)
+	}
+}

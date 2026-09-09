@@ -80,7 +80,7 @@ func (s *Server) serveIndex(w http.ResponseWriter, r *http.Request, assets fs.FS
 		"default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; "+
 			"script-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; "+
 			"frame-ancestors 'none'")
-	w.Header().Set("Referrer-Policy", "same-origin")
+	w.Header().Set("Referrer-Policy", "no-referrer")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(body)
 }
