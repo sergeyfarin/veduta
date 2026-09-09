@@ -71,17 +71,12 @@ the wrong default. Priority: whenever declarative caching is wired in (no milest
 owns this) - fix by making `manifestload.Limits` pointer-fielded like D2b's, or by threading a
 "was this key present" bit alongside the plain `int` some other way.
 
-### D2b's approval endpoint has no sudo-window gate and no audit trail yet
+### Resolved in H2: D2b approval sudo-window and audit trail
 
-`docs/02-implementation-plan.md`'s D2b entry calls for `POST /api/v1/auth/sudo`, a fresh
-re-authentication window gating `POST /api/v1/integrations/{id}/approve`, and every approval
-audited with actor, IP and diff. H1 now supplies sessions and request identity; `internal/audit/`
-and the fresh sudo window remain H2 work. `veduta integration approve` (the CLI) is unaffected,
-since docs/01-architecture.md documents CLI approval as available regardless of auth mode.
-Priority: **H2** - wire a sudo-window check and an audit write into
-`internal/api/integrations.go`'s approve handler using the H1 identity once `internal/audit` exists;
-the handler's own logic (digest check, grant-subset check, lock write) does not need
-to change.
+H2 added `POST /api/v1/auth/sudo`, a five-minute password re-authentication window, authenticated
+approval attribution and persistent success/failure audit records. Forward auth defaults to
+CLI-only privileged operations and may opt into a configured admin group. `auth: none` remains
+CLI-only. `veduta integration approve` remains available regardless of server auth mode.
 
 ### The documented approve flow has no way to grant a limit above its documented default
 
@@ -173,15 +168,14 @@ configs, arguably a design call, not C1's own scope of "build the loader for the
 exists"). Priority: low-medium, whenever `schemas/config.v1.schema.json` next gets a deliberate
 revision - do not roll it into an unrelated milestone's diff.
 
-### `auth: none` + actions guard is not implemented
+### Resolved in H2: `auth: none` + actions guard
 
 The schema's own description for `auth.mode: none` says: "additionally requires the
 `--i-know-what-im-doing` flag when any action or secret is configured (semantic check)." C3
 implemented the secrets half: `serve` now loads a `*Snapshot`, resolves every secret before
 publishing it, and refuses `auth.mode: none` plus any secret reference unless the override was
-passed. "Any action... configured" remains blocked: `ActionsBlock` renders permanently disabled
-until Phase H gives actions a real execution path. Priority: Phase H; extend the same startup guard
-once an enabled action has a real configuration representation.
+passed. H2 extended the guard to Docker `allowActions` and action blocks in card views. The UI now
+shows a persistent warning whenever authentication is disabled.
 
 ## Resolved in Phase F/E (continued)
 

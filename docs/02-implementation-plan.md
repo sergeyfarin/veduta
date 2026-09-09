@@ -1379,12 +1379,16 @@ CSRF rejected on a cross-origin mutation; expired session cleaned up; logout rev
 Landed with SHA-256-only session identifiers in SQLite, strict/HttpOnly cookie flags, a four-stream
 per-session SSE ceiling, and the API under `/api/v1/auth/*` as specified by the versioned API table.
 
-**H2 · Forward-auth, `auth: none` gating, audit log** · 1 d · deps: H1
+**H2 · Forward-auth, `auth: none` gating, audit log** · 1 d · deps: H1 · **DONE**
 Creates: trusted-header mode with a trusted-proxy CIDR allowlist, `internal/audit/`, a persistent UI
 banner when auth is disabled, and a refusal to start with `auth: none` when actions or secrets exist
 unless `--i-know-what-im-doing`.
 Tests: a spoofed auth header from an untrusted source IP is ignored; audit entries written for login,
 logout, config apply, plugin load, and every action.
+Landed with direct-peer CIDR validation, same-origin mutation checks, CLI-only or admin-group
+privileged policy, five-minute password sudo windows, persistent audit records for authentication,
+configuration/plugin lifecycle, approvals, manual refreshes, connection tests and capability
+denials. Auth-mode changes require restart so a hot reload cannot retain stale middleware.
 
 ### Phase I — Docker and host metrics (2 d)
 

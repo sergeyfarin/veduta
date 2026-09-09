@@ -30,6 +30,7 @@ import (
 
 	"veduta.dev/veduta/internal/api"
 	appcore "veduta.dev/veduta/internal/app"
+	"veduta.dev/veduta/internal/audit"
 	"veduta.dev/veduta/internal/auth"
 	"veduta.dev/veduta/internal/canonical"
 	assettokens "veduta.dev/veduta/internal/capabilities/assets"
@@ -174,6 +175,7 @@ func serve(args []string) error {
 		}
 
 		snapshot := store.Snapshot()
+		cfg.AuthMode = snapshot.Config.Auth.Mode
 		dir := snapshot.Config.Server.DataDir
 		if *dataDir != "" {
 			dir = *dataDir
@@ -187,13 +189,27 @@ func serve(args []string) error {
 		if secretDiags.HasErrors() {
 			return fmt.Errorf("resolve authentication secrets:\n%s", secretDiags.String())
 		}
-		if snapshot.Config.Auth.Mode == config.AuthPassword {
+		auditLog, auditErr := audit.New(db)
+		if auditErr != nil {
+			return fmt.Errorf("configure audit log: %w", auditErr)
+		}
+		cfg.Audit = auditLog
+		switch snapshot.Config.Auth.Mode {
+		case config.AuthPassword:
 			admin := snapshot.Config.Auth.Admin
 			authService, authErr := auth.New(ctx, auth.Config{Store: db, Username: admin.Username, PasswordHash: admin.PasswordHash, ResolvedSecrets: resolvedSecrets, SessionTTL: snapshot.Config.Auth.SessionTTL})
 			if authErr != nil {
 				return fmt.Errorf("configure authentication: %w", authErr)
 			}
 			cfg.Auth = authService
+			cfg.AuthConfigured = true
+		case config.AuthForward:
+			forward := snapshot.Config.Auth.Forward
+			forwardAuth, forwardErr := auth.NewForward(auth.ForwardConfig{TrustedProxies: forward.TrustedProxies, UserHeader: forward.UserHeader, GroupsHeader: forward.GroupsHeader, AdminGroups: forward.AdminGroups, PrivilegedOperations: string(forward.PrivilegedOperations)})
+			if forwardErr != nil {
+				return fmt.Errorf("configure forward authentication: %w", forwardErr)
+			}
+			cfg.ForwardAuth = forwardAuth
 			cfg.AuthConfigured = true
 		}
 		go db.RunJanitor(ctx, 30*24*time.Hour, time.Hour, func(err error) {
@@ -212,7 +228,7 @@ func serve(args []string) error {
 		if err != nil {
 			return err
 		}
-		registry, _, runtimeGeneration, err := buildRuntime(ctx, snapshot, store.Status().Generation, *configPath, db, instanceKey, tokens, logger)
+		registry, _, runtimeGeneration, err := buildRuntime(ctx, snapshot, store.Status().Generation, *configPath, db, instanceKey, tokens, auditLog, logger)
 		if err != nil {
 			return fmt.Errorf("build runtime: %w", err)
 		}
@@ -220,6 +236,7 @@ func serve(args []string) error {
 			closeRuntimeGeneration(runtimeGeneration, logger)
 			return fmt.Errorf("start schedules: %w", err)
 		}
+		recordGenerationAudit(ctx, auditLog, store.Status().Generation, runtimeGeneration, logger)
 		runtimes := &runtimeHolder{current: runtimeGeneration}
 		var reloads sync.WaitGroup
 		defer func() {
@@ -242,7 +259,7 @@ func serve(args []string) error {
 		reloads.Add(1)
 		go func() {
 			defer reloads.Done()
-			reloadRuntime(ctx, store, manager, dynamic, db, instanceKey, tokens, cfg.Auth, *configPath, runtimes, logger)
+			reloadRuntime(ctx, store, manager, dynamic, db, instanceKey, tokens, cfg.Auth, cfg.ForwardAuth, auditLog, *configPath, runtimes, logger)
 		}()
 	}
 
@@ -265,7 +282,7 @@ func serve(args []string) error {
 	return nil
 }
 
-func reloadRuntime(ctx context.Context, store *config.Store, manager *scheduler.Manager, dynamic *connections.Dynamic, db *storage.Store, instanceKey []byte, tokens *assettokens.Service, authService *auth.Service, configPath string, runtimes *runtimeHolder, logger *slog.Logger) {
+func reloadRuntime(ctx context.Context, store *config.Store, manager *scheduler.Manager, dynamic *connections.Dynamic, db *storage.Store, instanceKey []byte, tokens *assettokens.Service, authService *auth.Service, forwardAuth *auth.Forward, auditLog *audit.Log, configPath string, runtimes *runtimeHolder, logger *slog.Logger) {
 	var generation = store.Status().Generation
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
@@ -280,7 +297,7 @@ func reloadRuntime(ctx context.Context, store *config.Store, manager *scheduler.
 			continue
 		}
 		snapshot := store.Snapshot()
-		registry, _, next, err := buildRuntime(ctx, snapshot, status.Generation, configPath, db, instanceKey, tokens, logger)
+		registry, _, next, err := buildRuntime(ctx, snapshot, status.Generation, configPath, db, instanceKey, tokens, auditLog, logger)
 		if err != nil {
 			logger.Error("runtime reload rejected", "error", err)
 			continue
@@ -299,6 +316,14 @@ func reloadRuntime(ctx context.Context, store *config.Store, manager *scheduler.
 				continue
 			}
 		}
+		if forwardAuth != nil && snapshot.Config.Auth.Mode == config.AuthForward {
+			forward := snapshot.Config.Auth.Forward
+			if err = forwardAuth.Reconfigure(auth.ForwardConfig{TrustedProxies: forward.TrustedProxies, UserHeader: forward.UserHeader, GroupsHeader: forward.GroupsHeader, AdminGroups: forward.AdminGroups, PrivilegedOperations: string(forward.PrivilegedOperations)}); err != nil {
+				closeRuntimeGeneration(next, logger)
+				logger.Error("authentication reload rejected", "error", err)
+				continue
+			}
+		}
 		if err = manager.Apply(ctx, next.Definitions); err != nil {
 			closeRuntimeGeneration(next, logger)
 			logger.Error("runtime reload rejected", "error", err)
@@ -306,6 +331,7 @@ func reloadRuntime(ctx context.Context, store *config.Store, manager *scheduler.
 		}
 		dynamic.Swap(registry)
 		runtimes.Swap(next, logger)
+		recordGenerationAudit(ctx, auditLog, status.Generation, next, logger)
 		generation = status.Generation
 	}
 }
@@ -339,7 +365,7 @@ func closeRuntimeGeneration(generation *appcore.Generation, logger *slog.Logger)
 	}
 }
 
-func buildRuntime(ctx context.Context, snapshot *config.Snapshot, generation uint64, configPath string, db *storage.Store, instanceKey []byte, tokens *assettokens.Service, logger *slog.Logger) (connections.Registry, map[string]string, *appcore.Generation, error) {
+func buildRuntime(ctx context.Context, snapshot *config.Snapshot, generation uint64, configPath string, db *storage.Store, instanceKey []byte, tokens *assettokens.Service, auditLog *audit.Log, logger *slog.Logger) (connections.Registry, map[string]string, *appcore.Generation, error) {
 	resolved, diags := secrets.ResolveAll(snapshot.SecretRefs, secrets.DefaultResolver())
 	if diags.HasErrors() {
 		return nil, nil, nil, fmt.Errorf("resolve secrets:\n%s", diags.String())
@@ -356,11 +382,22 @@ func buildRuntime(ctx context.Context, snapshot *config.Snapshot, generation uin
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	built, err := appcore.BuildGeneration(ctx, snapshot, generation, configPath, registry, revisions, tokens, filepath.Join(db.DataDir(), "wasm-cache"), logger)
+	built, err := appcore.BuildGenerationWithAudit(ctx, snapshot, generation, configPath, registry, revisions, tokens, filepath.Join(db.DataDir(), "wasm-cache"), auditLog, logger)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 	return registry, revisions, built, nil
+}
+
+func recordGenerationAudit(ctx context.Context, log *audit.Log, generation uint64, built *appcore.Generation, logger *slog.Logger) {
+	if err := log.Record(ctx, audit.Entry{Actor: "system", Action: "config.apply", Outcome: "success", Detail: map[string]uint64{"generation": generation}}); err != nil {
+		logger.Error("write config audit record", "error", err)
+	}
+	for _, plugin := range built.PluginLoads {
+		if err := log.Record(ctx, audit.Entry{Actor: "system", Action: "plugin.load", Target: plugin.ID, Outcome: "success", Detail: plugin}); err != nil {
+			logger.Error("write plugin audit record", "plugin", plugin.ID, "error", err)
+		}
+	}
 }
 
 // configLoader is config.Store's Loader for real (non-fixture) configuration: parse, resolve
@@ -371,6 +408,8 @@ func buildRuntime(ctx context.Context, snapshot *config.Snapshot, generation uin
 // failed check here is an ordinary load diagnostic, so config.Store's own atomic-swap semantics
 // apply automatically: the bad snapshot is refused and the previous good one stays live.
 func configLoader(override bool) config.Loader {
+	var mu sync.Mutex
+	var initialMode config.AuthMode
 	return func(path string) (*config.Snapshot, config.Diagnostics) {
 		snapshot, diags := config.LoadPath(path)
 		if snapshot == nil || diags.HasErrors() {
@@ -385,15 +424,60 @@ func configLoader(override bool) config.Loader {
 			diags = append(diags, config.Diagnostic{Severity: config.SeverityError, File: path, Message: err.Error()})
 			return nil, diags
 		}
+		mu.Lock()
+		defer mu.Unlock()
+		if initialMode == "" {
+			initialMode = snapshot.Config.Auth.Mode
+		} else if snapshot.Config.Auth.Mode != initialMode {
+			diags = append(diags, config.Diagnostic{Severity: config.SeverityError, File: path, Message: "auth.mode changes require a server restart"})
+			return nil, diags
+		}
 		return snapshot, diags
 	}
 }
 
 func validateAuthNone(snapshot *config.Snapshot, override bool) error {
-	if snapshot.Config.Auth.Mode == config.AuthNone && len(snapshot.SecretRefs) > 0 && !override {
-		return errors.New("auth.mode is none but the configuration references secrets; pass --i-know-what-im-doing to acknowledge the risk")
+	if snapshot.Config.Auth.Mode == config.AuthNone && !override && (len(snapshot.SecretRefs) > 0 || configuredActions(snapshot)) {
+		return errors.New("auth.mode is none but the configuration enables actions or references secrets; pass --i-know-what-im-doing to acknowledge the risk")
 	}
 	return nil
+}
+
+func configuredActions(snapshot *config.Snapshot) bool {
+	for _, connection := range snapshot.Config.Connections {
+		if connection.Docker != nil && connection.Docker.AllowActions {
+			return true
+		}
+	}
+	for _, section := range snapshot.Config.Sections {
+		for _, card := range section.Cards {
+			if containsAction(card.View) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func containsAction(value any) bool {
+	switch typed := value.(type) {
+	case map[string]any:
+		if blockType, _ := typed["type"].(string); blockType == "actions" {
+			return true
+		}
+		for _, child := range typed {
+			if containsAction(child) {
+				return true
+			}
+		}
+	case []any:
+		for _, child := range typed {
+			if containsAction(child) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func printVersion(args []string) error {

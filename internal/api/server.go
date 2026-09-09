@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"veduta.dev/veduta/internal/audit"
 	"veduta.dev/veduta/internal/auth"
 	"veduta.dev/veduta/internal/config"
 	"veduta.dev/veduta/internal/connections"
@@ -40,6 +41,13 @@ type Config struct {
 	AllowPublicWithoutAuth bool
 	// Auth enforces password sessions when non-nil.
 	Auth *auth.Service
+	// ForwardAuth accepts identity headers only from configured proxy networks.
+	ForwardAuth *auth.Forward
+	// Audit persists security-relevant mutations and authentication events.
+	Audit *audit.Log
+	// AuthMode records the explicit production policy. The zero value preserves lightweight
+	// handler construction in package tests; serve always sets it from the validated config.
+	AuthMode config.AuthMode
 
 	// Assets overrides the embedded frontend. Left nil it uses the build compiled into the
 	// binary; tests set it so their results do not depend on whether anyone ran `pnpm build`.
@@ -106,7 +114,7 @@ func New(cfg Config) (*Server, error) {
 	if cfg.Listen == "" {
 		cfg.Listen = "127.0.0.1:8099"
 	}
-	if cfg.Auth != nil {
+	if cfg.Auth != nil || cfg.ForwardAuth != nil {
 		cfg.AuthConfigured = true
 	}
 	public, err := isPublicAddr(cfg.Listen)
@@ -170,6 +178,7 @@ func (s *Server) routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/v1/health", s.handleHealth)
 	mux.HandleFunc("GET /api/v1/version", s.handleVersion)
+	s.routeIdentity(mux)
 	if s.cfg.Auth != nil {
 		s.routeAuth(mux)
 	}
@@ -266,7 +275,10 @@ func (s *Server) routeConfig(mux *http.ServeMux) {
 			writeJSON(w, http.StatusOK, cs)
 		})
 		mux.HandleFunc("POST /api/v1/cards/{id}/refresh", func(w http.ResponseWriter, r *http.Request) {
-			if err := s.cfg.Scheduler.RefreshNow(r.Context(), r.PathValue("id")); err != nil {
+			id := r.PathValue("id")
+			identity, _ := identityFromContext(r.Context())
+			if err := s.cfg.Scheduler.RefreshNow(r.Context(), id); err != nil {
+				s.audit(r.Context(), audit.Entry{Actor: identity.Username, IP: auth.ClientIP(r), Action: "card.refresh", Target: id, Outcome: "failure"})
 				status := http.StatusInternalServerError
 				if errors.Is(err, scheduler.ErrUnknownCard) {
 					status = http.StatusNotFound
@@ -276,7 +288,8 @@ func (s *Server) routeConfig(mux *http.ServeMux) {
 				writeJSON(w, status, map[string]string{"error": err.Error()})
 				return
 			}
-			cs, _ := s.cfg.Scheduler.State(r.PathValue("id"))
+			s.audit(r.Context(), audit.Entry{Actor: identity.Username, IP: auth.ClientIP(r), Action: "card.refresh", Target: id, Outcome: "success"})
+			cs, _ := s.cfg.Scheduler.State(id)
 			writeJSON(w, http.StatusOK, cs)
 		})
 	}

@@ -11,6 +11,8 @@ import (
 	"sort"
 	"time"
 
+	"veduta.dev/veduta/internal/audit"
+	"veduta.dev/veduta/internal/auth"
 	"veduta.dev/veduta/internal/config"
 	"veduta.dev/veduta/internal/integrations"
 )
@@ -19,10 +21,8 @@ import (
 // POST /api/v1/integrations/{id}/approve - the REST side of the same two-step, digest-bound
 // approval transaction `veduta integration approve` performs (cmd/veduta/integration.go).
 //
-// Scope note: docs/02-implementation-plan.md's D2b entry also asks for a sudo-window
-// re-authentication gate on the approve endpoint and an audited approval trail. H1 sessions now
-// authenticate this route, while the fresh sudo window and audit write remain H2 work recorded in
-// docs/03-backlog.md with this file named as the hook point.
+// H2 gates approval with a fresh password sudo window or the configured forward-auth admin group,
+// and records the authenticated actor, peer IP, digest and grants in the persistent audit log.
 //
 // integrationSummary is one row of GET /api/v1/integrations - docs/01-architecture.md section 9:
 // "installed integrations: version, runtime, lock status (approved/unapproved/changed), granted
@@ -56,15 +56,14 @@ type approvalPreview struct {
 // section 6: "the client sends the exact grants it is approving, not a bare yes." Deliberately
 // has no approvedBy field: found in review that a client-supplied actor string was passed
 // straight through to the audit-trail attribution with no authentication behind it at all - not
-// this endpoint's own mistake so much as a former limitation of having no session system. H2 will
-// replace the fixed sentinel with the authenticated identity when it adds the audit transaction.
+// this endpoint's own mistake so much as a former limitation of having no session system.
 type approveRequest struct {
 	ExpectedManifestSHA256 string              `json:"expectedManifestSha256"`
 	Grants                 integrations.Grants `json:"grants"`
 }
 
-// unauthenticatedApprovedBy remains the REST attribution until H2 wires the authenticated H1
-// identity through the approval audit transaction. The CLI's own `--by` flag is unaffected.
+// unauthenticatedApprovedBy is retained only for direct package tests that omit an explicit
+// AuthMode. Production always attributes approvals to its authenticated request identity.
 const unauthenticatedApprovedBy = "rest-api (unauthenticated)"
 
 // errIntegrationNotDeclared and errIntegrationBuiltin distinguish "there is nothing to approve
@@ -159,6 +158,13 @@ func (s *Server) routeIntegrations(mux *http.ServeMux) {
 	})
 
 	mux.HandleFunc("POST /api/v1/integrations/{id}/approve", func(w http.ResponseWriter, r *http.Request) {
+		identity, identified := identityFromContext(r.Context())
+		id := r.PathValue("id")
+		if s.cfg.AuthMode != "" && (!identified || !s.allowsPrivileged(identity)) {
+			s.audit(r.Context(), audit.Entry{Actor: identity.Username, IP: auth.ClientIP(r), Action: "integration.approve", Target: id, Outcome: "failure", Detail: map[string]string{"reason": "fresh privileged authorization required"}})
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "fresh privileged authorization required"})
+			return
+		}
 		// Serialises this whole read-modify-write of veduta.lock.yaml against every other
 		// concurrent approval in this process - see approveMu's own doc comment for the race
 		// this closes. Held across resolveForApproval's own lock read too, so the digest/diff
@@ -167,7 +173,6 @@ func (s *Server) routeIntegrations(mux *http.ServeMux) {
 		s.approveMu.Lock()
 		defer s.approveMu.Unlock()
 
-		id := r.PathValue("id")
 		resolved, err := s.resolveForApproval(id)
 		if err != nil {
 			writeIntegrationError(w, err)
@@ -188,8 +193,13 @@ func (s *Server) routeIntegrations(mux *http.ServeMux) {
 			return
 		}
 
-		entry, err := integrations.Approve(resolved.manifest, req.ExpectedManifestSHA256, req.Grants, unauthenticatedApprovedBy, time.Now())
+		approvedBy := unauthenticatedApprovedBy
+		if identified {
+			approvedBy = identity.Username
+		}
+		entry, err := integrations.Approve(resolved.manifest, req.ExpectedManifestSHA256, req.Grants, approvedBy, time.Now())
 		if err != nil {
+			s.audit(r.Context(), audit.Entry{Actor: approvedBy, IP: auth.ClientIP(r), Action: "integration.approve", Target: id, Outcome: "failure", Detail: map[string]string{"expectedDigest": req.ExpectedManifestSHA256, "actualDigest": resolved.manifest.Digest}})
 			if errors.Is(err, integrations.ErrDigestChanged) {
 				// docs/01-architecture.md section 6: "409 Conflict with the new diff. Nothing is
 				// approved." resolved.entry is still the PRE-attempt lock record (nothing was
@@ -220,6 +230,7 @@ func (s *Server) routeIntegrations(mux *http.ServeMux) {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}
+		s.audit(r.Context(), audit.Entry{Actor: approvedBy, IP: auth.ClientIP(r), Action: "integration.approve", Target: id, Outcome: "success", Detail: map[string]any{"manifestDigest": entry.ManifestSHA256, "grants": req.Grants}})
 		writeJSON(w, http.StatusOK, entry)
 	})
 }

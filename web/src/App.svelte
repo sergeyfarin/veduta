@@ -25,7 +25,8 @@
   let cardsById = $state<Map<string, CardEnvelope>>(new Map());
   let loadError = $state<string | null>(null);
   let streamStatus = $state<StreamStatus>('connecting');
-  let authState = $state<'checking' | 'required' | 'ready'>('checking');
+  let authState = $state<'checking' | 'required' | 'denied' | 'ready'>('checking');
+  let authMode = $state<'password' | 'forward' | 'none'>('none');
 
   $effect(() => {
     apply(theme);
@@ -39,8 +40,18 @@
   });
 
   $effect(() => {
-    fetch('/api/v1/auth/me').then((response) => {
-      authState = response.ok || response.status === 404 ? 'ready' : 'required';
+    fetch('/api/v1/auth/me').then(async (response) => {
+      if (response.ok) {
+        const identity = await response.json() as { mode?: 'password' | 'forward' | 'none' };
+        authMode = identity.mode ?? 'none';
+        authState = 'ready';
+      } else if (response.headers.get('X-Veduta-Auth-Mode') === 'forward') {
+        authMode = 'forward';
+        authState = 'denied';
+      } else {
+        authMode = 'password';
+        authState = 'required';
+      }
     }).catch(() => {
       authState = 'ready';
     });
@@ -116,18 +127,24 @@
 </script>
 
 {#if authState === 'required'}
-  <Login onAuthenticated={() => (authState = 'ready')} />
+  <Login onAuthenticated={() => { authMode = 'password'; authState = 'ready'; }} />
+{:else if authState === 'denied'}
+  <main class="access-denied"><h1>Access denied</h1><p>Your reverse proxy did not provide a trusted identity.</p></main>
 {:else if authState === 'ready'}
 <div class="page">
   <header class="topbar">
     <h1>Home</h1>
     <span class="connection" data-status={streamStatus}>{streamStatus}</span>
     <span class="spacer"></span>
-    <button onclick={() => void logout()}>Sign out</button>
+    {#if authMode === 'password'}<button onclick={() => void logout()}>Sign out</button>{/if}
     <button onclick={() => (theme = next(theme))}>
       Theme: {theme}
     </button>
   </header>
+
+  {#if authMode === 'none'}
+    <p class="auth-banner" role="status">Authentication is disabled. Anyone who can reach this server can view the dashboard.</p>
+  {/if}
 
   {#if loadError}
     <p class="error-banner">Could not load the dashboard: {loadError}</p>
@@ -232,6 +249,23 @@
     background: var(--v-surface-2);
     color: var(--v-muted);
     font-size: 13px;
+  }
+
+  .auth-banner {
+    margin: 0 0 var(--v-s-5);
+    padding: var(--v-s-3) var(--v-s-4);
+    border: 1px solid color-mix(in srgb, var(--v-warning) 55%, var(--v-border));
+    border-radius: var(--v-r-sm);
+    background: color-mix(in srgb, var(--v-warning) 10%, var(--v-surface));
+    color: var(--v-text);
+    font-size: 13px;
+  }
+
+  .access-denied {
+    max-width: 420px;
+    margin: 20vh auto;
+    padding: var(--v-s-6);
+    color: var(--v-text);
   }
 
   .blocks {

@@ -142,3 +142,13 @@ connections:
 		t.Fatal("the unsafe reload replaced the last-good snapshot instead of being refused")
 	}
 }
+
+func TestValidateAuthNoneRejectsConfiguredDockerActions(t *testing.T) {
+	snapshot := &config.Snapshot{Config: config.Config{Auth: config.Auth{Mode: config.AuthNone}, Connections: map[string]config.Connection{"docker": {Kind: "docker", Docker: &config.DockerConnection{AllowActions: true}}}}}
+	if err := validateAuthNone(snapshot, false); err == nil {
+		t.Fatal("auth none with Docker actions should require the explicit override")
+	}
+	if err := validateAuthNone(snapshot, true); err != nil {
+		t.Fatalf("explicit override was rejected: %v", err)
+	}
+}

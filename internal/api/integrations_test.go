@@ -93,6 +93,24 @@ func TestIntegrationsList_ShowsUnapproved(t *testing.T) {
 	}
 }
 
+func TestIntegrationApprovalIsCLIOnlyWithExplicitAuthNone(t *testing.T) {
+	_, dir := glancesServer(t)
+	// Rebuild with the production auth policy so the legacy helper remains useful to the
+	// approval transaction tests while this test covers the security boundary itself.
+	store, diags := config.Open(filepath.Join(dir, "veduta.yaml"), nil, nil)
+	if diags.HasErrors() {
+		t.Fatal(diags.String())
+	}
+	secured, err := api.New(api.Config{Listen: "127.0.0.1:0", Assets: fstest.MapFS{}, ConfigStore: store, AuthMode: config.AuthNone})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := doJSON(t, secured, http.MethodPost, "/api/v1/integrations/glances/approve", map[string]any{})
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestIntegrationApproval_ReturnsDiffForUnapproved(t *testing.T) {
 	s, _ := glancesServer(t)
 	rec := doJSON(t, s, http.MethodGet, "/api/v1/integrations/glances/approval", nil)

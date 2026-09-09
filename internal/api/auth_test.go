@@ -105,3 +105,32 @@ func TestPasswordSessionCookiesProtectAPIAndLogoutRevokes(t *testing.T) {
 		t.Fatalf("revoked session status=%d", againRec.Code)
 	}
 }
+
+func TestForwardAuthRejectsSpoofedUntrustedPeer(t *testing.T) {
+	forward, err := auth.NewForward(auth.ForwardConfig{TrustedProxies: []string{"192.0.2.0/24"}, UserHeader: "X-User"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	server, err := New(Config{Listen: "127.0.0.1:0", ForwardAuth: forward, Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := server.Handler()
+	spoofed := httptest.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
+	spoofed.RemoteAddr = "198.51.100.10:1234"
+	spoofed.Header.Set("X-User", "attacker")
+	denied := httptest.NewRecorder()
+	handler.ServeHTTP(denied, spoofed)
+	if denied.Code != http.StatusUnauthorized || denied.Header().Get("X-Veduta-Auth-Mode") != "forward" {
+		t.Fatalf("status=%d mode=%q", denied.Code, denied.Header().Get("X-Veduta-Auth-Mode"))
+	}
+
+	trusted := httptest.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
+	trusted.RemoteAddr = "192.0.2.10:1234"
+	trusted.Header.Set("X-User", "alice")
+	ok := httptest.NewRecorder()
+	handler.ServeHTTP(ok, trusted)
+	if ok.Code != http.StatusOK || !bytes.Contains(ok.Body.Bytes(), []byte(`"username":"alice"`)) {
+		t.Fatalf("status=%d body=%s", ok.Code, ok.Body.String())
+	}
+}

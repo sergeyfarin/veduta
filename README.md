@@ -32,8 +32,8 @@ HTTP/JSON card - a card's `view:` block synthesises a manifest reused wholesale 
 second execution engine), and D5 (connection health and admin endpoints: `GET /api/v1/connections`,
 `POST /api/v1/connections/{id}/test`, DNS/TCP/TLS/auth/HTTP-status classified separately) are done
 and green in CI, closing out Phase D; spikes S2 (upstream API reality check), S3 (expr vs cel
-bake-off), S4 (visual prototype), Phases E–G, and H1 (password sessions and login UI) are done.
-Next up: H2 (forward auth, privileged-operation gating, and audit). See
+bake-off), S4 (visual prototype), Phases E–G, and Phase H (password and forward authentication,
+privileged-operation gating, and persistent audit) are done. Next up: Phase I. See
 [docs/02-implementation-plan.md](docs/02-implementation-plan.md) for the full
 milestone table and what's marked **DONE**, and [docs/03-backlog.md](docs/03-backlog.md) for
 open gaps found along the way (currently: a config/schema asymmetry, and how Jellyfin's real auth

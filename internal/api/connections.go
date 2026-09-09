@@ -7,6 +7,8 @@ import (
 	"sort"
 	"sync"
 
+	"veduta.dev/veduta/internal/audit"
+	"veduta.dev/veduta/internal/auth"
 	"veduta.dev/veduta/internal/connections"
 )
 
@@ -71,6 +73,7 @@ func (s *Server) routeConnections(mux *http.ServeMux) {
 
 	mux.HandleFunc("POST /api/v1/connections/{id}/test", func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
+		identity, _ := identityFromContext(r.Context())
 		snapshot := store.Snapshot()
 		if snapshot == nil {
 			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "no valid configuration loaded"})
@@ -78,9 +81,16 @@ func (s *Server) routeConnections(mux *http.ServeMux) {
 		}
 		conn, ok := snapshot.Config.Connections[id]
 		if !ok {
+			s.audit(r.Context(), audit.Entry{Actor: identity.Username, IP: auth.ClientIP(r), Action: "connection.test", Target: id, Outcome: "failure"})
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "no such connection"})
 			return
 		}
-		writeJSON(w, http.StatusOK, connectionSummary{ID: id, Kind: conn.Kind, Health: reg.Health(r.Context(), id)})
+		health := reg.Health(r.Context(), id)
+		outcome := "success"
+		if !health.Reachable {
+			outcome = "failure"
+		}
+		s.audit(r.Context(), audit.Entry{Actor: identity.Username, IP: auth.ClientIP(r), Action: "connection.test", Target: id, Outcome: outcome})
+		writeJSON(w, http.StatusOK, connectionSummary{ID: id, Kind: conn.Kind, Health: health})
 	})
 }

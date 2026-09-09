@@ -31,7 +31,13 @@ import (
 // Close it only after the scheduler has cancelled the generation's invocations.
 type Generation struct {
 	Definitions []scheduler.Definition
+	PluginLoads []PluginLoad
 	runtimes    []integrations.Runtime
+}
+
+// PluginLoad identifies an external plugin loaded by a generation for audit attribution.
+type PluginLoad struct {
+	ID, Runtime, Version, Digest string
 }
 
 // Close releases runtime caches and waits for any bounded invocation still leaving the old generation.
@@ -49,8 +55,14 @@ func (g *Generation) Close(ctx context.Context) error {
 
 // BuildGeneration resolves every card to an approved runtime instance and scheduler definition.
 func BuildGeneration(ctx context.Context, snap *config.Snapshot, generation uint64, configPath string, reg connections.Registry, revisions map[string]string, assets *assettokens.Service, wasmCacheDir string, logger *slog.Logger) (_ *Generation, err error) {
-	broker := capabilities.NewBrokerWithAssets(reg, capabilities.NewMemCache(), capabilities.NewMemAudit(), logger, assets)
+	return BuildGenerationWithAudit(ctx, snap, generation, configPath, reg, revisions, assets, wasmCacheDir, capabilities.NewMemAudit(), logger)
+}
+
+// BuildGenerationWithAudit builds a generation and persists broker denials through auditSink.
+func BuildGenerationWithAudit(ctx context.Context, snap *config.Snapshot, generation uint64, configPath string, reg connections.Registry, revisions map[string]string, assets *assettokens.Service, wasmCacheDir string, auditSink capabilities.Audit, logger *slog.Logger) (_ *Generation, err error) {
+	broker := capabilities.NewBrokerWithAssets(reg, capabilities.NewMemCache(), auditSink, logger, assets)
 	built := &Generation{}
+	loaded := make(map[string]struct{})
 	declarativeRuntime := declarative.New(broker)
 	built.runtimes = append(built.runtimes, declarativeRuntime)
 	var wasmRuntime integrations.Runtime
@@ -182,6 +194,10 @@ func BuildGeneration(ctx context.Context, snap *config.Snapshot, generation uint
 			inst, e := runtime.Load(ctx, integrations.Installed{Manifest: m, Lock: entry})
 			if e != nil {
 				return nil, e
+			}
+			if _, seen := loaded[in.ID]; !seen {
+				built.PluginLoads = append(built.PluginLoads, PluginLoad{ID: in.ID, Runtime: m.Runtime, Version: m.Version, Digest: m.Digest})
+				loaded[in.ID] = struct{}{}
 			}
 			g := grant(m, entry, card, reg, revisions, generation, d.ApprovalRevision, d.Hash)
 			d.Source.Runtime = state.Runtime(m.Runtime)

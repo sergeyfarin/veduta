@@ -63,8 +63,11 @@ type Session struct {
 
 // Identity is the authenticated request principal.
 type Identity struct {
-	Username  string `json:"username"`
-	SessionID string `json:"-"`
+	Username  string   `json:"username"`
+	SessionID string   `json:"-"`
+	Mode      string   `json:"mode"`
+	Admin     bool     `json:"admin"`
+	Groups    []string `json:"groups,omitempty"`
 }
 
 type attempts struct {
@@ -82,8 +85,10 @@ type Service struct {
 	ttl      time.Duration
 	now      func() time.Time
 
-	mu       sync.Mutex
-	attempts map[string]attempts
+	mu        sync.Mutex
+	attempts  map[string]attempts
+	sudoMu    sync.Mutex
+	sudoUntil map[string]time.Time
 }
 
 // Reconfigure atomically replaces the administrator hash and session lifetime after validation.
@@ -140,7 +145,7 @@ func New(ctx context.Context, cfg Config) (*Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Service{store: cfg.Store, username: cfg.Username, params: params, ttl: ttl, now: cfg.Now, attempts: map[string]attempts{}}, nil
+	return &Service{store: cfg.Store, username: cfg.Username, params: params, ttl: ttl, now: cfg.Now, attempts: map[string]attempts{}, sudoUntil: map[string]time.Time{}}, nil
 }
 
 // Login verifies credentials, applies source lockout, and creates a fresh server-side session.
@@ -221,7 +226,7 @@ func (s *Service) Authenticate(ctx context.Context, token string) (Identity, str
 		return Identity{}, "", ErrNoSession
 	}
 	_, _ = s.store.DB().ExecContext(ctx, `UPDATE sessions SET last_seen_at=? WHERE id=?`, s.now().UTC().Format(time.RFC3339Nano), tokenHash(token))
-	return Identity{Username: username, SessionID: tokenHash(token)}, csrf, nil
+	return Identity{Username: username, SessionID: tokenHash(token), Mode: "password", Admin: true}, csrf, nil
 }
 
 // Logout revokes token in the server-side store.
@@ -229,8 +234,42 @@ func (s *Service) Logout(ctx context.Context, token string) error {
 	if token == "" {
 		return nil
 	}
-	_, err := s.store.DB().ExecContext(ctx, `DELETE FROM sessions WHERE id=?`, tokenHash(token))
+	sessionID := tokenHash(token)
+	_, err := s.store.DB().ExecContext(ctx, `DELETE FROM sessions WHERE id=?`, sessionID)
+	s.sudoMu.Lock()
+	delete(s.sudoUntil, sessionID)
+	s.sudoMu.Unlock()
 	return err
+}
+
+// OpenSudo re-verifies the password and opens a five-minute privileged-operation window.
+func (s *Service) OpenSudo(ctx context.Context, sessionToken, password string) error {
+	identity, _, err := s.Authenticate(ctx, sessionToken)
+	if err != nil {
+		return err
+	}
+	s.configMu.RLock()
+	params := s.params
+	s.configMu.RUnlock()
+	if !verifyPassword(params, password) {
+		return ErrInvalidCredentials
+	}
+	s.sudoMu.Lock()
+	s.sudoUntil[identity.SessionID] = s.now().Add(5 * time.Minute)
+	s.sudoMu.Unlock()
+	return nil
+}
+
+// AllowsPrivileged reports whether identity has a current sudo window.
+func (s *Service) AllowsPrivileged(identity Identity) bool {
+	s.sudoMu.Lock()
+	defer s.sudoMu.Unlock()
+	until := s.sudoUntil[identity.SessionID]
+	if !s.now().Before(until) {
+		delete(s.sudoUntil, identity.SessionID)
+		return false
+	}
+	return true
 }
 
 // CheckCSRF authenticates the session and compares its stored, cookie, and header tokens.

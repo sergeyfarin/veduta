@@ -116,3 +116,38 @@ func TestReconfigureReplacesPasswordGeneration(t *testing.T) {
 		t.Fatalf("session TTL=%s", got)
 	}
 }
+
+func TestSudoWindowExpiresAndLogoutRevokesIt(t *testing.T) {
+	now := time.Date(2026, 9, 8, 12, 0, 0, 0, time.UTC)
+	service, _ := testService(t, &now)
+	session, err := service.Login(context.Background(), "admin", "correct horse", "test", "192.0.2.1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	identity, _, err := service.Authenticate(context.Background(), session.Token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if service.AllowsPrivileged(identity) {
+		t.Fatal("new session unexpectedly has a sudo window")
+	}
+	if err := service.OpenSudo(context.Background(), session.Token, "correct horse"); err != nil {
+		t.Fatal(err)
+	}
+	if !service.AllowsPrivileged(identity) {
+		t.Fatal("verified password did not open sudo window")
+	}
+	now = now.Add(6 * time.Minute)
+	if service.AllowsPrivileged(identity) {
+		t.Fatal("expired sudo window remained open")
+	}
+	if err := service.OpenSudo(context.Background(), session.Token, "correct horse"); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.Logout(context.Background(), session.Token); err != nil {
+		t.Fatal(err)
+	}
+	if service.AllowsPrivileged(identity) {
+		t.Fatal("logout did not revoke sudo window")
+	}
+}
