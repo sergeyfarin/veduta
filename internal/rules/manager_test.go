@@ -97,11 +97,8 @@ func TestWrongSignalTypeEmitsOncePerBadEpisode(t *testing.T) {
 func TestFiredRuleCallsNotificationSink(t *testing.T) {
 	store, cards, original, declarations := ruleHarness(t, float64(95))
 	original.Close()
-	var alert rules.Alert
-	manager := rules.NewWithNotifier(context.Background(), store, cards, nil, func(_ context.Context, value rules.Alert) error {
-		alert = value
-		return nil
-	})
+	sink := &recordingSink{}
+	manager := rules.NewWithNotifier(context.Background(), store, cards, nil, sink)
 	defer manager.Close()
 	definition := compileRule(t, config.Rule{ID: "hot", When: `signal("server", "cpu") > 90`, Severity: "critical", Notify: []string{"phone"}}, declarations)
 	if err := manager.Apply(context.Background(), []rules.Definition{definition}, declarations); err != nil {
@@ -110,10 +107,21 @@ func TestFiredRuleCallsNotificationSink(t *testing.T) {
 	if err := manager.Evaluate(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if alert.RuleID != "hot" || alert.Event != "fired" || alert.Severity != "critical" || len(alert.Channels) != 1 || alert.Channels[0] != "phone" {
-		t.Fatalf("alert=%+v", alert)
+	if sink.alert.RuleID != "hot" || sink.alert.Event != "fired" || sink.alert.Severity != "critical" || len(sink.alert.Channels) != 1 || sink.alert.Channels[0] != "phone" {
+		t.Fatalf("alert=%+v", sink.alert)
 	}
 }
+
+type recordingSink struct {
+	alert rules.Alert
+}
+
+func (s *recordingSink) PrepareRuleAlert(ruleID, event, severity string, channels []string, _ time.Time) ([]storage.NotificationRequest, error) {
+	s.alert = rules.Alert{RuleID: ruleID, Event: event, Severity: severity, Channels: channels}
+	return nil, nil
+}
+
+func (*recordingSink) Wake() {}
 
 func ruleHarness(t *testing.T, initial any) (*storage.Store, *scheduler.Manager, *rules.Manager, map[string]rules.CardDefinition) {
 	t.Helper()

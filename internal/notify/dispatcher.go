@@ -99,6 +99,35 @@ func (d *Dispatcher) Enqueue(ctx context.Context, message Message, channelIDs []
 	return nil
 }
 
+// PrepareRuleAlert converts one rule transition into credential-free outbox requests. It validates
+// every named channel before the caller starts its storage transaction.
+func (d *Dispatcher) PrepareRuleAlert(ruleID, event, severity string, channelIDs []string, now time.Time) ([]storage.NotificationRequest, error) {
+	message := Message{RuleID: ruleID, Event: event, Severity: severity, Title: "Veduta rule " + event, Body: "Rule " + ruleID + " " + event}
+	payload, err := json.Marshal(message)
+	if err != nil {
+		return nil, err
+	}
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	requests := make([]storage.NotificationRequest, 0, len(channelIDs))
+	for _, id := range channelIDs {
+		channel, ok := d.channels[id]
+		if !ok {
+			return nil, fmt.Errorf("notify: channel %q is not configured", id)
+		}
+		requests = append(requests, storage.NotificationRequest{Channel: id, DedupeKey: id + ":" + ruleID + ":" + event, Payload: payload, Now: now, Cooldown: channel.Cooldown, PerHour: channel.PerHour})
+	}
+	return requests, nil
+}
+
+// Wake prompts the durable dispatcher after a transaction inserted an outbox row.
+func (d *Dispatcher) Wake() {
+	select {
+	case d.wake <- struct{}{}:
+	default:
+	}
+}
+
 // Run drains the outbox until ctx is cancelled.
 func (d *Dispatcher) Run(ctx context.Context) error {
 	if err := d.store.ResetSendingNotifications(ctx); err != nil {

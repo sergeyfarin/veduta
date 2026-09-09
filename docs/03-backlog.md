@@ -251,7 +251,7 @@ scheduler with rollback on failure, then swaps the registry/runtime. Only that c
 publishes the config generation. Activation errors reject the candidate, retain the last-good
 snapshot and appear in `/config/status` diagnostics. The 500 ms runtime poll is removed.
 
-### Rule transitions are not committed atomically with their event and notification
+### Resolved before L3: rule transitions were not committed atomically
 
 J2/J3 persist a fired or resolved transition in three steps: append `rule.fired`/`rule.resolved`,
 enqueue each notification, then write `rule_state`. Dedupe limits repeated deliveries, but a crash
@@ -259,9 +259,11 @@ or database error between those steps can leave an event or outbox row committed
 rule state still describes the previous transition. On restart the manager can therefore append a
 duplicate event and, after the cooldown window, enqueue the same transition again. Wrong-signal-type
 episodes do not have this gap: J3's follow-up persists their marker before emitting the event.
-Priority: **before L3/release hardening**; add a storage transaction that commits the rule state,
-transition event, all outbox rows, and any channel suspension meta-event together. Keep network
-delivery outside that transaction and add crash-boundary tests for fired and resolved transitions.
+Closed before L3: the dispatcher now prepares credential-free outbox requests without writing,
+and `storage.CommitRuleTransition` commits the rule state, transition event, all outbox rows, and
+any channel suspension meta-event in one SQLite transaction. The dispatcher wakes only after the
+commit; network delivery remains outside it. Injected last-statement failures prove fired and
+resolved transitions roll back state, event, outbox, suspension state and suspension meta-event.
 
 ### Asset format coverage is narrower than the architecture's final allowlist
 

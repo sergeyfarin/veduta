@@ -244,9 +244,7 @@ func serve(args []string) error {
 			return fmt.Errorf("start schedules: %w", err)
 		}
 		dispatcher := notify.NewDispatcher(db, notificationChannels, logger, notify.DispatcherConfig{})
-		ruleManager := rules.NewWithNotifier(ctx, db, manager, logger, func(alertCtx context.Context, alert rules.Alert) error {
-			return dispatcher.Enqueue(alertCtx, notify.Message{RuleID: alert.RuleID, Event: alert.Event, Severity: alert.Severity, Title: "Veduta rule " + alert.Event, Body: "Rule " + alert.RuleID + " " + alert.Event}, alert.Channels)
-		})
+		ruleManager := rules.NewWithNotifier(ctx, db, manager, logger, dispatcher)
 		if err = ruleManager.Apply(ctx, runtimeGeneration.RuleDefinitions, runtimeGeneration.RuleDeclarations); err != nil {
 			ruleManager.Close()
 			closeRuntimeGeneration(runtimeGeneration, logger)

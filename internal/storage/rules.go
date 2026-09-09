@@ -43,8 +43,53 @@ func (s *Store) GetRuleState(ctx context.Context, id, hash string) (RuleState, b
 
 // PutRuleState stores one rule's complete state.
 func (s *Store) PutRuleState(ctx context.Context, value RuleState) error {
-	_, err := s.db.ExecContext(ctx, `INSERT INTO rule_state(rule_id,rule_hash,since,deadline_at,last_result,fired_at,resolved_at,wrong_type) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(rule_id) DO UPDATE SET rule_hash=excluded.rule_hash,since=excluded.since,deadline_at=excluded.deadline_at,last_result=excluded.last_result,fired_at=excluded.fired_at,resolved_at=excluded.resolved_at,wrong_type=excluded.wrong_type`, value.RuleID, value.RuleHash, nullTime(value.Since), nullTime(value.Deadline), value.LastResult, nullTime(value.FiredAt), nullTime(value.ResolvedAt), value.WrongType)
+	_, err := putRuleState(ctx, s.db, value)
 	return err
+}
+
+// CommitRuleTransition atomically persists one evaluated rule state, its optional user-visible
+// event, every notification outbox insertion, and notification flood-suspension meta-events.
+// It returns true when at least one deliverable outbox row was inserted.
+func (s *Store) CommitRuleTransition(ctx context.Context, value RuleState, event *Event, notifications []NotificationRequest) (bool, error) {
+	if event != nil {
+		copy := *event
+		if err := validateEvent(&copy); err != nil {
+			return false, err
+		}
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	wake := false
+	for _, notification := range notifications {
+		enqueued, _, enqueueErr := enqueueNotificationTx(ctx, tx, notification)
+		if enqueueErr != nil {
+			return false, enqueueErr
+		}
+		wake = wake || enqueued
+	}
+	if event != nil {
+		if err = appendEventTx(ctx, tx, *event); err != nil {
+			return false, err
+		}
+	}
+	if _, err = putRuleState(ctx, tx, value); err != nil {
+		return false, err
+	}
+	if err = tx.Commit(); err != nil {
+		return false, err
+	}
+	return wake, nil
+}
+
+type ruleStateExecutor interface {
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
+}
+
+func putRuleState(ctx context.Context, executor ruleStateExecutor, value RuleState) (sql.Result, error) {
+	return executor.ExecContext(ctx, `INSERT INTO rule_state(rule_id,rule_hash,since,deadline_at,last_result,fired_at,resolved_at,wrong_type) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(rule_id) DO UPDATE SET rule_hash=excluded.rule_hash,since=excluded.since,deadline_at=excluded.deadline_at,last_result=excluded.last_result,fired_at=excluded.fired_at,resolved_at=excluded.resolved_at,wrong_type=excluded.wrong_type`, value.RuleID, value.RuleHash, nullTime(value.Since), nullTime(value.Deadline), value.LastResult, nullTime(value.FiredAt), nullTime(value.ResolvedAt), value.WrongType)
 }
 
 func nullTime(value time.Time) any {

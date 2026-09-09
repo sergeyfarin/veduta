@@ -4,6 +4,7 @@ package storage
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"time"
@@ -23,6 +24,14 @@ type Event struct {
 
 // AppendEvent stores a bounded structured event.
 func (s *Store) AppendEvent(ctx context.Context, event Event) error {
+	if err := validateEvent(&event); err != nil {
+		return err
+	}
+	_, err := s.db.ExecContext(ctx, `INSERT INTO events(ts,type,severity,source,card_id,message,data) VALUES(?,?,?,?,?,?,?)`, event.Timestamp, event.Type, event.Severity, nullString(event.Source), nullString(event.CardID), nullString(event.Message), event.Data)
+	return err
+}
+
+func validateEvent(event *Event) error {
 	if event.Type == "" || event.Severity == "" {
 		return errors.New("storage: event type and severity are required")
 	}
@@ -35,7 +44,14 @@ func (s *Store) AppendEvent(ctx context.Context, event Event) error {
 	if event.Timestamp == "" {
 		event.Timestamp = time.Now().UTC().Format(time.RFC3339Nano)
 	}
-	_, err := s.db.ExecContext(ctx, `INSERT INTO events(ts,type,severity,source,card_id,message,data) VALUES(?,?,?,?,?,?,?)`, event.Timestamp, event.Type, event.Severity, nullString(event.Source), nullString(event.CardID), nullString(event.Message), event.Data)
+	return nil
+}
+
+func appendEventTx(ctx context.Context, tx *sql.Tx, event Event) error {
+	if err := validateEvent(&event); err != nil {
+		return err
+	}
+	_, err := tx.ExecContext(ctx, `INSERT INTO events(ts,type,severity,source,card_id,message,data) VALUES(?,?,?,?,?,?,?)`, event.Timestamp, event.Type, event.Severity, nullString(event.Source), nullString(event.CardID), nullString(event.Message), event.Data)
 	return err
 }
 

@@ -41,8 +41,8 @@ connections and integrations for review, and atomically applies a comment-preser
 Config reloads activate a complete runtime generation before publishing it. Next up: Phase L. See
 [docs/02-implementation-plan.md](docs/02-implementation-plan.md) for the full
 milestone table and what's marked **DONE**, and [docs/03-backlog.md](docs/03-backlog.md) for
-open gaps found along the way. Atomic rule-transition persistence remains required before release
-hardening.
+open gaps found along the way. Rule transitions and their event/outbox effects now persist in one
+transaction, clearing the final pre-L3 implementation blocker.
 
 The contract suite in `internal/contracts` is the CI gate from the first commit —
 `mise run contracts`.

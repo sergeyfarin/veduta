@@ -28,7 +28,7 @@ type Manager struct {
 	declarations map[string]CardDefinition
 	states       map[string]storage.RuleState
 	timers       map[string]*time.Timer
-	notify       func(context.Context, Alert) error
+	notify       NotificationSink
 	active       bool
 }
 
@@ -38,13 +38,20 @@ type Alert struct {
 	Channels                []string
 }
 
+// NotificationSink prepares outbox rows without performing I/O and wakes its dispatcher only
+// after storage has committed the complete rule transition.
+type NotificationSink interface {
+	PrepareRuleAlert(ruleID, event, severity string, channels []string, now time.Time) ([]storage.NotificationRequest, error)
+	Wake()
+}
+
 // New starts a rule manager subscribed to scheduler state commits.
 func New(parent context.Context, store *storage.Store, cards *scheduler.Manager, logger *slog.Logger) *Manager {
 	return NewWithNotifier(parent, store, cards, logger, nil)
 }
 
 // NewWithNotifier also sends fired and resolved transitions to a durable notification sink.
-func NewWithNotifier(parent context.Context, store *storage.Store, cards *scheduler.Manager, logger *slog.Logger, notifier func(context.Context, Alert) error) *Manager {
+func NewWithNotifier(parent context.Context, store *storage.Store, cards *scheduler.Manager, logger *slog.Logger, notifier NotificationSink) *Manager {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -169,11 +176,11 @@ func (m *Manager) evaluateLocked(ctx context.Context, id string, cards map[strin
 		return err
 	}
 	current := m.states[id]
+	var transitionEvent *storage.Event
+	var alert *Alert
 	if len(evaluation.WrongTypes) > 0 && !current.WrongType {
 		data, _ := json.Marshal(map[string]any{"rule": id, "signals": evaluation.WrongTypes})
-		if err = m.store.AppendEvent(ctx, storage.Event{Type: "rule.signal-type", Severity: "warning", Source: "rules", Message: "Declared signal has the wrong runtime type", Data: data}); err != nil {
-			return err
-		}
+		transitionEvent = &storage.Event{Timestamp: now.Format(time.RFC3339Nano), Type: "rule.signal-type", Severity: "warning", Source: "rules", Message: "Declared signal has the wrong runtime type", Data: data}
 		current.WrongType = true
 	} else if len(evaluation.WrongTypes) == 0 {
 		current.WrongType = false
@@ -189,14 +196,12 @@ func (m *Manager) evaluateLocked(ctx context.Context, id string, cards map[strin
 			current.Deadline = now.Add(definition.For)
 		}
 		if !now.Before(current.Deadline) && current.FiredAt.IsZero() {
-			if err = m.appendRuleEvent(ctx, definition, "rule.fired", now); err != nil {
+			transitionEvent, err = ruleEvent(definition, "rule.fired", now)
+			if err != nil {
 				return err
 			}
 			if m.notify != nil {
-				err = m.notify(ctx, Alert{RuleID: definition.ID, Event: "fired", Severity: definition.Severity, Channels: definition.Notify})
-				if err != nil {
-					return err
-				}
+				alert = &Alert{RuleID: definition.ID, Event: "fired", Severity: definition.Severity, Channels: definition.Notify}
 			}
 			current.FiredAt = now
 			current.ResolvedAt = time.Time{}
@@ -207,14 +212,12 @@ func (m *Manager) evaluateLocked(ctx context.Context, id string, cards map[strin
 		current.Since, current.Deadline = time.Time{}, time.Time{}
 		if !current.FiredAt.IsZero() {
 			if definition.Resolve {
-				if err = m.appendRuleEvent(ctx, definition, "rule.resolved", now); err != nil {
+				transitionEvent, err = ruleEvent(definition, "rule.resolved", now)
+				if err != nil {
 					return err
 				}
 				if m.notify != nil {
-					err = m.notify(ctx, Alert{RuleID: definition.ID, Event: "resolved", Severity: definition.Severity, Channels: definition.Notify})
-					if err != nil {
-						return err
-					}
+					alert = &Alert{RuleID: definition.ID, Event: "resolved", Severity: definition.Severity, Channels: definition.Notify}
 				}
 			}
 			current.ResolvedAt = now
@@ -224,8 +227,19 @@ func (m *Manager) evaluateLocked(ctx context.Context, id string, cards map[strin
 		current.Since, current.Deadline = time.Time{}, time.Time{}
 	}
 	current.RuleID, current.RuleHash, current.LastResult = id, definition.Hash, string(evaluation.Result)
-	if err = m.store.PutRuleState(ctx, current); err != nil {
+	var notifications []storage.NotificationRequest
+	if alert != nil {
+		notifications, err = m.notify.PrepareRuleAlert(alert.RuleID, alert.Event, alert.Severity, alert.Channels, now)
+		if err != nil {
+			return err
+		}
+	}
+	wake, err := m.store.CommitRuleTransition(ctx, current, transitionEvent, notifications)
+	if err != nil {
 		return err
+	}
+	if wake {
+		m.notify.Wake()
 	}
 	m.states[id] = current
 	return nil
@@ -248,14 +262,14 @@ func (m *Manager) scheduleLocked(id, hash string, delay time.Duration) {
 	})
 }
 
-func (m *Manager) appendRuleEvent(ctx context.Context, definition Definition, eventType string, now time.Time) error {
+func ruleEvent(definition Definition, eventType string, now time.Time) (*storage.Event, error) {
 	data, err := json.Marshal(map[string]any{"rule": definition.ID, "notify": definition.Notify})
 	if err != nil {
-		return err
+		return nil, err
 	}
 	message := "Rule fired"
 	if eventType == "rule.resolved" {
 		message = "Rule resolved"
 	}
-	return m.store.AppendEvent(ctx, storage.Event{Timestamp: now.Format(time.RFC3339Nano), Type: eventType, Severity: definition.Severity, Source: "rules", Message: message, Data: data})
+	return &storage.Event{Timestamp: now.Format(time.RFC3339Nano), Type: eventType, Severity: definition.Severity, Source: "rules", Message: message, Data: data}, nil
 }
