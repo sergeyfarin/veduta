@@ -282,11 +282,9 @@ func serve(args []string) error {
 				logger.Error("notification dispatcher stopped", "error", dispatchErr)
 			}
 		}()
-		reloads.Add(1)
-		go func() {
-			defer reloads.Done()
-			reloadRuntime(ctx, store, manager, ruleManager, dispatcher, dynamic, db, instanceKey, tokens, cfg.Auth, cfg.ForwardAuth, auditLog, *configPath, runtimes, logger)
-		}()
+		store.SetActivator(func(activateCtx context.Context, candidate *config.Snapshot, generation uint64) error {
+			return activateRuntime(activateCtx, candidate, generation, store, manager, ruleManager, dispatcher, dynamic, db, instanceKey, tokens, cfg.Auth, cfg.ForwardAuth, auditLog, *configPath, runtimes, logger)
+		})
 	}
 
 	srv, err := api.New(cfg)
@@ -308,77 +306,94 @@ func serve(args []string) error {
 	return nil
 }
 
-func reloadRuntime(ctx context.Context, store *config.Store, manager *scheduler.Manager, ruleManager *rules.Manager, dispatcher *notify.Dispatcher, dynamic *connections.Dynamic, db *storage.Store, instanceKey []byte, tokens *assettokens.Service, authService *auth.Service, forwardAuth *auth.Forward, auditLog *audit.Log, configPath string, runtimes *runtimeHolder, logger *slog.Logger) {
-	var generation = store.Status().Generation
-	ticker := time.NewTicker(500 * time.Millisecond)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-		}
-		status := store.Status()
-		if !status.OK || status.Generation == generation {
-			continue
-		}
-		snapshot := store.Snapshot()
-		registry, _, next, nextChannels, err := buildRuntime(ctx, snapshot, status.Generation, configPath, db, instanceKey, tokens, auditLog, logger)
-		if err != nil {
-			logger.Error("runtime reload rejected", "error", err)
-			continue
-		}
-		if authService != nil && snapshot.Config.Auth.Mode == config.AuthPassword {
-			resolvedSecrets, secretDiags := secrets.ResolveAll(snapshot.SecretRefs, secrets.DefaultResolver())
-			if secretDiags.HasErrors() {
-				closeRuntimeGeneration(next, logger)
-				logger.Error("authentication reload rejected", "error", secretDiags.String())
-				continue
-			}
-			admin := snapshot.Config.Auth.Admin
-			if err = authService.Reconfigure(ctx, auth.Config{Username: admin.Username, PasswordHash: admin.PasswordHash, ResolvedSecrets: resolvedSecrets, SessionTTL: snapshot.Config.Auth.SessionTTL}); err != nil {
-				closeRuntimeGeneration(next, logger)
-				logger.Error("authentication reload rejected", "error", err)
-				continue
-			}
-		}
-		if forwardAuth != nil && snapshot.Config.Auth.Mode == config.AuthForward {
-			forward := snapshot.Config.Auth.Forward
-			if err = forwardAuth.Reconfigure(auth.ForwardConfig{TrustedProxies: forward.TrustedProxies, UserHeader: forward.UserHeader, GroupsHeader: forward.GroupsHeader, AdminGroups: forward.AdminGroups, PrivilegedOperations: string(forward.PrivilegedOperations)}); err != nil {
-				closeRuntimeGeneration(next, logger)
-				logger.Error("authentication reload rejected", "error", err)
-				continue
-			}
-		}
-		previousRules, previousDeclarations := ruleManager.Definitions()
-		previousChannels := dispatcher.Channels()
-		if err = ruleManager.Apply(ctx, next.RuleDefinitions, next.RuleDeclarations); err != nil {
-			closeRuntimeGeneration(next, logger)
-			logger.Error("runtime reload rejected", "error", err)
-			continue
-		}
-		dispatcher.Apply(nextChannels)
-		if err = manager.Apply(ctx, next.Definitions); err != nil {
-			dispatcher.Apply(previousChannels)
-			rollbackErr := ruleManager.Apply(ctx, previousRules, previousDeclarations)
-			if rollbackErr == nil {
-				rollbackErr = ruleManager.Evaluate(ctx)
-			}
-			if rollbackErr != nil {
-				logger.Error("rule rollback failed", "error", rollbackErr)
-			}
-			closeRuntimeGeneration(next, logger)
-			logger.Error("runtime reload rejected", "error", err)
-			continue
-		}
-		if err = ruleManager.Evaluate(ctx); err != nil {
-			logger.Error("rule evaluation after reload failed", "error", err)
-		}
-		dynamic.Swap(registry)
-		runtimes.Swap(next, logger)
-		recordGenerationAudit(ctx, auditLog, status.Generation, next, logger)
-		generation = status.Generation
+func activateRuntime(ctx context.Context, snapshot *config.Snapshot, generation uint64, store *config.Store, manager *scheduler.Manager, ruleManager *rules.Manager, dispatcher *notify.Dispatcher, dynamic *connections.Dynamic, db *storage.Store, instanceKey []byte, tokens *assettokens.Service, authService *auth.Service, forwardAuth *auth.Forward, auditLog *audit.Log, configPath string, runtimes *runtimeHolder, logger *slog.Logger) error {
+	registry, resolvedSecrets, next, nextChannels, err := buildRuntime(ctx, snapshot, generation, configPath, db, instanceKey, tokens, auditLog, logger)
+	if err != nil {
+		return err
 	}
+	keepNext := false
+	defer func() {
+		if !keepNext {
+			closeRuntimeGeneration(next, logger)
+		}
+	}()
+
+	previousSnapshot := store.Snapshot()
+	previousScheduler := manager.Definitions()
+	previousRules, previousDeclarations := ruleManager.Definitions()
+	previousChannels := dispatcher.Channels()
+	authChanged := false
+	rollback := func(cause error, schedulerChanged, rulesChanged bool) error {
+		var rollbackErrors []error
+		if schedulerChanged {
+			rollbackErrors = appendIfError(rollbackErrors, manager.Apply(ctx, previousScheduler))
+		}
+		if rulesChanged {
+			if rollbackErr := ruleManager.Apply(ctx, previousRules, previousDeclarations); rollbackErr == nil {
+				rollbackErr = ruleManager.Evaluate(ctx)
+				rollbackErrors = appendIfError(rollbackErrors, rollbackErr)
+			} else {
+				rollbackErrors = append(rollbackErrors, rollbackErr)
+			}
+			dispatcher.Apply(previousChannels)
+		}
+		if authChanged {
+			rollbackErrors = appendIfError(rollbackErrors, reconfigureAuthentication(ctx, previousSnapshot, authService, forwardAuth))
+		}
+		if len(rollbackErrors) > 0 {
+			return errors.Join(append([]error{cause, errors.New("runtime rollback failed")}, rollbackErrors...)...)
+		}
+		return cause
+	}
+
+	if err = reconfigureAuthenticationResolved(ctx, snapshot, resolvedSecrets, authService, forwardAuth); err != nil {
+		return err
+	}
+	authChanged = authService != nil || forwardAuth != nil
+	if err = ruleManager.Apply(ctx, next.RuleDefinitions, next.RuleDeclarations); err != nil {
+		return rollback(err, false, false)
+	}
+	dispatcher.Apply(nextChannels)
+	if err = manager.Apply(ctx, next.Definitions); err != nil {
+		return rollback(err, false, true)
+	}
+	if err = ruleManager.Evaluate(ctx); err != nil {
+		return rollback(err, true, true)
+	}
+	dynamic.Swap(registry)
+	runtimes.Swap(next, logger)
+	keepNext = true
+	recordGenerationAudit(ctx, auditLog, generation, next, logger)
+	return nil
+}
+
+func appendIfError(values []error, err error) []error {
+	if err != nil {
+		return append(values, err)
+	}
+	return values
+}
+
+func reconfigureAuthentication(ctx context.Context, snapshot *config.Snapshot, authService *auth.Service, forwardAuth *auth.Forward) error {
+	resolved, diags := secrets.ResolveAll(snapshot.SecretRefs, secrets.DefaultResolver())
+	if diags.HasErrors() {
+		return errors.New(diags.String())
+	}
+	return reconfigureAuthenticationResolved(ctx, snapshot, resolved, authService, forwardAuth)
+}
+
+func reconfigureAuthenticationResolved(ctx context.Context, snapshot *config.Snapshot, resolved map[string]secrets.Value, authService *auth.Service, forwardAuth *auth.Forward) error {
+	if authService != nil && snapshot.Config.Auth.Mode == config.AuthPassword {
+		admin := snapshot.Config.Auth.Admin
+		if err := authService.Reconfigure(ctx, auth.Config{Username: admin.Username, PasswordHash: admin.PasswordHash, ResolvedSecrets: resolved, SessionTTL: snapshot.Config.Auth.SessionTTL}); err != nil {
+			return err
+		}
+	}
+	if forwardAuth != nil && snapshot.Config.Auth.Mode == config.AuthForward {
+		forward := snapshot.Config.Auth.Forward
+		return forwardAuth.Reconfigure(auth.ForwardConfig{TrustedProxies: forward.TrustedProxies, UserHeader: forward.UserHeader, GroupsHeader: forward.GroupsHeader, AdminGroups: forward.AdminGroups, PrivilegedOperations: string(forward.PrivilegedOperations)})
+	}
+	return nil
 }
 
 type runtimeHolder struct {
@@ -410,7 +425,7 @@ func closeRuntimeGeneration(generation *appcore.Generation, logger *slog.Logger)
 	}
 }
 
-func buildRuntime(ctx context.Context, snapshot *config.Snapshot, generation uint64, configPath string, db *storage.Store, instanceKey []byte, tokens *assettokens.Service, auditLog *audit.Log, logger *slog.Logger) (connections.Registry, map[string]string, *appcore.Generation, map[string]notify.Channel, error) {
+func buildRuntime(ctx context.Context, snapshot *config.Snapshot, generation uint64, configPath string, db *storage.Store, instanceKey []byte, tokens *assettokens.Service, auditLog *audit.Log, logger *slog.Logger) (connections.Registry, map[string]secrets.Value, *appcore.Generation, map[string]notify.Channel, error) {
 	resolved, diags := secrets.ResolveAll(snapshot.SecretRefs, secrets.DefaultResolver())
 	if diags.HasErrors() {
 		return nil, nil, nil, nil, fmt.Errorf("resolve secrets:\n%s", diags.String())
@@ -443,7 +458,7 @@ func buildRuntime(ctx context.Context, snapshot *config.Snapshot, generation uin
 		_ = built.Close(context.Background())
 		return nil, nil, nil, nil, err
 	}
-	return registry, revisions, built, channels, nil
+	return registry, resolved, built, channels, nil
 }
 
 func recordGenerationAudit(ctx context.Context, log *audit.Log, generation uint64, built *appcore.Generation, logger *slog.Logger) {

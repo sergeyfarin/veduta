@@ -36,11 +36,12 @@ bake-off), S4 (visual prototype), Phases E–G, and Phase H (password and forwar
 privileged-operation gating, and persistent audit) and Phase I (Docker and host metrics) are done.
 Phase J is done: declared signal history and events feed durable, manifest-checked rules, and a
 credential-safe ntfy/webhook outbox with bounded retries and flood controls. Phase K is underway:
-K1 parses Homepage YAML and Docker labels into a format-neutral import model. See
+K1 parses Homepage YAML and Docker labels into a format-neutral import model, and config reloads
+now activate a complete runtime generation before publishing it. K2 mapping/apply is next. See
 [docs/02-implementation-plan.md](docs/02-implementation-plan.md) for the full
 milestone table and what's marked **DONE**, and [docs/03-backlog.md](docs/03-backlog.md) for
-open gaps found along the way. K1 is unblocked; coherent config/runtime publication is required
-before K2, and atomic rule-transition persistence is required before release hardening.
+open gaps found along the way. Atomic rule-transition persistence remains required before release
+hardening.
 
 The contract suite in `internal/contracts` is the CI gate from the first commit —
 `mise run contracts`.

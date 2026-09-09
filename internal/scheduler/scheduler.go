@@ -133,6 +133,17 @@ func (m *Manager) Apply(parent context.Context, defs []Definition) error {
 	return nil
 }
 
+// Definitions returns the active definitions for rolling back a composed configuration change.
+func (m *Manager) Definitions() []Definition {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	out := make([]Definition, 0, len(m.defs))
+	for _, definition := range m.defs {
+		out = append(out, definition)
+	}
+	return out
+}
+
 // Close stops refresh loops and closes all subscriptions.
 func (m *Manager) Close() {
 	m.mu.Lock()

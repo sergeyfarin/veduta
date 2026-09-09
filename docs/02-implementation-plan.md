@@ -1449,9 +1449,9 @@ enqueue; flood suspension persists across restarts and emits one event per suspe
 
 ### Phase K — Homepage importer (2 d)
 
-Post-J review: K1 is the next unblocked slice. K2 must first close the backlog item where validated
-config is published before its composed runtime generation; an importer using `config.Apply` must
-not report success while the API serves a config that the runtime failed to activate.
+Post-J review: K1 is complete. K2's publication precondition is also complete: a validated config
+candidate is now published only after its composed runtime generation activates successfully, and
+activation failures are surfaced through config status while the previous generation remains live.
 
 **K1 · Parse Homepage configs** · 1 d · deps: C1 · **DONE** — `internal/homepageimport/` reading
 `services.yaml` (nested groups, `href`, `description`, `icon`, `ping`, `siteMonitor`, `widget`/`widgets`,
@@ -1464,8 +1464,8 @@ Homepage shapes, unmodified settings/global-widget options, and a shared Docker-
 `homepage.widgets[n]` labels and dotted header names are reconstructed without losing their source
 shape. Unknown widget types and unsupported labels are retained where possible and reported as
 warnings; malformed document structure remains a hard parse error.
-**K2 · Map and apply** · 1 d · deps: K1, D3, coherent config/runtime publication — group→section,
-service→card, `widget.type`→integration
+**K2 · Map and apply** · 1 d · deps: K1, D3 — group→section, service→card,
+`widget.type`→integration
 (a mapping table covering the ~25 most common types, everything else → `http-json` or a link-only card),
 `widget.url`→connection (deduplicated by base URL), `widget.key`→a `${secret:…}` reference plus a
 printed list of environment variables to set. Applied through `config.Apply` so comments and formatting

@@ -27,6 +27,11 @@ const defaultSecretDir = "/run/secrets"
 // as secret resolution; a failed step must return a nil snapshot and diagnostics.
 type Loader func(path string) (*Snapshot, Diagnostics)
 
+// Activator prepares and swaps every runtime component derived from a candidate snapshot. It is
+// called before Store publishes that snapshot; returning an error keeps the previous generation
+// live and exposes the failure through Status.
+type Activator func(context.Context, *Snapshot, uint64) error
+
 // Status is the last config load result. A failed reload updates this value but never replaces
 // the live snapshot or its checksum/generation.
 type Status struct {
@@ -40,12 +45,13 @@ type Status struct {
 
 // Store owns the process-wide immutable config snapshot and its live-reload status.
 type Store struct {
-	path    string
-	load    Loader
-	log     *slog.Logger
-	current atomic.Pointer[Snapshot]
-	mu      sync.RWMutex
-	status  Status
+	path     string
+	load     Loader
+	log      *slog.Logger
+	current  atomic.Pointer[Snapshot]
+	mu       sync.RWMutex
+	status   Status
+	activate Activator
 }
 
 // Open loads the initial snapshot. The server must not start without one valid configuration.
@@ -83,6 +89,14 @@ func (s *Store) Status() Status {
 	out := s.status
 	out.Diagnostics = copyDiagnostics(out.Diagnostics)
 	return out
+}
+
+// SetActivator installs the runtime activation hook used by subsequent reloads. Startup builds
+// its first runtime before the HTTP server becomes reachable, then installs this hook before Watch.
+func (s *Store) SetActivator(activate Activator) {
+	s.mu.Lock()
+	s.activate = activate
+	s.mu.Unlock()
 }
 
 // Watch blocks until ctx is cancelled, reloading after relevant filesystem events settle.
@@ -178,7 +192,7 @@ func (s *Store) Watch(ctx context.Context) error {
 			}
 		case <-timerC:
 			timerC = nil
-			s.reload()
+			s.reload(ctx)
 			watchIntegrationDirs()
 		}
 	}
@@ -221,9 +235,19 @@ func (s *Store) relevant(name string) bool {
 	return false
 }
 
-func (s *Store) reload() {
+func (s *Store) reload(ctx context.Context) {
 	snapshot, diags := s.load(s.path)
 	now := time.Now().UTC()
+	s.mu.RLock()
+	nextGeneration := s.status.Generation + 1
+	activate := s.activate
+	s.mu.RUnlock()
+	if snapshot != nil && !diags.HasErrors() && activate != nil {
+		if err := activate(ctx, snapshot, nextGeneration); err != nil {
+			diags = append(diags, Diagnostic{Severity: SeverityError, File: s.path, Message: "activate runtime: " + err.Error()})
+			snapshot = nil
+		}
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.status.AttemptedAt = now
@@ -235,7 +259,7 @@ func (s *Store) reload() {
 	}
 	s.current.Store(snapshot)
 	s.status.OK = true
-	s.status.Generation++
+	s.status.Generation = nextGeneration
 	s.status.Checksum = snapshotChecksum(snapshot)
 	s.status.LoadedAt = now
 	s.log.Info("configuration reloaded", "generation", s.status.Generation, "checksum", s.status.Checksum)

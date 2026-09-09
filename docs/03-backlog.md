@@ -234,7 +234,7 @@ ultimately call would close it without either caller needing to know about the o
 
 ---
 
-### Config publication precedes the rebuilt runtime generation by up to one debounce poll
+### Resolved before K2: config publication preceded the rebuilt runtime generation
 
 Phase F now rebuilds resolved secrets, connection revisions, the registry and scheduler definitions
 as one runtime generation, then swaps them. `config.Store` publishes the accepted configuration
@@ -244,10 +244,12 @@ previous generation. No old invocation can publish after the scheduler swap (gen
 and asset checks fail closed, but the API view is not a single atomic config+runtime snapshot yet.
 If runtime composition (for example, lock parsing) fails after config validation, `/config/status`
 also still reports the config generation as valid while the error is present only in logs.
-The original deadline (before multi-user/auth work) has passed. K2 would add another writer through
-`config.Apply`, making this gap easier to trigger and harder for an importer to report accurately.
-Priority: **before K2**; replace polling with a post-validation generation callback or publish a
-composed application snapshot, and make runtime-composition failures part of config status.
+The original deadline (before multi-user/auth work) passed. Closed before K2: `config.Store` now
+calls a runtime activator after loading and validating a candidate but before publishing it. The
+activator builds the candidate generation, applies authentication, rules, notifications and the
+scheduler with rollback on failure, then swaps the registry/runtime. Only that complete success
+publishes the config generation. Activation errors reject the candidate, retain the last-good
+snapshot and appear in `/config/status` diagnostics. The 500 ms runtime poll is removed.
 
 ### Rule transitions are not committed atomically with their event and notification
 

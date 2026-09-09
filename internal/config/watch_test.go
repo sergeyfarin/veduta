@@ -100,6 +100,50 @@ func TestStoreReloadsWhenApprovalLockChanges(t *testing.T) {
 	waitForStatus(t, store, func(s Status) bool { return s.Generation == 2 })
 }
 
+func TestStoreActivatesCandidateBeforePublishingIt(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "veduta.yaml")
+	writeWatchConfig(t, path, "first")
+	store, diags := Open(path, nil, nil)
+	if diags.HasErrors() {
+		t.Fatal(diags.String())
+	}
+	first := store.Snapshot()
+	store.SetActivator(func(_ context.Context, candidate *Snapshot, generation uint64) error {
+		if store.Snapshot() != first {
+			t.Fatal("candidate was published before activation completed")
+		}
+		if candidate.Config.Dashboard.Title != "rejected" || generation != 2 {
+			t.Fatalf("activation candidate = %q generation %d", candidate.Config.Dashboard.Title, generation)
+		}
+		return errors.New("runtime composition failed")
+	})
+	writeWatchConfig(t, path, "rejected")
+	store.reload(context.Background())
+	if store.Snapshot() != first {
+		t.Fatal("failed activation replaced the live snapshot")
+	}
+	status := store.Status()
+	if status.OK || status.Generation != 1 || len(status.Diagnostics) != 1 {
+		t.Fatalf("failed activation status = %+v", status)
+	}
+
+	store.SetActivator(func(_ context.Context, candidate *Snapshot, generation uint64) error {
+		if store.Snapshot() != first || candidate.Config.Dashboard.Title != "accepted" || generation != 2 {
+			t.Fatal("activation did not receive the unpublished next generation")
+		}
+		return nil
+	})
+	writeWatchConfig(t, path, "accepted")
+	store.reload(context.Background())
+	if got := store.Snapshot().Config.Dashboard.Title; got != "accepted" {
+		t.Fatalf("published title = %q", got)
+	}
+	if status = store.Status(); !status.OK || status.Generation != 2 {
+		t.Fatalf("accepted activation status = %+v", status)
+	}
+}
+
 func waitForStatus(t *testing.T, store *Store, ready func(Status) bool) {
 	t.Helper()
 	deadline := time.Now().Add(time.Second)
