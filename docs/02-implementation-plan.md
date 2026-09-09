@@ -1453,12 +1453,17 @@ Post-J review: K1 is the next unblocked slice. K2 must first close the backlog i
 config is published before its composed runtime generation; an importer using `config.Apply` must
 not report success while the API serves a config that the runtime failed to activate.
 
-**K1 · Parse Homepage configs** · 1 d · deps: C1 — `internal/homepageimport/` reading
+**K1 · Parse Homepage configs** · 1 d · deps: C1 · **DONE** — `internal/homepageimport/` reading
 `services.yaml` (nested groups, `href`, `description`, `icon`, `ping`, `siteMonitor`, `widget`/`widgets`,
 `server`/`container`), `bookmarks.yaml`, `settings.yaml`, `widgets.yaml`, and Docker labels
 (`homepage.*`, incl. `widgets[n]` indices and dotted header keys) into an intermediate model with a
 warning list. Tests: a large real-world corpus in `testdata/homepage/` parses without panic; unknown
 widget types produce warnings, not failures.
+Landed with recursive group parsing, both `widget` and `widgets`, bookmarks in compact and expanded
+Homepage shapes, unmodified settings/global-widget options, and a shared Docker-label path. Indexed
+`homepage.widgets[n]` labels and dotted header names are reconstructed without losing their source
+shape. Unknown widget types and unsupported labels are retained where possible and reported as
+warnings; malformed document structure remains a hard parse error.
 **K2 · Map and apply** · 1 d · deps: K1, D3, coherent config/runtime publication — group→section,
 service→card, `widget.type`→integration
 (a mapping table covering the ~25 most common types, everything else → `http-json` or a link-only card),

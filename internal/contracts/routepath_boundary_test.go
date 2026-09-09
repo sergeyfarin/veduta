@@ -28,6 +28,7 @@ var routepathAllowlist = map[string]string{
 	filepath.Join("internal", "api", "static.go"):                  "SPA static file serving (embedded frontend assets) - not a connection's route",
 	filepath.Join("internal", "config", "load.go"):                 "local filesystem paths: the config file and its conf.d directory",
 	filepath.Join("internal", "config", "watch.go"):                "local filesystem paths: the watched config file and conf.d directory",
+	filepath.Join("internal", "homepageimport", "parse.go"):        "local filesystem paths: fixed Homepage filenames inside the operator-supplied import directory",
 	filepath.Join("internal", "secrets", "provider.go"):            "local filesystem path: the file: secret provider's own directory",
 	filepath.Join("internal", "integrations", "manifest.go"):       "local filesystem path: an integration's manifest.yaml/.yml on disk",
 	filepath.Join("internal", "integrations", "source.go"):         "local filesystem path: resolving a `path:` integration source against the config directory",

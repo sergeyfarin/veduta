@@ -1,0 +1,9 @@
+- Development:
+    - GitHub:
+        - abbr: GH
+          href: https://github.com/
+    - Documentation:
+        href: https://docs.example.test
+        description: Internal documentation
+        icon: mdi-book-open
+

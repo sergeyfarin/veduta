@@ -35,7 +35,8 @@ and green in CI, closing out Phase D; spikes S2 (upstream API reality check), S3
 bake-off), S4 (visual prototype), Phases E–G, and Phase H (password and forward authentication,
 privileged-operation gating, and persistent audit) and Phase I (Docker and host metrics) are done.
 Phase J is done: declared signal history and events feed durable, manifest-checked rules, and a
-credential-safe ntfy/webhook outbox with bounded retries and flood controls. Next up: Phase K. See
+credential-safe ntfy/webhook outbox with bounded retries and flood controls. Phase K is underway:
+K1 parses Homepage YAML and Docker labels into a format-neutral import model. See
 [docs/02-implementation-plan.md](docs/02-implementation-plan.md) for the full
 milestone table and what's marked **DONE**, and [docs/03-backlog.md](docs/03-backlog.md) for
 open gaps found along the way. K1 is unblocked; coherent config/runtime publication is required
