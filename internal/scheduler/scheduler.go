@@ -28,6 +28,7 @@ type Definition struct {
 	Run                                                            RunFunc
 	Disabled                                                       state.DisabledReason
 	HistorySignals                                                 map[string]struct{}
+	SignalTypes                                                    map[string]string
 	generation                                                     uint64
 }
 

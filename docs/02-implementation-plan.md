@@ -1420,7 +1420,7 @@ Landed with card state and its samples in one SQLite transaction under the sched
 fence, persistent capability-broker events with bounded validated JSON, and a newest-first bounded
 events API. Existing janitor retention now covers both stores. The regression suite also proves a
 superseded invocation cannot leave history from an obsolete configuration generation.
-**J2 · Rules** · 1.5 d · deps: J1, S3 — `expr` predicate over `signal(card, name)` and `state(card)`
+**J2 · Rules** · 1.5 d · deps: J1, S3 · **DONE** — `expr` predicate over `signal(card, name)` and `state(card)`
 only, + `for:` debounce + severity + resolve; pure evaluator over
 `(prev signals, new signals, history, execution state)`.
 Also creates: `rule_state` persistence and the three-valued evaluator from §12.
@@ -1431,6 +1431,12 @@ cannot reach into blocks. Freshness suite, one test per row of the §12 table: a
 `unknown`; a wrong-typed value yields `unknown` and emits one event; an open circuit does not
 accumulate; a stale `true` that recovers as fresh `false` resolves; **a restart mid-window resumes
 from `rule_state` rather than restarting the timer**; `state()` still alerts through all of it.
+Landed as a builtin-free `expr` evaluator compiled against resolved manifest declarations, with
+card-definition hashes included in rule identity. A scheduler subscriber evaluates coherent state
+snapshots, while persisted independent deadline timers fire even without new card traffic. Fired,
+resolved, and wrong-type events use J1's event store. Tests cover the full freshness table,
+flapping, sustained truth, restart mid-window, fresh-only resolution, inaccessible blocks, dynamic
+reference rejection, and load-time unknown card/signal rejection.
 **J3 · Notifications** · 1 d · deps: J2 — `Notifier` interface, ntfy and webhook implementations,
 outbox with dedupe key, capped retry, per-channel rate limit and hourly ceiling, auto-suspend on flood.
 Tests: delivery retried on 5xx and abandoned after N; dedupe suppresses duplicates inside the cooldown;

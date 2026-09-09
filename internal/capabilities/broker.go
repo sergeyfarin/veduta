@@ -206,9 +206,8 @@ func (b *broker) Log(g Grant, level, msg string, fields map[string]any) error {
 	return nil
 }
 
-// Emit implements Broker. Rules/notifications (Phase J) are the real consumer; D2 only needs
-// Emit authorised and budgeted, so this logs the event for now rather than inventing the outbox
-// J will define.
+// Emit implements Broker. Production supplies the persistent event sink; isolated runtimes keep
+// the structured log fallback.
 func (b *broker) Emit(ctx context.Context, g Grant, e Event) error {
 	if err := b.authorize(g, "Emit", func() error {
 		if !g.Caps.Has("events") {

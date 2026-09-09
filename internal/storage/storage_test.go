@@ -136,13 +136,13 @@ func TestRuleDefinitionChangeResetsDebounce(t *testing.T) {
 	}
 	defer s.Close()
 	now := time.Now().UTC()
-	if err = s.PutRuleSince(ctx, "hot", "hash-a", now); err != nil {
+	if err = s.PutRuleState(ctx, storage.RuleState{RuleID: "hot", RuleHash: "hash-a", Since: now, Deadline: now.Add(time.Minute), LastResult: "true"}); err != nil {
 		t.Fatal(err)
 	}
-	if got, ok, err := s.RuleSince(ctx, "hot", "hash-a"); err != nil || !ok || !got.Equal(now) {
-		t.Fatalf("got=%v ok=%v err=%v", got, ok, err)
+	if got, ok, err := s.GetRuleState(ctx, "hot", "hash-a"); err != nil || !ok || !got.Since.Equal(now) || !got.Deadline.Equal(now.Add(time.Minute)) {
+		t.Fatalf("got=%+v ok=%v err=%v", got, ok, err)
 	}
-	if _, ok, err := s.RuleSince(ctx, "hot", "hash-b"); err != nil || ok {
+	if _, ok, err := s.GetRuleState(ctx, "hot", "hash-b"); err != nil || ok {
 		t.Fatalf("edited rule retained debounce: ok=%v err=%v", ok, err)
 	}
 }

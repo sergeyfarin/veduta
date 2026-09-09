@@ -22,6 +22,7 @@ import (
 	"veduta.dev/veduta/internal/integrations/httpjson"
 	"veduta.dev/veduta/internal/integrations/manifestload"
 	wasmrt "veduta.dev/veduta/internal/integrations/wasm"
+	"veduta.dev/veduta/internal/rules"
 	"veduta.dev/veduta/internal/scheduler"
 	"veduta.dev/veduta/internal/state"
 	"veduta.dev/veduta/internal/storage"
@@ -31,9 +32,11 @@ import (
 // Generation owns every integration runtime used by one accepted configuration.
 // Close it only after the scheduler has cancelled the generation's invocations.
 type Generation struct {
-	Definitions []scheduler.Definition
-	PluginLoads []PluginLoad
-	runtimes    []integrations.Runtime
+	Definitions      []scheduler.Definition
+	RuleDefinitions  []rules.Definition
+	RuleDeclarations map[string]rules.CardDefinition
+	PluginLoads      []PluginLoad
+	runtimes         []integrations.Runtime
 }
 
 // PluginLoad identifies an external plugin loaded by a generation for audit attribution.
@@ -102,6 +105,7 @@ func BuildGenerationWithAuditAndEvents(ctx context.Context, snap *config.Snapsho
 			d.Refresh = parseDuration(card.Refresh, time.Minute)
 			d.Timeout = 10 * time.Second
 			if card.Integration == "docker" {
+				d.SignalTypes = map[string]string{"containers.running": "number", "containers.total": "number"}
 				declared, exists := snap.IntegrationByID("docker")
 				connectionID, bound := card.Slots["server"]
 				connection, connected := reg.Get(connectionID)
@@ -179,6 +183,14 @@ func BuildGenerationWithAuditAndEvents(ctx context.Context, snap *config.Snapsho
 				built.Definitions = append(built.Definitions, d)
 				continue
 			}
+			op := operation(m, card.Operation)
+			if op == nil {
+				d.Disabled = state.ReasonConfigError
+				built.Definitions = append(built.Definitions, d)
+				continue
+			}
+			d.SignalTypes = signalTypes(op.Signals)
+			d.HistorySignals = historicalSignals(op.Signals)
 			entry := lock.Integrations[in.ID]
 			if entry == nil {
 				d.Disabled = state.ReasonUnapproved
@@ -194,13 +206,6 @@ func BuildGenerationWithAuditAndEvents(ctx context.Context, snap *config.Snapsho
 			if err != nil {
 				return nil, err
 			}
-			op := operation(m, card.Operation)
-			if op == nil {
-				d.Disabled = state.ReasonConfigError
-				built.Definitions = append(built.Definitions, d)
-				continue
-			}
-			d.HistorySignals = historicalSignals(op.Signals)
 			var runtime integrations.Runtime
 			switch m.Runtime {
 			case "declarative":
@@ -242,7 +247,26 @@ func BuildGenerationWithAuditAndEvents(ctx context.Context, snap *config.Snapsho
 			built.Definitions = append(built.Definitions, d)
 		}
 	}
+	built.RuleDeclarations = make(map[string]rules.CardDefinition, len(built.Definitions))
+	for _, definition := range built.Definitions {
+		built.RuleDeclarations[definition.ID] = rules.CardDefinition{Hash: definition.Hash, Signals: definition.SignalTypes}
+	}
+	for _, rule := range snap.Config.Rules {
+		definition, compileErr := rules.Compile(rule, built.RuleDeclarations)
+		if compileErr != nil {
+			return nil, compileErr
+		}
+		built.RuleDefinitions = append(built.RuleDefinitions, definition)
+	}
 	return built, nil
+}
+
+func signalTypes(signals []manifestload.SignalDecl) map[string]string {
+	out := make(map[string]string, len(signals))
+	for _, signal := range signals {
+		out[signal.Name] = signal.Type
+	}
+	return out
 }
 
 func historicalSignals(signals []manifestload.SignalDecl) map[string]struct{} {

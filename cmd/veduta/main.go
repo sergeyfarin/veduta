@@ -38,6 +38,7 @@ import (
 	"veduta.dev/veduta/internal/config"
 	"veduta.dev/veduta/internal/connections"
 	"veduta.dev/veduta/internal/fixtures"
+	"veduta.dev/veduta/internal/rules"
 	"veduta.dev/veduta/internal/scheduler"
 	"veduta.dev/veduta/internal/secrets"
 	"veduta.dev/veduta/internal/storage"
@@ -238,11 +239,23 @@ func serve(args []string) error {
 			closeRuntimeGeneration(runtimeGeneration, logger)
 			return fmt.Errorf("start schedules: %w", err)
 		}
+		ruleManager := rules.New(ctx, db, manager, logger)
+		if err = ruleManager.Apply(ctx, runtimeGeneration.RuleDefinitions, runtimeGeneration.RuleDeclarations); err != nil {
+			ruleManager.Close()
+			closeRuntimeGeneration(runtimeGeneration, logger)
+			return fmt.Errorf("start rules: %w", err)
+		}
+		if err = ruleManager.Evaluate(ctx); err != nil {
+			ruleManager.Close()
+			closeRuntimeGeneration(runtimeGeneration, logger)
+			return fmt.Errorf("evaluate rules: %w", err)
+		}
 		recordGenerationAudit(ctx, auditLog, store.Status().Generation, runtimeGeneration, logger)
 		runtimes := &runtimeHolder{current: runtimeGeneration}
 		var reloads sync.WaitGroup
 		defer func() {
 			stop()
+			ruleManager.Close()
 			manager.Close()
 			reloads.Wait()
 			runtimes.Close(logger)
@@ -261,7 +274,7 @@ func serve(args []string) error {
 		reloads.Add(1)
 		go func() {
 			defer reloads.Done()
-			reloadRuntime(ctx, store, manager, dynamic, db, instanceKey, tokens, cfg.Auth, cfg.ForwardAuth, auditLog, *configPath, runtimes, logger)
+			reloadRuntime(ctx, store, manager, ruleManager, dynamic, db, instanceKey, tokens, cfg.Auth, cfg.ForwardAuth, auditLog, *configPath, runtimes, logger)
 		}()
 	}
 
@@ -284,7 +297,7 @@ func serve(args []string) error {
 	return nil
 }
 
-func reloadRuntime(ctx context.Context, store *config.Store, manager *scheduler.Manager, dynamic *connections.Dynamic, db *storage.Store, instanceKey []byte, tokens *assettokens.Service, authService *auth.Service, forwardAuth *auth.Forward, auditLog *audit.Log, configPath string, runtimes *runtimeHolder, logger *slog.Logger) {
+func reloadRuntime(ctx context.Context, store *config.Store, manager *scheduler.Manager, ruleManager *rules.Manager, dynamic *connections.Dynamic, db *storage.Store, instanceKey []byte, tokens *assettokens.Service, authService *auth.Service, forwardAuth *auth.Forward, auditLog *audit.Log, configPath string, runtimes *runtimeHolder, logger *slog.Logger) {
 	var generation = store.Status().Generation
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
@@ -326,10 +339,26 @@ func reloadRuntime(ctx context.Context, store *config.Store, manager *scheduler.
 				continue
 			}
 		}
-		if err = manager.Apply(ctx, next.Definitions); err != nil {
+		previousRules, previousDeclarations := ruleManager.Definitions()
+		if err = ruleManager.Apply(ctx, next.RuleDefinitions, next.RuleDeclarations); err != nil {
 			closeRuntimeGeneration(next, logger)
 			logger.Error("runtime reload rejected", "error", err)
 			continue
+		}
+		if err = manager.Apply(ctx, next.Definitions); err != nil {
+			rollbackErr := ruleManager.Apply(ctx, previousRules, previousDeclarations)
+			if rollbackErr == nil {
+				rollbackErr = ruleManager.Evaluate(ctx)
+			}
+			if rollbackErr != nil {
+				logger.Error("rule rollback failed", "error", rollbackErr)
+			}
+			closeRuntimeGeneration(next, logger)
+			logger.Error("runtime reload rejected", "error", err)
+			continue
+		}
+		if err = ruleManager.Evaluate(ctx); err != nil {
+			logger.Error("rule evaluation after reload failed", "error", err)
 		}
 		dynamic.Swap(registry)
 		runtimes.Swap(next, logger)

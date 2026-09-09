@@ -57,6 +57,13 @@ sections:
         integration: docker
         operation: containers
         slots: { server: local }
+rules:
+  - id: no-containers
+    when: 'signal("containers", "containers.running") == 0'
+    notify: [hook]
+notifications:
+  channels:
+    hook: { type: webhook, url: "http://hooks.test/veduta" }
 `
 	if err := os.WriteFile(configPath, []byte(source), 0o600); err != nil {
 		t.Fatal(err)
@@ -72,6 +79,9 @@ sections:
 	defer func() { _ = generation.Close(context.Background()) }()
 	if len(generation.Definitions) != 1 || generation.Definitions[0].Source.Runtime != state.RuntimeBuiltin || generation.Definitions[0].Run == nil {
 		t.Fatalf("definition=%+v", generation.Definitions)
+	}
+	if len(generation.RuleDefinitions) != 1 || generation.RuleDeclarations["containers"].Signals["containers.running"] != "number" {
+		t.Fatalf("rules=%+v declarations=%+v", generation.RuleDefinitions, generation.RuleDeclarations)
 	}
 	document, err := generation.Definitions[0].Run(context.Background())
 	if err != nil || document.Title != "Containers" {

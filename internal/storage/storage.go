@@ -314,35 +314,6 @@ func (s *Store) Prune(ctx context.Context, before time.Time) error {
 	return nil
 }
 
-// RuleSince returns a persisted debounce start only when it belongs to the same rule definition.
-// Reusing an id for an edited expression cannot inherit the previous rule's timer.
-func (s *Store) RuleSince(ctx context.Context, id, ruleHash string) (time.Time, bool, error) {
-	var storedHash string
-	var since sql.NullString
-	err := s.db.QueryRowContext(ctx, `SELECT rule_hash,since FROM rule_state WHERE rule_id=?`, id).Scan(&storedHash, &since)
-	if errors.Is(err, sql.ErrNoRows) {
-		return time.Time{}, false, nil
-	}
-	if err != nil {
-		return time.Time{}, false, err
-	}
-	if storedHash != ruleHash {
-		_, err = s.db.ExecContext(ctx, `DELETE FROM rule_state WHERE rule_id=?`, id)
-		return time.Time{}, false, err
-	}
-	if !since.Valid {
-		return time.Time{}, false, nil
-	}
-	parsed, err := time.Parse(time.RFC3339Nano, since.String)
-	return parsed, err == nil, err
-}
-
-// PutRuleSince records when the current rule definition first remained true.
-func (s *Store) PutRuleSince(ctx context.Context, id, ruleHash string, since time.Time) error {
-	_, err := s.db.ExecContext(ctx, `INSERT INTO rule_state(rule_id,rule_hash,since,last_result) VALUES(?,?,?,?) ON CONFLICT(rule_id) DO UPDATE SET rule_hash=excluded.rule_hash,since=excluded.since,last_result=excluded.last_result`, id, ruleHash, since.UTC().Format(time.RFC3339Nano), "pending")
-	return err
-}
-
 // RunJanitor prunes retention-bound rows until ctx is cancelled.
 func (s *Store) RunJanitor(ctx context.Context, retention, interval time.Duration, report func(error)) {
 	if retention <= 0 {
