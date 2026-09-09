@@ -286,13 +286,83 @@ F4 capped the process at 128 streams and dropped slow consumers without blocking
 H1 now keys a second counter by the hashed server-side session ID and permits four streams per
 session; disconnect removes both counters atomically.
 
-### S2 real-server validation and the Immich cold-latency acceptance check remain external
+### S2 real-server validation: run 2026-09-09 — Immich green, Jellyfin manifest invalidated
 
-The fixture-backed Immich vertical slice now exercises the production declarative scheduler,
-signed proxy and disk cache, and asset safety does not depend on the upstream Content-Type header.
-The repository still has no credentials or live Immich/Jellyfin instances, so
-`hack/capture-upstream-fixtures.sh` and E3's “under 2 s cold” measurement have not been run against
-real servers. Priority: deployment validation before calling the demo production-proven.
+`hack/capture-upstream-fixtures.sh` was run against a live **Immich 3.1.0** (`immich:2283`) and a
+live **Jellyfin 12.0.0** (`docker:8096`, released ~2026-09-07). Raw output in `testdata/upstream/`
+(gitignored — contains real usernames, device IDs, LAN IPs, movie titles and photo filenames; must
+be scrubbed before any `git add -f`).
+
+**Immich — green** (with an `asset.statistics`-scoped non-admin key):
+- `/api/assets/statistics` → 200 `{"images","videos","total"}`, maps straight to the manifest's
+  `stats.images/videos/total`.
+- Thumbnail `Content-Type` is **`image/jpeg`**, not the spec's declared `application/octet-stream`
+  (F3). E1's content-sniff path is still correct; the header is simply not hostile here.
+- `nextPage` is a **string** (`"2"`); `total`/`count` both present; envelope matches the manifest
+  mapping. `thumbhash` populated on every asset (B4 blur-up is free). 6-asset search = 4.9 KB;
+  `preview` thumbnail = 163 KB — both well inside `inputMB: 4`. No redirects anywhere.
+- F1 confirmed: `/api/server/statistics` → 403 `Missing required permission: server.statistics`
+  with a non-admin key; the `server-statistics` operation stays correctly quarantined.
+- Minor: live server is 3.1.0, manifest/spike cite 3.2.0-rc.0. All endpoints behaved as specified;
+  bump the cited version after a fixture commit.
+- **Still unrun:** E3's "six photos render under 2 s cold" — needs the `veduta` binary with a cold
+  proxy + disk cache against this Immich, not curl.
+
+**Jellyfin — the manifest's `recently-added` operation does not work as written on 12.0.0.**
+Verified against the running server's own OpenAPI (`GET /api-docs/openapi.json`, `info.version`
+12.0.0, 294 paths — the same doc the S2 spec pass used) and live calls with a fresh API key:
+
+- **F4 is correct at the spec level, wrong in its fix.** `/Users/{userId}/Items` is **not in the
+  v12 OpenAPI** (the only `/Users/*` item paths are `AuthenticateByName`, `Configuration`, `Me`,
+  `New`, `Password`, `Public`, `{userId}`, `{userId}/Policy`). A legacy `/Users/{guid}/Items` route
+  still *answers* 200 (undocumented back-compat) but must not be built on. The spike's mistake was
+  the **replacement it chose**: `/Users/Me` + `/Items/Latest`.
+- **`GET /Users/Me` → 400** with an API key (both the new key and the old one; `Authorization:
+  MediaBrowser Token=` and `X-Emby-Token` alike). A Jellyfin **API key is app-scoped and carries
+  no user identity**, so `Me` has nothing to resolve to. Getting a user-scoped token instead means
+  `POST /Users/AuthenticateByName` with a username+password — strictly worse for a dashboard.
+- **`GET /Items/Latest` is the wrong endpoint.** Without `parentId` it ignores `includeItemTypes`
+  (asked for `Movie`, returned `MusicAlbum`); with `parentId` set to the movies library it returns
+  `400 Error processing request.` in this build. Not usable.
+- **The right endpoint is `GET /Items`** (the generic query; `userId` is an *optional* parameter).
+  `GET /Items?recursive=true&includeItemTypes=Movie&sortBy=DateCreated&sortOrder=Descending&limit=N&enableImages=true&enableImageTypes=Primary&imageTypeLimit=1&fields=DateCreated`
+  with just the API key → 200, Movies only, newest first, `ImageTags.Primary` on every row,
+  `TotalRecordCount` for the count signal. `Movie,Series` mixed also works. **No user-resolution
+  step is needed at all** — the entire multi-step premise of G4 collapses to one request.
+- **F6 confirmed:** the v12 OpenAPI declares exactly one scheme, `CustomAuthentication` = apiKey in
+  the `Authorization` header. `X-Emby-Token` is gone from the spec. The manifest's
+  `Authorization: MediaBrowser Token="…"` is right.
+- **F7 confirmed:** default `Accept` → PascalCase (`"Name"`); `Accept: application/json;
+  profile="CamelCase"` → camelCase (`"name"`), explicit profile honoured. Pin one and capture
+  fixtures with the same header.
+- **F5 confirmed:** `GET /Items/{id}/Images/Primary` with no credential → 200 `image/jpeg` (~190
+  KB), no redirect. A 404 means the item has no Primary image, not an auth failure.
+- `/Sessions` → 200; `NowPlayingItem` present on a session only while it streams, so
+  `active_streams` = count of sessions with that key. `/Users` → 200. No redirects anywhere.
+
+### Jellyfin manifest, spike S2, capture script and G4 need a coordinated rewrite
+
+Consequences of the live pass, as one change set:
+1. `plugins/jellyfin/manifest.yaml` — replace both `GET /Users/Me` and `GET /Items/Latest` with a
+   single `GET /Items` route (queryKeys: `recursive, includeItemTypes, sortBy, sortOrder, limit,
+   enableImages, enableImageTypes, imageTypeLimit, fields, enableTotalRecordCount`); keep
+   `/Sessions` and the unauthenticated `/Items/*/Images/Primary`; rewrite the header comment (drop
+   the "`/Items` with a userId query parameter" and "recently-added is `/Items/Latest`" claims;
+   cite OpenAPI 12.0.0 verified live 2026-09-09).
+2. `docs/spikes/s2-upstream-reality-check.md` — rewrite F4's "Resolved" paragraph (the replacement
+   endpoints were wrong); mark F5/F6/F7 `[live]` confirmed; move Immich items 1–7 and Jellyfin
+   questions 4–7 from Outstanding to answered.
+3. `hack/capture-upstream-fixtures.sh` — Jellyfin half still probes `/Users/Me` and `/Items/Latest`
+   (both fail); repoint at `GET /Items`, pin the `Accept` profile, so it yields committable
+   goldens.
+4. G4's WASM plugin (`sdk/`, `plugins/jellyfin/jellyfin.wasm` + its `sha256`) — the whole
+   multi-step rationale ("send auth header, resolve user, then list") is gone; the module now does
+   one `GET /Items` + one `GET /Sessions` and maps PascalCase fields. This is close to "a
+   declarative manifest could do it" — worth re-checking whether G4 still earns being the WASM
+   proof case, or whether the proof case should move to an integration that genuinely needs
+   cross-request logic. Rebuild, re-hash, re-run fixture + mutation tests regardless.
+5. Fixtures: scrub `testdata/upstream/` and `git add -f` only after 1–4, so the goldens match the
+   shipped endpoints.
 
 ## Resolved
 

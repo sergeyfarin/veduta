@@ -3,7 +3,10 @@
 # (`veduta integration approve immich`), and the card works.
 #
 # Endpoints verified against the Immich OpenAPI specification (3.2.0-rc.0) and the
-# server source during spike S2 - see docs/spikes/s2-upstream-reality-check.md.
+# server source during spike S2, then confirmed live against Immich 3.1.0 on
+# 2026-09-09 (thumbnail arrives as image/jpeg, not the declared octet-stream;
+# search envelope and nextPage:"2" match; E3 cold render ~90 ms) -
+# see docs/spikes/s2-upstream-reality-check.md.
 apiVersion: veduta.dev/v1
 kind: Integration
 metadata:
