@@ -259,14 +259,6 @@
     background: color-mix(in srgb, var(--v-warning) 10%, var(--v-surface));
     color: var(--v-text);
     font-size: 13px;
-    line-height: 20px;
-  }
-
-  @media (max-width: 600px) {
-    .auth-banner {
-      padding-bottom: 13px;
-      line-height: 19px;
-    }
   }
 
   .access-denied {

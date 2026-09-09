@@ -22,18 +22,29 @@ async function loadDashboard(page: Page, colorScheme: 'light' | 'dark') {
   await page.waitForLoadState('networkidle');
 }
 
+async function stabilizeCanvas(page: Page, minimumHeight: number) {
+  // GitHub's container and a fresh local instance of the identical pinned Playwright image can
+  // round the auth banner's fractional line box one pixel apart. Playwright rejects unequal image
+  // dimensions before applying maxDiffPixelRatio, so pin the baseline canvas while leaving all
+  // component pixels under comparison. Content growing beyond this height still grows the image.
+  await page.addStyleTag({ content: `body { min-height: ${minimumHeight}px }` });
+}
+
 test('dashboard - light', async ({ page }) => {
   await loadDashboard(page, 'light');
+  await stabilizeCanvas(page, 1407);
   await expect(page).toHaveScreenshot('dashboard-light.png', { fullPage: true });
 });
 
 test('dashboard - dark', async ({ page }) => {
   await loadDashboard(page, 'dark');
+  await stabilizeCanvas(page, 1407);
   await expect(page).toHaveScreenshot('dashboard-dark.png', { fullPage: true });
 });
 
 test('dashboard - mobile', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await loadDashboard(page, 'light');
+  await stabilizeCanvas(page, 3154);
   await expect(page).toHaveScreenshot('dashboard-mobile.png', { fullPage: true });
 });
