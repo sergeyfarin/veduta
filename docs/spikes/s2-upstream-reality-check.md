@@ -77,9 +77,15 @@ check. Confirm what the server actually sends before E1 hardens that path.
 Jellyfin 12 removed it. The routes the manifest declared (`/Users`, `/Users/*/Items`) would have
 404'd on every call, and the WASM plugin in G4 would have been written against an API that is gone.
 
-**Resolved:** the manifest now declares `/Users/Me` (one request, no admin needed, replacing "list
-users then pick one"), `/Items/Latest` (`GetLatestMedia` — purpose-built for recently-added, so no
-sort-and-filter dance), `/Items` for counts, and `/Sessions` for active streams.
+**First fix (wrong):** the manifest was changed to `/Users/Me` + `/Items/Latest` + `/Items` +
+`/Sessions`. The live pass (2026-09-09) showed `/Users/Me` returns **400** with an API key — a
+Jellyfin API key carries no user identity — and `/Items/Latest` ignores `includeItemTypes`.
+
+**Actual fix (Approach A, verified live against 12.0.0):** recently-added is a single
+`GET /Items?recursive=true&includeItemTypes=Movie,Series&sortBy=DateCreated&sortOrder=Descending&limit=N`
+with the API key and **no user resolution**; `/Items` with a type filter gives the per-type counts;
+`/Sessions` gives active streams. Three routes, four requests, no `/Users/*` at all. See
+[Live-server pass](#live-server-pass-2026-09-09).
 
 ### F5 — Item images need no authentication **[spec, design input]**
 
@@ -114,7 +120,7 @@ golden fixtures must be captured with that same `Accept` header.
 | --- | --- |
 | Immich default operation moved off the admin endpoint; `usage` split into an admin-only operation | `plugins/immich/manifest.yaml` |
 | `visibility: timeline` pinned so archived/hidden photos never render | `plugins/immich/manifest.yaml` |
-| Jellyfin routes rewritten for Jellyfin 12 (`/Users/Me`, `/Items/Latest`, `/Items`, `/Sessions`) | `plugins/jellyfin/manifest.yaml` |
+| Jellyfin recently-added rewritten to a single sorted `GET /Items` (Approach A) after the live pass killed `/Users/Me`; module rebuilt, lock re-approved | `plugins/jellyfin/`, `examples/veduta.lock.yaml` |
 | Jellyfin connection switched to the `Authorization` scheme | `examples/veduta.yaml` |
 | Lock approves the non-admin Immich routes only, demonstrating subset approval | `examples/veduta.lock.yaml` |
 | `veduta manifest digest` added, so a lock can be regenerated rather than guessed | `cmd/veduta` |
@@ -173,8 +179,16 @@ and no log line.
   `TotalRecordCount` for the count signal. **No user-resolution step is needed** — the multi-step
   premise behind putting Jellyfin in WASM (G4) largely evaporates.
 
-The consequent rewrite of `plugins/jellyfin/manifest.yaml`, this file, the capture script and the
-G4 module is tracked in `docs/03-backlog.md`.
+**Done (Approach A, 2026-09-09).** `plugins/jellyfin/manifest.yaml` now declares three routes
+(`GET /Items`, `GET /Sessions`, `GET /Items/*/Images/Primary`); `plugins/jellyfin/src/lib.rs` does
+one sorted `/Items` list + two typed `/Items` counts + `/Sessions`, no `/Users/*`;
+`jellyfin.wasm` was rebuilt (deterministic, `sha256 0bd308fd…`) and the manifest digest, the
+example lock and `testdata/canonical/expected-digests.json` updated; `hack/capture-upstream-fixtures.sh`
+was repointed and re-run, and the scrubbed goldens are in `testdata/upstream/jellyfin/`. The Go
+golden test (`internal/integrations/wasm/jellyfin_test.go`) is unchanged in output — the fixture
+items and counts were kept identical so `testdata/widgets/jellyfin-recent.golden.json` did not move.
+`httpRequests` tightened 5 → 4. Whether Jellyfin still earns being *the* WASM proof case, now that
+the auth dance is gone, is a separate question left in `docs/03-backlog.md`.
 
 ### F5 — confirmed `[live]`
 

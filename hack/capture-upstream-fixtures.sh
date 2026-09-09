@@ -71,22 +71,32 @@ if [[ -n "${JELLYFIN_URL:-}" && -n "${JELLYFIN_KEY:-}" ]]; then
   log ""
   log "| Request | Status | Content-Type | Size | Redirects |"
   log "| --- | --- | --- | --- | --- |"
-  auth=(-H "Authorization: MediaBrowser Token=\"${JELLYFIN_KEY}\"")
+  # The plugin pins the CamelCase JSON profile; capture goldens with the same header.
+  auth=(-H "Authorization: MediaBrowser Token=\"${JELLYFIN_KEY}\"" \
+        -H 'Accept: application/json; profile="CamelCase"')
 
-  probe GET "${JELLYFIN_URL}/Users/Me" "$out/jellyfin/users-me.json" "${auth[@]}"
-  probe GET "${JELLYFIN_URL}/Items/Latest?limit=5&includeItemTypes=Movie,Series&enableImages=true" \
-    "$out/jellyfin/items-latest.json" "${auth[@]}"
-  probe GET "${JELLYFIN_URL}/Items?recursive=true&includeItemTypes=Movie&limit=0" \
+  # A Jellyfin API key has no associated user, so /Users/Me and a userId-less
+  # /Items/Latest both 400 - recently-added is one sorted /Items query. See
+  # docs/spikes/s2-upstream-reality-check.md finding F4.
+  recent='recursive=true&includeItemTypes=Movie,Series&sortBy=DateCreated&sortOrder=Descending'
+  recent="${recent}&limit=6&fields=ProductionYear&imageTypeLimit=1&enableImageTypes=Primary&enableImages=true"
+  probe GET "${JELLYFIN_URL}/Items?${recent}" "$out/jellyfin/items-recent.json" "${auth[@]}"
+  probe GET "${JELLYFIN_URL}/Items?recursive=true&includeItemTypes=Movie&limit=1" \
     "$out/jellyfin/items-count-movies.json" "${auth[@]}"
+  probe GET "${JELLYFIN_URL}/Items?recursive=true&includeItemTypes=Series&limit=1" \
+    "$out/jellyfin/items-count-series.json" "${auth[@]}"
   probe GET "${JELLYFIN_URL}/Sessions" "$out/jellyfin/sessions.json" "${auth[@]}"
 
   # F7: which casing does the server use by default, and is an explicit profile honoured?
-  probe GET "${JELLYFIN_URL}/Items/Latest?limit=1" "$out/jellyfin/casing-default.json" "${auth[@]}"
-  probe GET "${JELLYFIN_URL}/Items/Latest?limit=1" "$out/jellyfin/casing-camel.json" \
-    "${auth[@]}" -H 'Accept: application/json; profile="CamelCase"'
+  jf_auth=(-H "Authorization: MediaBrowser Token=\"${JELLYFIN_KEY}\"")
+  probe GET "${JELLYFIN_URL}/Items?recursive=true&includeItemTypes=Movie&limit=1" \
+    "$out/jellyfin/casing-default.json" "${jf_auth[@]}"
+  probe GET "${JELLYFIN_URL}/Items?recursive=true&includeItemTypes=Movie&limit=1" \
+    "$out/jellyfin/casing-camel.json" \
+    "${jf_auth[@]}" -H 'Accept: application/json; profile="CamelCase"'
 
   # F5: item images are declared unauthenticated. Verify with NO credential at all.
-  item=$(sed -n 's/.*"\(Id\|id\)":"\([0-9a-f]\{32\}\)".*/\2/p' "$out/jellyfin/items-latest.json" | head -1)
+  item=$(sed -n 's/.*"\(Id\|id\)":"\([0-9a-f]\{32\}\)".*/\2/p' "$out/jellyfin/items-recent.json" | head -1)
   if [[ -n "$item" ]]; then
     probe GET "${JELLYFIN_URL}/Items/${item}/Images/Primary?maxWidth=400" \
       "$out/jellyfin/poster-noauth.bin"

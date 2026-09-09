@@ -1,0 +1,15 @@
+[
+  {
+    "id": "00000000000000000000000000000063",
+    "serverId": "00000000000000000000000000000000",
+    "userId": "00000000000000000000000000000007",
+    "userName": "user",
+    "client": "Jellyfin Web",
+    "deviceName": "Browser",
+    "deviceId": "REDACTED",
+    "applicationVersion": "10.0.0",
+    "isActive": true,
+    "nowPlayingQueue": [],
+    "additionalUsers": []
+  }
+]

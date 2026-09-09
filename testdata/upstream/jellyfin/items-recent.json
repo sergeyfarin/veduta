@@ -1,0 +1,120 @@
+{
+  "items": [
+    {
+      "name": "The Glass Harbor",
+      "serverId": "00000000000000000000000000000000",
+      "id": "00000000000000000000000000000001",
+      "hasSubtitles": true,
+      "container": "mkv",
+      "productionYear": 2003,
+      "isFolder": false,
+      "type": "Movie",
+      "imageTags": {
+        "Primary": "00000000000000000000000000000007"
+      },
+      "imageBlurHashes": {
+        "Primary": {
+          "00000000000000000000000000000007": "d0Lg#0~q00_3xtWB00Rj?bWBofof"
+        }
+      },
+      "mediaType": "Video"
+    },
+    {
+      "name": "Paper Cities",
+      "serverId": "00000000000000000000000000000000",
+      "id": "00000000000000000000000000000002",
+      "hasSubtitles": true,
+      "container": "mkv",
+      "productionYear": 2006,
+      "isFolder": false,
+      "type": "Movie",
+      "imageTags": {
+        "Primary": "0000000000000000000000000000000e"
+      },
+      "imageBlurHashes": {
+        "Primary": {
+          "0000000000000000000000000000000e": "d0Lg#0~q00_3xtWB00Rj?bWBofof"
+        }
+      },
+      "mediaType": "Video"
+    },
+    {
+      "name": "Salt & Ember",
+      "serverId": "00000000000000000000000000000000",
+      "id": "00000000000000000000000000000003",
+      "hasSubtitles": true,
+      "container": "mkv",
+      "productionYear": 2009,
+      "isFolder": false,
+      "type": "Movie",
+      "imageTags": {
+        "Primary": "00000000000000000000000000000015"
+      },
+      "imageBlurHashes": {
+        "Primary": {
+          "00000000000000000000000000000015": "d0Lg#0~q00_3xtWB00Rj?bWBofof"
+        }
+      },
+      "mediaType": "Video"
+    },
+    {
+      "name": "Ninth of April",
+      "serverId": "00000000000000000000000000000000",
+      "id": "00000000000000000000000000000004",
+      "hasSubtitles": true,
+      "container": "mkv",
+      "productionYear": 2012,
+      "isFolder": false,
+      "type": "Movie",
+      "imageTags": {
+        "Primary": "0000000000000000000000000000001c"
+      },
+      "imageBlurHashes": {
+        "Primary": {
+          "0000000000000000000000000000001c": "d0Lg#0~q00_3xtWB00Rj?bWBofof"
+        }
+      },
+      "mediaType": "Video"
+    },
+    {
+      "name": "Low Tide",
+      "serverId": "00000000000000000000000000000000",
+      "id": "00000000000000000000000000000005",
+      "hasSubtitles": true,
+      "container": "mkv",
+      "productionYear": 2015,
+      "isFolder": false,
+      "type": "Movie",
+      "imageTags": {
+        "Primary": "00000000000000000000000000000023"
+      },
+      "imageBlurHashes": {
+        "Primary": {
+          "00000000000000000000000000000023": "d0Lg#0~q00_3xtWB00Rj?bWBofof"
+        }
+      },
+      "mediaType": "Video"
+    },
+    {
+      "name": "North Wind",
+      "serverId": "00000000000000000000000000000000",
+      "id": "00000000000000000000000000000006",
+      "hasSubtitles": true,
+      "container": "mkv",
+      "productionYear": 2018,
+      "isFolder": false,
+      "type": "Movie",
+      "imageTags": {
+        "Primary": "0000000000000000000000000000002a"
+      },
+      "imageBlurHashes": {
+        "Primary": {
+          "0000000000000000000000000000002a": "d0Lg#0~q00_3xtWB00Rj?bWBofof"
+        }
+      },
+      "mediaType": "Video"
+    }
+  ],
+  "totalRecordCount": 313,
+  "startIndex": 0
+}

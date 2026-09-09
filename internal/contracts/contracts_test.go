@@ -426,7 +426,7 @@ func TestGlobMatch(t *testing.T) {
 	}{
 		{"/api/assets/*/thumbnail", "/api/assets/abc/thumbnail", true},
 		{"/api/assets/*/thumbnail", "/api/assets/a/b/thumbnail", false}, // * never crosses /
-		{"/Users/*/Items", "/Users/1/Items", true},
+		{"/Items/*/Images/Primary", "/Items/abc/Images/Primary", true},
 		{"/api/4/cpu", "/api/4/cpu", true},
 		{"/api/4/cpu", "/api/4/mem", false},
 	}

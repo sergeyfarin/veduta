@@ -1,10 +1,14 @@
-# The WASM proof case: multi-step auth and cross-endpoint logic that a declarative
-# pipeline cannot express. The module is built from sdk/ - see docs/02 milestone G4.
+# The WASM proof case: cross-endpoint aggregation a declarative pipeline cannot
+# express - one sorted list plus two typed counts plus the session list, folded
+# into a single document with per-item poster handling. Built from sdk/ - see
+# docs/02 milestone G4.
 #
-# Endpoints verified against the Jellyfin OpenAPI specification (12.0.0) during spike
-# S2 - see docs/spikes/s2-upstream-reality-check.md. Jellyfin 12 removed
-# /Users/{userId}/Items entirely; it is /Items with a userId query parameter, and
-# recently-added is /Items/Latest.
+# Verified live against Jellyfin 12.0.0 on 2026-09-09 (the server's own OpenAPI,
+# info.version 12.0.0). A Jellyfin API key has no associated user, so there is no
+# /Users/Me step and /Items/Latest (user-scoped) is unavailable; recently-added is
+# GET /Items with recursive + sortBy=DateCreated. Item images need no credential -
+# the asset route is for caching and to keep the server's address out of the
+# browser. See docs/spikes/s2-upstream-reality-check.md.
 apiVersion: veduta.dev/v1
 kind: Integration
 metadata:
@@ -17,22 +21,20 @@ metadata:
 spec:
   runtime: wasm
   module: jellyfin.wasm
-  sha256: "943038ecc026329cad35e5d76672257b11bb3cacb71bd5f8def189e2367b401d"
+  sha256: "0bd308fdbef7fa163d3217ca3396e9a43c1b2a89a18a8faa8fbe1384e1d80101"
   slots:
     - name: server
       kind: http
       description: Your Jellyfin server
   capabilities: [http, assets]
-  limits: { memoryMB: 64, timeoutMs: 3000, outputKB: 64, httpRequests: 5, hostCalls: 10 }
+  limits: { memoryMB: 64, timeoutMs: 3000, outputKB: 64, httpRequests: 4, hostCalls: 10 }
   operations:
     - id: recently-added
       name: Recently added
       defaultRefresh: 5m
       routes:
-        - { slot: server, method: GET, path: /Users/Me,     reason: Resolve the authenticated user }
-        - { slot: server, method: GET, path: /Items/Latest, queryKeys: [enableImageTypes, fields, imageTypeLimit, limit, userId], reason: Recently added items }
-        - { slot: server, method: GET, path: /Items, queryKeys: [includeItemTypes, limit, recursive, userId], reason: Library counts by type }
-        - { slot: server, method: GET, path: /Sessions,     reason: Active streams }
+        - { slot: server, method: GET, path: /Items, queryKeys: [recursive, includeItemTypes, sortBy, sortOrder, limit, fields, imageTypeLimit, enableImageTypes, enableImages], reason: "Recently added movies and shows, and per-type library counts" }
+        - { slot: server, method: GET, path: /Sessions, reason: Active streams }
         # Jellyfin serves item images without authentication, so this route exists for
         # caching and to keep the server's address out of the browser - not to inject a
         # credential. See the spike notes.

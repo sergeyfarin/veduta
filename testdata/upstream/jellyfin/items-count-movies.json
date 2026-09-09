@@ -1,0 +1,25 @@
+{
+  "items": [
+    {
+      "name": "Low Tide",
+      "serverId": "00000000000000000000000000000000",
+      "id": "0000000000000000000000000000000b",
+      "hasSubtitles": true,
+      "container": "mkv",
+      "productionYear": 2008,
+      "isFolder": false,
+      "type": "Movie",
+      "imageTags": {
+        "Primary": "0000000000000000000000000000004d"
+      },
+      "imageBlurHashes": {
+        "Primary": {
+          "0000000000000000000000000000004d": "d0Lg#0~q00_3xtWB00Rj?bWBofof"
+        }
+      },
+      "mediaType": "Video"
+    }
+  ],
+  "totalRecordCount": 288,
+  "startIndex": 0
+}

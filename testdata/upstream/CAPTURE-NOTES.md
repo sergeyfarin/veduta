@@ -2,7 +2,7 @@
 
 Produced by `hack/capture-upstream-fixtures.sh` on 2026-09-09 against live servers, then
 **scrubbed by hand** before committing. See `docs/spikes/s2-upstream-reality-check.md` for the
-findings these files support and `docs/03-backlog.md` for the follow-up work.
+findings these files support and `docs/03-backlog.md` for follow-up work.
 
 ## Immich 3.1.0
 
@@ -14,7 +14,7 @@ findings these files support and `docs/03-backlog.md` for the follow-up work.
 | `GET /api/assets/{id}/thumbnail?size=preview` | 200 | `image/jpeg` | 166688 B | 0 |
 
 - Thumbnail first bytes on the wire: `ff d8 ff e2 ...` — a real JPEG (JFIF/EXIF), **not** the
-  `application/octet-stream` the OpenAPI 3.x `viewAsset` response declares (spike finding F3).
+  `application/octet-stream` the OpenAPI 3.x `viewAsset` response declares (finding F3).
 - `search/metadata` envelope is `{albums, assets:{total,count,items,facets,nextPage}}`;
   `nextPage` is the **string** `"2"`. Every asset carries a populated `thumbhash` and
   `visibility: "timeline"`.
@@ -26,23 +26,44 @@ findings these files support and `docs/03-backlog.md` for the follow-up work.
   `thumbhash` and all timestamps replaced with deterministic synthetic values. Response
   **structure, field set, counts and `nextPage` shape are unchanged.**
 - `assets-statistics.json` — real body shape `{"images","videos","total"}` kept; the counts are
-  synthetic (the live instance holds a real personal library).
+  synthetic.
 - `server-statistics.json` — the 403 error body, no personal data, kept verbatim.
 - `thumbnail-preview.bin` — the real capture was a photo from the owner's library. Replaced with a
-  **synthetic 2160×1440 baseline JPEG** (`go run hack/gen-fixture-images.go` style, deterministic
-  seed). The wire facts that matter — `Content-Type: image/jpeg`, JFIF magic bytes, ~160 KB at
-  `preview` size — are recorded in the table above.
+  **synthetic 2160×1440 baseline JPEG**. The wire facts that matter — `Content-Type: image/jpeg`,
+  JFIF magic bytes, ~160 KB at `preview` size — are in the table above.
 
-## Jellyfin 12.0.0 — no committable fixtures from this run
+## Jellyfin 12.0.0
 
-The capture script's Jellyfin half still probes `/Users/Me` and `/Items/Latest`, which the live
-pass showed to be the wrong endpoints (`/Users/Me` → 400 with an API key; `/Items/Latest` ignores
-`includeItemTypes`). Every Jellyfin response from this run was an error and none is a useful
-golden. The Jellyfin capture will be redone once the manifest and `hack/capture-upstream-fixtures.sh`
-are repointed at `GET /Items` — see `docs/03-backlog.md`, "Jellyfin manifest, spike S2, capture
-script and G4 need a coordinated rewrite".
+Approach A (see the spike): a Jellyfin API key has no associated user, so recently-added is one
+sorted `GET /Items` query — no `/Users/Me`, no user-scoped `/Items/Latest`.
 
-What the live Jellyfin 12 calls did establish (recorded in the spike doc, not as fixtures here):
-default JSON casing is PascalCase and an explicit `profile="CamelCase"` is honoured (F7); item
-`Images/Primary` is served with no credential (F5); the only auth scheme in the 12.0.0 OpenAPI is
-an API key in the `Authorization` header (F6).
+| Request | Status | Content-Type | Size (real) | Redirects |
+| --- | --- | --- | --- | --- |
+| `GET /Items?recursive=true&includeItemTypes=Movie,Series&sortBy=DateCreated&sortOrder=Descending&limit=6&…` | 200 | `application/json; profile="CamelCase"; charset=utf-8` | 3990 B | 0 |
+| `GET /Items?recursive=true&includeItemTypes=Movie&limit=1` | 200 | `application/json; profile="CamelCase"; charset=utf-8` | 1185 B | 0 |
+| `GET /Items?recursive=true&includeItemTypes=Series&limit=1` | 200 | `application/json; profile="CamelCase"; charset=utf-8` | 823 B | 0 |
+| `GET /Sessions` | 200 | `application/json; profile="CamelCase"; charset=utf-8` | 1921 B | 0 |
+| `GET /Items?…&limit=1` — default `Accept` (casing probe) | 200 | `application/json; charset=utf-8` | 1185 B | 0 |
+| `GET /Items?…&limit=1` — `Accept: …profile="CamelCase"` (casing probe) | 200 | `application/json; profile="CamelCase"; charset=utf-8` | 1185 B | 0 |
+| `GET /Items/{id}/Images/Primary?maxWidth=400` — **no credential** | 200 | `image/jpeg` | 153254 B | 0 |
+
+- **F7:** default `Accept` → PascalCase body (`{"Items":[{"Name":…}]}`); `Accept: application/json;
+  profile="CamelCase"` → camelCase body (`{"items":[{"name":…}]}`) and the server echoes the
+  profile in the response `Content-Type`. The explicit profile is honoured. The plugin pins it.
+- **F5:** the poster request carried **no `Authorization` header** and still returned `200
+  image/jpeg`.
+- `/Items` list envelope is `{items, totalRecordCount, startIndex}`; every one of the six newest
+  items had an `imageTags.Primary`. `totalRecordCount` on the type-filtered `limit:1` queries is
+  the whole-library count (movies 288, series 25 on the source server).
+- No redirects anywhere.
+
+### Scrubbing applied to the committed files
+- `items-recent.json`, `items-count-movies.json`, `items-count-series.json` — synthetic item
+  names, ids, `serverId`, `imageTags`/`imageBlurHashes` values and years; real ratings, container
+  detail and provider ids dropped. Envelope, field casing and `totalRecordCount` shape unchanged.
+- `casing-default.json` / `casing-camel.json` — trimmed to the one thing they demonstrate, the key
+  casing; PascalCase vs camelCase preserved exactly.
+- `sessions.json` — one idle session, shape only; device id, real user name and client details
+  removed. No `NowPlayingItem` (nobody was streaming at capture time).
+- `poster-noauth.bin` — replaced with a **synthetic 400×600 baseline JPEG**. Real capture was
+  `image/jpeg`, 153 KB.

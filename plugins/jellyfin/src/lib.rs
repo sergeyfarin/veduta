@@ -13,13 +13,6 @@ const JSON_PROFILE: &str = "application/json; profile=\"CamelCase\"";
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct User {
-    #[serde(alias = "Id")]
-    id: String,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct Item {
     #[serde(alias = "Id")]
     id: String,
@@ -31,9 +24,13 @@ struct Item {
     image_tags: BTreeMap<String, String>,
 }
 
+/// The `/Items` envelope. The recently-added query reads `items`; the per-type
+/// count queries read `total_record_count` and ignore the (single) item.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct QueryResult {
+struct ItemsResponse {
+    #[serde(default, alias = "Items")]
+    items: Vec<Item>,
     #[serde(default, alias = "TotalRecordCount")]
     total_record_count: u64,
 }
@@ -72,11 +69,14 @@ fn get<T: for<'de> Deserialize<'de>>(path: &str, query: BTreeMap<String, String>
     Ok(serde_json::from_value(body)?)
 }
 
-fn count(user_id: &str, item_type: &str) -> FnResult<u64> {
-    let result: QueryResult = get(
+/// A library-wide count for one item type. `/Items` accepts an optional `userId`;
+/// omitting it counts the whole library and needs only the connection's API key -
+/// a Jellyfin API key has no associated user, so anything scoped to "the current
+/// user" (`/Users/Me`, `/Items/Latest` without a userId) is unavailable to us.
+fn count(item_type: &str) -> FnResult<u64> {
+    let result: ItemsResponse = get(
         "/Items",
         query(&[
-            ("userId", user_id.into()),
             ("recursive", "true".into()),
             ("includeItemTypes", item_type.into()),
             ("limit", "1".into()),
@@ -100,19 +100,25 @@ pub fn invoke(Json(input): Json<veduta_sdk::Invocation>) -> FnResult<Json<Docume
         .unwrap_or(5)
         .clamp(1, 24);
 
-    let user: User = get("/Users/Me", BTreeMap::new())?;
-    let latest: Vec<Item> = get(
-        "/Items/Latest",
+    // Recently added, newest first, movies and shows together. One `/Items` query
+    // with an explicit sort replaces the removed `/Users/{userId}/Items` and the
+    // user-scoped `/Items/Latest` - see docs/spikes/s2-upstream-reality-check.md.
+    let recent: ItemsResponse = get(
+        "/Items",
         query(&[
-            ("userId", user.id.clone()),
+            ("recursive", "true".into()),
+            ("includeItemTypes", "Movie,Series".into()),
+            ("sortBy", "DateCreated".into()),
+            ("sortOrder", "Descending".into()),
             ("limit", limit.to_string()),
-            ("fields", "ProductionYear,ImageTags".into()),
+            ("fields", "ProductionYear".into()),
             ("imageTypeLimit", "1".into()),
             ("enableImageTypes", "Primary".into()),
+            ("enableImages", "true".into()),
         ]),
     )?;
-    let movies = count(&user.id, "Movie")?;
-    let shows = count(&user.id, "Series")?;
+    let movies = count("Movie")?;
+    let shows = count("Series")?;
     let sessions: Vec<Session> = get("/Sessions", BTreeMap::new())?;
     let active_streams = sessions
         .iter()
@@ -121,7 +127,7 @@ pub fn invoke(Json(input): Json<veduta_sdk::Invocation>) -> FnResult<Json<Docume
 
     let mut posters = Vec::new();
     let mut missing_images = 0;
-    for item in latest.into_iter().take(limit as usize) {
+    for item in recent.items.into_iter().take(limit as usize) {
         if !item.image_tags.contains_key("Primary") && !item.image_tags.contains_key("primary") {
             missing_images += 1;
             continue;

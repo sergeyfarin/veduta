@@ -1,0 +1,25 @@
+{
+  "items": [
+    {
+      "name": "North Wind",
+      "serverId": "00000000000000000000000000000000",
+      "id": "0000000000000000000000000000000c",
+      "hasSubtitles": true,
+      "container": "mkv",
+      "productionYear": 2011,
+      "isFolder": false,
+      "type": "Series",
+      "imageTags": {
+        "Primary": "00000000000000000000000000000054"
+      },
+      "imageBlurHashes": {
+        "Primary": {
+          "00000000000000000000000000000054": "d0Lg#0~q00_3xtWB00Rj?bWBofof"
+        }
+      },
+      "mediaType": "Video"
+    }
+  ],
+  "totalRecordCount": 25,
+  "startIndex": 0
+}

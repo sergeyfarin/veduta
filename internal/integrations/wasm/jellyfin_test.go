@@ -34,18 +34,23 @@ func (b *jellyfinBroker) HTTP(_ context.Context, _ capabilities.Grant, request c
 	}
 	fixture := ""
 	switch request.Path {
-	case "/Users/Me":
-		fixture = "user.json"
-	case "/Items/Latest":
-		fixture = "latest.json"
-		wantQuery(b.t, request.Query, "userId", "user-1", "limit", "5", "fields", "ProductionYear,ImageTags", "imageTypeLimit", "1", "enableImageTypes", "Primary")
 	case "/Items":
-		wantQuery(b.t, request.Query, "userId", "user-1", "recursive", "true", "limit", "1")
+		// A Jellyfin API key has no associated user, so there is no /Users/Me
+		// step: recently-added is one sorted /Items query, counts are the same
+		// endpoint with a type filter. The list request is the one that sorts.
 		switch request.Query["includeItemTypes"] {
+		case "Movie,Series":
+			fixture = "recent.json"
+			wantQuery(b.t, request.Query, "recursive", "true", "sortBy", "DateCreated", "sortOrder", "Descending", "limit", "5", "fields", "ProductionYear", "imageTypeLimit", "1", "enableImageTypes", "Primary")
+			if _, ok := request.Query["userId"]; ok {
+				b.t.Errorf("list request carried a userId: %q", request.Query["userId"])
+			}
 		case "Movie":
 			fixture = "movies.json"
+			wantQuery(b.t, request.Query, "recursive", "true", "limit", "1")
 		case "Series":
 			fixture = "shows.json"
+			wantQuery(b.t, request.Query, "recursive", "true", "limit", "1")
 		default:
 			b.t.Fatalf("unexpected item type %q", request.Query["includeItemTypes"])
 		}
@@ -105,7 +110,7 @@ func TestJellyfinPluginMatchesGoldenDocument(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	limits := integrations.EffectiveLimits{MemoryMB: 64, TimeoutMs: 3000, OutputKB: 64, HTTPRequests: 5, ResponseMB: 4, CacheEntries: 64, InputMB: 4, JSONDepth: 32, JSONNodes: 200000, ExprNodes: 512, Iterations: 20000, RequestBodyKB: 64, HostCalls: 10, CacheBytesKB: 256}
+	limits := integrations.EffectiveLimits{MemoryMB: 64, TimeoutMs: 3000, OutputKB: 64, HTTPRequests: 4, ResponseMB: 4, CacheEntries: 64, InputMB: 4, JSONDepth: 32, JSONNodes: 200000, ExprNodes: 512, Iterations: 20000, RequestBodyKB: 64, HostCalls: 10, CacheBytesKB: 256}
 	routes := manifestRoutes(manifest)
 	lock := &integrations.LockEntry{ManifestSHA256: manifest.Digest, ModuleSHA256: manifest.ModuleSHA256, Version: manifest.Version, Runtime: "wasm", Capabilities: []string{"http", "assets"}, Routes: lockRoutes(routes), EffectiveLimits: limits}
 	broker := &jellyfinBroker{t: t, dataDir: filepath.Join(pluginDir, "testdata")}
@@ -118,13 +123,13 @@ func TestJellyfinPluginMatchesGoldenDocument(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	grant := capabilities.NewGrant("jellyfin", "1.0.0", "jellyfin-recent", map[string]string{"server": "jellyfin"}, capabilities.NewCapSet("http", "assets"), routes, routes, nil, capabilities.Limits{HTTPRequests: 5, ResponseMB: 4, HostCalls: 10}, capabilities.ExecutionIdentity{})
+	grant := capabilities.NewGrant("jellyfin", "1.0.0", "jellyfin-recent", map[string]string{"server": "jellyfin"}, capabilities.NewCapSet("http", "assets"), routes, routes, nil, capabilities.Limits{HTTPRequests: 4, ResponseMB: 4, HostCalls: 10}, capabilities.ExecutionIdentity{})
 	response, err := instance.Invoke(context.Background(), integrations.InvokeRequest{Operation: "recently-added", Params: json.RawMessage(`{"limit":5}`), Grant: grant})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if broker.calls != 5 {
-		t.Fatalf("HTTP calls = %d, want 5", broker.calls)
+	if broker.calls != 4 {
+		t.Fatalf("HTTP calls = %d, want 4", broker.calls)
 	}
 	got, err := json.Marshal(response.Document)
 	if err != nil {

@@ -1,7 +1,0 @@
-[
-  {"id":"a1","name":"Dune","productionYear":2021,"imageTags":{"Primary":"tag-1"}},
-  {"id":"a2","name":"Arrival","productionYear":2016,"imageTags":{"Primary":"tag-2"}},
-  {"id":"a3","name":"Andor","productionYear":2022,"imageTags":{"Primary":"tag-3"}},
-  {"id":"a4","name":"Severance","productionYear":2022,"imageTags":{"Primary":"tag-4"}},
-  {"id":"a5","name":"Blade Runner","productionYear":1982,"imageTags":{"Primary":"tag-5"}}
-]
