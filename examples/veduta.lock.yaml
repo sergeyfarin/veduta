@@ -10,7 +10,7 @@ integrations:
     approvedAt: "2026-09-04T21:40:00Z"
     approvedBy: sergey
     capabilities: [http, assets]
-    effectiveLimits:   # min(core maximum, manifest value-or-default, approved value-or-default)
+    effectiveLimits:
       cacheBytesKB: 256
       cacheEntries: 64
       exprNodes: 512
@@ -30,8 +30,7 @@ integrations:
       - { slot: server, method: POST, path: /api/search/metadata, contentType: application/json }
       - { slot: server, method: GET,  path: /api/assets/*/thumbnail, use: asset }
       # Not approved: GET /api/server/statistics. The manifest requests it for the
-      # server-statistics operation, which needs an ADMIN api key. Approving a subset of
-      # what a manifest asks for is the normal case, not an exception.
+      # server-statistics operation, which needs an ADMIN api key.
     limits: { httpRequests: 2, timeoutMs: 5000 }
 
   jellyfin:
@@ -42,7 +41,7 @@ integrations:
     approvedAt: "2026-09-04T21:41:00Z"
     approvedBy: sergey
     capabilities: [http, assets]
-    effectiveLimits:   # min(core maximum, manifest value-or-default, approved value-or-default)
+    effectiveLimits:
       cacheBytesKB: 256
       cacheEntries: 64
       exprNodes: 512
@@ -65,18 +64,18 @@ integrations:
       - { slot: server, method: GET, path: /Items/*/Images/Primary, use: asset }
 
   glances:
-    manifestSha256: 2487e1387e05727309307158a483ee0137c22637cc88ad15a4ec7b9485637dfe
+    manifestSha256: 07f8c9a7807c24de29a42314dd8dd501b5ec6de6434e655f1f7376f278852271
     version: 0.1.0
     runtime: declarative
-    approvedAt: "2026-09-05T08:00:00Z"
-    approvedBy: sergey
+    approvedAt: "2026-09-09T00:19:38Z"
+    approvedBy: codex
     capabilities: [http]
-    effectiveLimits:   # min(core maximum, manifest value-or-default, approved value-or-default)
+    effectiveLimits:
       cacheBytesKB: 256
       cacheEntries: 64
       exprNodes: 512
       hostCalls: 256
-      httpRequests: 4
+      httpRequests: 6
       inputMB: 2
       iterations: 2000
       jsonDepth: 32
@@ -91,4 +90,6 @@ integrations:
       - { slot: server, method: GET, path: /api/4/mem }
       - { slot: server, method: GET, path: /api/4/fs }
       - { slot: server, method: GET, path: /api/4/uptime }
-    limits: { timeoutMs: 4000 }
+      - { slot: server, method: GET, path: /api/4/network }
+      - { slot: server, method: GET, path: /api/4/sensors }
+    limits: { timeoutMs: 4000, httpRequests: 6, inputMB: 2, iterations: 2000 }

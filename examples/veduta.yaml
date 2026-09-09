@@ -58,11 +58,11 @@ connections:
 # upstream routes it may call live in veduta.lock.yaml, approved once by an admin.
 integrations:
   - id: immich
-    source: path:./plugins/immich    # the flagship declarative integration
+    source: path:../plugins/immich    # paths resolve from this file's examples/ directory
   - id: jellyfin
-    source: path:./plugins/jellyfin  # runtime: wasm, sha256-pinned and lock-approved
+    source: path:../plugins/jellyfin  # runtime: wasm, sha256-pinned and lock-approved
   - id: glances
-    source: path:./plugins/glances
+    source: path:../plugins/glances
   - id: docker
     source: builtin
   - id: http-json

@@ -31,6 +31,9 @@ ABI.
 shows multi-request broker calls, typed response mapping, asset-reference
 minting, signals, and partial-data notices.
 
+The first-party declarative manifests need no compilation: Immich provides media summaries,
+Glances provides direct host metrics, and Beszel reads one authorised system record from a Hub.
+
 The Go core remains the supported Veduta host. The measured Go plugin toolchain
 requires WASI and does not meet the strict guest profile; its revisit criteria
 are recorded in [`docs/decisions/0001-backend-language.md`](../docs/decisions/0001-backend-language.md).

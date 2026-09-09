@@ -15,7 +15,7 @@ spec:
       kind: http
       description: A host running `glances -w`
   capabilities: [http]
-  limits: { httpRequests: 4, timeoutMs: 4000, inputMB: 2, iterations: 2000 }
+  limits: { httpRequests: 6, timeoutMs: 4000, inputMB: 2, iterations: 2000 }
   operations:
     - id: overview
       name: Host overview
@@ -25,6 +25,8 @@ spec:
         - { slot: server, method: GET, path: /api/4/mem,    reason: Memory utilisation }
         - { slot: server, method: GET, path: /api/4/fs,     reason: Filesystem usage }
         - { slot: server, method: GET, path: /api/4/uptime, reason: Uptime }
+        - { slot: server, method: GET, path: /api/4/network, reason: Per-interface network throughput }
+        - { slot: server, method: GET, path: /api/4/sensors, reason: Temperature sensors }
       signals:
         - { name: cpu.percent,     type: number, unit: percent, history: true }
         - { name: mem.percent,     type: number, unit: percent, history: true }
@@ -36,6 +38,12 @@ spec:
           request: { slot: server, method: GET, path: /api/4/mem }
         - as: fs
           request: { slot: server, method: GET, path: /api/4/fs }
+        - as: uptime
+          request: { slot: server, method: GET, path: /api/4/uptime }
+        - as: network
+          request: { slot: server, method: GET, path: /api/4/network }
+        - as: sensors
+          request: { slot: server, method: GET, path: /api/4/sensors }
       output:
         title: Host
         status:
@@ -50,3 +58,26 @@ spec:
               - { label: CPU,    progress: { expr: cpu.total / 100 }, value: { expr: cpu.total }, format: percent }
               - { label: Memory, progress: { expr: mem.percent / 100 }, value: { expr: mem.percent }, format: percent }
               - { label: Root,   progress: { expr: 'first(filter(fs, .mnt_point == "/")).percent / 100' }, value: { expr: 'first(filter(fs, .mnt_point == "/")).percent' }, format: percent }
+          - type: metrics
+            items:
+              - { label: Uptime, value: { expr: uptime }, format: text }
+          - type: list
+            title: Network
+            empty: No network interfaces
+            items:
+              each: { expr: "take(network, 4)" }
+              as: interface
+              item:
+                title: { expr: interface.interface_name }
+                value: { expr: interface.bytes_all_rate_per_sec }
+                format: bytes-rate
+          - type: list
+            title: Temperatures
+            empty: No temperature sensors
+            items:
+              each: { expr: 'take(filter(sensors, .type == "temperature_core"), 4)' }
+              as: sensor
+              item:
+                title: { expr: sensor.label }
+                value: { expr: sensor.value }
+                format: temperature

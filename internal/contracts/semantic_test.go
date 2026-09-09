@@ -8,10 +8,12 @@ import (
 	"testing"
 
 	"veduta.dev/veduta/internal/canonical"
+	"veduta.dev/veduta/internal/config"
 	"veduta.dev/veduta/internal/contracts"
+	"veduta.dev/veduta/internal/integrations"
 )
 
-// documents loads the real examples: three manifests, the lock and the configuration.
+// documents loads the real examples: four manifests, the lock and the configuration.
 func documents(t *testing.T) contracts.Documents {
 	t.Helper()
 	root := repoRoot(t)
@@ -38,6 +40,27 @@ func documents(t *testing.T) contracts.Documents {
 		Config:    loadYAML(t, filepath.Join(root, "examples", "veduta.yaml")),
 		Limits:    limitsDef,
 		Digest:    canonical.Digest,
+	}
+}
+
+func TestExamplePluginSourcesResolveFromConfigDirectory(t *testing.T) {
+	root := repoRoot(t)
+	configPath := filepath.Join(root, "examples", "veduta.yaml")
+	snapshot, diagnostics := config.LoadPath(configPath)
+	if diagnostics.HasErrors() {
+		t.Fatal(diagnostics.String())
+	}
+	for _, integration := range snapshot.Config.Integrations {
+		source, err := integrations.ResolveSource(filepath.Dir(configPath), integration.Source)
+		if err != nil {
+			t.Fatalf("%s: %v", integration.ID, err)
+		}
+		if source.Builtin {
+			continue
+		}
+		if _, err := integrations.ManifestFile(source.Dir); err != nil {
+			t.Fatalf("%s: %v", integration.ID, err)
+		}
 	}
 }
 

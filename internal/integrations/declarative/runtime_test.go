@@ -17,7 +17,17 @@ import (
 type fixtureBroker struct{}
 
 func (fixtureBroker) HTTP(_ context.Context, _ capabilities.Grant, r capabilities.HTTPRequest) (capabilities.HTTPResponse, error) {
-	body := map[string]string{"/api/4/cpu": `{"total":25}`, "/api/4/mem": `{"percent":40}`, "/api/4/fs": `[{"mnt_point":"/","percent":50}]`, "/api/assets/statistics": `{"images":1,"videos":2,"total":3}`, "/api/search/metadata": `{"assets":{"items":[{"id":"x","originalFileName":"x.jpg","fileCreatedAt":"2026-01-01T00:00:00Z"}]}}`}[r.Path]
+	body := map[string]string{
+		"/api/4/cpu":                       `{"total":25}`,
+		"/api/4/mem":                       `{"percent":40}`,
+		"/api/4/fs":                        `[{"mnt_point":"/","percent":50}]`,
+		"/api/4/uptime":                    `"1:27:01"`,
+		"/api/4/network":                   `[{"interface_name":"eth0","bytes_all_rate_per_sec":2048}]`,
+		"/api/4/sensors":                   `[{"label":"CPU","type":"temperature_core","value":52}]`,
+		"/api/collections/systems/records": `{"items":[{"name":"Build host","status":"up","updated":"2026-09-09T00:00:00Z","info":{"cpu":12.5,"mp":40,"dp":55,"u":3600,"bb":4096,"dt":52}}]}`,
+		"/api/assets/statistics":           `{"images":1,"videos":2,"total":3}`,
+		"/api/search/metadata":             `{"assets":{"items":[{"id":"x","originalFileName":"x.jpg","fileCreatedAt":"2026-01-01T00:00:00Z"}]}}`,
+	}[r.Path]
 	return capabilities.HTTPResponse{Body: []byte(body)}, nil
 }
 func (fixtureBroker) CacheGet(context.Context, capabilities.Grant, string) ([]byte, bool, error) {
@@ -64,13 +74,31 @@ func TestGlancesGoldenPipeline(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resp.Document.Title != "Host" || len(resp.Document.Blocks) != 1 {
+	if resp.Document.Title != "Host" || len(resp.Document.Blocks) != 4 {
+		t.Fatalf("unexpected document: %#v", resp.Document)
+	}
+}
+
+func TestBeszelGoldenPipeline(t *testing.T) {
+	m, err := manifestload.Load(filepath.Join("..", "..", "..", "plugins", "beszel", "manifest.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := New(fixtureBroker{}).Load(context.Background(), integrations.Installed{Manifest: m, Lock: &integrations.LockEntry{ManifestSHA256: m.Digest}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := got.Invoke(context.Background(), integrations.InvokeRequest{Operation: "overview", Params: []byte(`{"systemId":"node-1"}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Document.Title != "Build host" || resp.Document.Status == nil || resp.Document.Status.Text != "up" || len(resp.Document.Blocks) != 2 {
 		t.Fatalf("unexpected document: %#v", resp.Document)
 	}
 }
 
 func TestLoadCompilesAllShippedDeclarativeManifests(t *testing.T) {
-	for _, name := range []string{"glances", "immich"} {
+	for _, name := range []string{"beszel", "glances", "immich"} {
 		m, err := manifestload.Load(filepath.Join("..", "..", "..", "plugins", name, "manifest.yaml"))
 		if err != nil {
 			t.Fatal(err)

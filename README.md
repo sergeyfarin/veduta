@@ -33,8 +33,8 @@ second execution engine), and D5 (connection health and admin endpoints: `GET /a
 `POST /api/v1/connections/{id}/test`, DNS/TCP/TLS/auth/HTTP-status classified separately) are done
 and green in CI, closing out Phase D; spikes S2 (upstream API reality check), S3 (expr vs cel
 bake-off), S4 (visual prototype), Phases E–G, and Phase H (password and forward authentication,
-privileged-operation gating, and persistent audit) and I1 (Docker container overview) are done.
-Next up: I2 host metrics. See
+privileged-operation gating, and persistent audit) and Phase I (Docker and host metrics) are done.
+Next up: Phase J. See
 [docs/02-implementation-plan.md](docs/02-implementation-plan.md) for the full
 milestone table and what's marked **DONE**, and [docs/03-backlog.md](docs/03-backlog.md) for
 open gaps found along the way (currently: a config/schema asymmetry, and how Jellyfin's real auth
@@ -80,7 +80,7 @@ This repository currently contains:
 | [hack/capture-upstream-fixtures.sh](hack/capture-upstream-fixtures.sh) | Captures real Immich/Jellyfin responses as reviewed fixtures |
 | [schemas/](schemas/) | JSON Schemas: Widget Document, card-state envelope, plugin manifest, integration lock, configuration |
 | [examples/veduta.yaml](examples/veduta.yaml) | Target configuration file (validates against the config schema) |
-| [plugins/](plugins/) | Three manifests: Immich and Glances (declarative), Jellyfin (WASM) — no code, no rebuild for the first two |
+| [plugins/](plugins/) | Four integrations: Immich, Glances and Beszel (declarative), plus Jellyfin (WASM) |
 | [examples/veduta.lock.yaml](examples/veduta.lock.yaml) | Approved capabilities and routes per integration |
 | [testdata/widgets/](testdata/widgets/) | Golden Widget Document and card-state fixtures |
 | [testdata/schema-cases.json](testdata/schema-cases.json) | 79-case adversarial schema corpus |

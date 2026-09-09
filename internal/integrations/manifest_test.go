@@ -26,8 +26,8 @@ func TestLoadManifest_Glances(t *testing.T) {
 	if len(m.Capabilities) != 1 || m.Capabilities[0] != "http" {
 		t.Fatalf("capabilities = %v, want [http]", m.Capabilities)
 	}
-	if len(m.Routes) != 4 {
-		t.Fatalf("routes = %d, want 4: %+v", len(m.Routes), m.Routes)
+	if len(m.Routes) != 6 {
+		t.Fatalf("routes = %d, want 6: %+v", len(m.Routes), m.Routes)
 	}
 	if m.Digest == "" {
 		t.Fatal("digest must not be empty")

@@ -131,8 +131,8 @@ func TestIntegrationApproval_ReturnsDiffForUnapproved(t *testing.T) {
 	if preview.CurrentLock != nil {
 		t.Fatalf("currentLock = %v, want nil for an unapproved integration", preview.CurrentLock)
 	}
-	if len(preview.Diff.AddedRoutes) != 4 {
-		t.Fatalf("addedRoutes = %+v, want 4 (glances' full route set)", preview.Diff.AddedRoutes)
+	if len(preview.Diff.AddedRoutes) != 6 {
+		t.Fatalf("addedRoutes = %+v, want 6 (glances' full route set)", preview.Diff.AddedRoutes)
 	}
 }
 

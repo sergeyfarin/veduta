@@ -28,10 +28,12 @@ import (
 func TestGlances_RealBrokerEndToEnd(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body := map[string]string{
-			"/api/4/cpu":    `{"total":25}`,
-			"/api/4/mem":    `{"percent":40}`,
-			"/api/4/fs":     `[{"mnt_point":"/","percent":50}]`,
-			"/api/4/uptime": `{"seconds":100}`,
+			"/api/4/cpu":     `{"total":25}`,
+			"/api/4/mem":     `{"percent":40}`,
+			"/api/4/fs":      `[{"mnt_point":"/","percent":50}]`,
+			"/api/4/uptime":  `"1:27:01"`,
+			"/api/4/network": `[{"interface_name":"eth0","bytes_all_rate_per_sec":2048}]`,
+			"/api/4/sensors": `[{"label":"CPU","type":"temperature_core","value":52}]`,
 		}[r.URL.Path]
 		if body == "" {
 			w.WriteHeader(http.StatusNotFound)
@@ -73,13 +75,13 @@ func TestGlances_RealBrokerEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Invoke through the real broker: %v", err)
 	}
-	if resp.Document.Title != "Host" || len(resp.Document.Blocks) != 1 {
+	if resp.Document.Title != "Host" || len(resp.Document.Blocks) != 4 {
 		t.Fatalf("unexpected document: %#v", resp.Document)
 	}
 }
 
 // TestGlances_RealBrokerEndToEnd_DeniesUnapprovedRoute proves the real Grant is actually
-// consulted, not merely plumbed through unused: dropping one of glances' four routes from
+// consulted, not merely plumbed through unused: dropping one of glances' six routes from
 // ApprovedRoutes must make the pipeline step calling it fail with the broker's own route denial.
 func TestGlances_RealBrokerEndToEnd_DeniesUnapprovedRoute(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

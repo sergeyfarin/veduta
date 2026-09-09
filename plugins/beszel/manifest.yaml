@@ -1,0 +1,71 @@
+# Host overview from a Beszel Hub system record. The connection should carry a PocketBase bearer
+# token and params.systemId selects the already-authorised system.
+apiVersion: veduta.dev/v1
+kind: Integration
+metadata:
+  id: beszel
+  name: Beszel
+  version: 0.1.0
+  description: CPU, memory, disk, network, temperature and uptime from a Beszel Hub.
+  license: MIT
+  icon: sh:beszel
+spec:
+  runtime: declarative
+  slots:
+    - name: server
+      kind: http
+      description: A Beszel Hub with a read-only PocketBase token
+  capabilities: [http]
+  limits: { httpRequests: 1, timeoutMs: 4000, inputMB: 1, iterations: 500 }
+  operations:
+    - id: overview
+      name: Host overview
+      defaultRefresh: 30s
+      routes:
+        - slot: server
+          method: GET
+          path: /api/collections/systems/records
+          queryKeys: [fields, filter, perPage]
+          reason: Latest metrics for the selected system
+      signals:
+        - { name: cpu.percent,  type: number, unit: percent, history: true }
+        - { name: mem.percent,  type: number, unit: percent, history: true }
+        - { name: disk.percent, type: number, unit: percent, history: true }
+        - { name: uptime,      type: number, unit: seconds, history: false }
+      params:
+        type: object
+        required: [systemId]
+        properties:
+          systemId: { type: string, pattern: "^[A-Za-z0-9_-]{1,64}$" }
+      pipeline:
+        - as: system
+          request:
+            slot: server
+            method: GET
+            path: /api/collections/systems/records
+            query:
+              fields: "name,status,info,updated"
+              filter: { expr: "\"id='\" + params.systemId + \"'\"" }
+              perPage: "1"
+      output:
+        title: { expr: first(system.items).name }
+        status:
+          level: { expr: 'first(system.items).status == "up" ? "ok" : "error"' }
+          text: { expr: first(system.items).status }
+          since: { expr: first(system.items).updated }
+        signals:
+          cpu.percent:  { value: { expr: first(system.items).info.cpu } }
+          mem.percent:  { value: { expr: first(system.items).info.mp } }
+          disk.percent: { value: { expr: first(system.items).info.dp } }
+          uptime:       { value: { expr: first(system.items).info.u } }
+        blocks:
+          - type: progress
+            items:
+              - { label: CPU,    progress: { expr: first(system.items).info.cpu / 100 }, value: { expr: first(system.items).info.cpu }, format: percent }
+              - { label: Memory, progress: { expr: first(system.items).info.mp / 100 },  value: { expr: first(system.items).info.mp },  format: percent }
+              - { label: Disk,   progress: { expr: first(system.items).info.dp / 100 },  value: { expr: first(system.items).info.dp },  format: percent }
+          - type: metrics
+            items:
+              - { label: Uptime,     value: { expr: first(system.items).info.u },  format: duration }
+              - { label: Network,    value: { expr: first(system.items).info.bb }, format: bytes-rate }
+              - { label: Temperature, value: { expr: first(system.items).info.dt }, format: temperature }

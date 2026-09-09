@@ -1403,10 +1403,13 @@ Landed as a core-only `DockerRegistry` extension with Unix/TCP transports, a bou
 allowlist, Docker-aware connection health, the builtin container card, and a socket-proxy compose
 guide. Plugin-facing `Registry.Do` continues to reject Docker-kind connections.
 
-**I2 · Host overview via Glances/Beszel** · 0.5 d · deps: D3
+**I2 · Host overview via Glances/Beszel** · 0.5 d · deps: D3 · **DONE**
 Creates: `plugins/glances/manifest.yaml` (CPU, memory, disks, network, sensors, uptime) and a
 `beszel` variant, plus docs showing the one-line Glances container to run.
 AC: the coding-server card from the target screenshot renders with no SSH and no credentials on the host.
+Landed with CPU, memory, filesystem, network, temperature and uptime rendering for Glances, a
+Beszel Hub system-record variant, golden runtime fixtures, corrected example plugin paths, and
+deployment guidance for a one-command Glances API container.
 
 ### Phase J — Events, rules, notifications (2.5 d)
 
