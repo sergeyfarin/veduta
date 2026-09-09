@@ -18,12 +18,15 @@ jobs:
         with:
           go-version: '1.27'
       - run: go vet ./...
+      # docs/configuration.md is generated from the versioned schema; keep the readable
+      # reference and the contract accepted by the loader in the same change.
+      - run: go run ./hack/gen-config-reference.go -check
       # internal/contracts is the contract suite: structural schema validation over the
       # adversarial corpus, RE2 pattern portability, canonical digests over golden fixtures,
       # the cross-document semantic checks with their negative fixtures, and the SPDX and
       # dependency-licence guards.
       - run: go test -race ./...
-      - run: test -z "$(gofmt -l cmd internal web)"
+      - run: test -z "$(gofmt -l cmd hack internal web)"
 
   lint:
     name: golangci-lint

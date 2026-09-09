@@ -44,6 +44,11 @@ milestone table and what's marked **DONE**, and [docs/03-backlog.md](docs/03-bac
 open gaps found along the way. Rule transitions and their event/outbox effects now persist in one
 transaction, clearing the final pre-L3 implementation blocker.
 
+New users can follow the focused [getting-started guide](docs/getting-started.md). The generated
+[configuration reference](docs/configuration.md), [integration authoring guide](docs/integration-authoring.md),
+[security model](docs/security.md), and [migration guide](docs/migration.md) cover deployment and
+extension beyond the showcase.
+
 The contract suite in `internal/contracts` is the CI gate from the first commit —
 `mise run contracts`.
 
@@ -68,13 +73,18 @@ Frontend dependencies are pinned to exact versions — `.npmrc` sets `save-exact
 and `pnpm update` write `1.2.3`, never `^1.2.3`. A dependency change should be a reviewable
 commit, not something a fresh install decides.
 
-Password mode now permits a non-loopback listener with Argon2id-backed sessions. `auth: none` and
-the not-yet-implemented forward mode remain loopback-only unless the explicit override is passed.
+Password and forward authentication permit a non-loopback listener. `auth: none` remains
+loopback-only unless the explicit override is passed.
 
 This repository currently contains:
 
 | Document | Contents |
 | --- | --- |
+| [docs/getting-started.md](docs/getting-started.md) | Build, first launch, authentication, secrets, and integration approval |
+| [docs/configuration.md](docs/configuration.md) | Configuration field reference generated from the authoritative JSON Schema |
+| [docs/integration-authoring.md](docs/integration-authoring.md) | Declarative and Rust/WASM integration authoring and validation |
+| [docs/security.md](docs/security.md) | Operator security model and deployment checklist |
+| [docs/migration.md](docs/migration.md) | Homepage import, review, rollback, and Veduta upgrade guidance |
 | [docs/00-review-and-prior-art.md](docs/00-review-and-prior-art.md) | Competitive research, reuse decisions, and eight rounds of adversarial review with verdicts |
 | [docs/01-architecture.md](docs/01-architecture.md) | Architecture, every contract (schemas, Go interfaces, REST, SQLite), threat model, decision log |
 | [docs/02-implementation-plan.md](docs/02-implementation-plan.md) | Spikes, dependency-ordered milestones, and an executable issue backlog |

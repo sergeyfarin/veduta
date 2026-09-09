@@ -52,6 +52,7 @@ pnpm check    # go vet, go test, svelte-check — what CI runs
 ## Integrations
 
 You do not need to change Veduta to add one. A declarative integration is a single YAML manifest
-(`plugins/immich/manifest.yaml` is the worked example). Read
-[docs/01-architecture.md §5](docs/01-architecture.md) first — in particular that a manifest
+(`plugins/immich/manifest.yaml` is the worked example). Follow the
+[integration authoring guide](docs/integration-authoring.md) and its validation workflow. The
+detailed trust model is in [docs/01-architecture.md §5](docs/01-architecture.md): a manifest
 *requests* authority and only `veduta.lock.yaml` grants it.

@@ -1490,8 +1490,13 @@ secret references are intentionally dormant until review and enablement.
 
 ### Phase L — Release readiness (3 d)
 
-**L1 · Docs** · 1 d — getting started, configuration reference generated from the JSON Schema,
-integration authoring guide (declarative and WASM), security model page, migration guide. ⇉
+**L1 · Docs** · 1 d · **DONE** — getting started, configuration reference generated from the JSON
+Schema, integration authoring guide (declarative and WASM), security model page, migration guide.
+Landed as five focused operator/author documents. `hack/gen-config-reference.go` deterministically
+walks the authoritative v1 schema into the checked-in field table; CI runs its `-check` mode and
+also formats the generator, so schema/reference drift is a build failure. The guides link the
+actual CLI validation, trust approval, secret-resolution, Homepage rollback, and Rust/WASM paths
+rather than duplicating the architecture narrative. ⇉
 **L2 · Icon proxy and cache** · 0.5 d — `GET /api/v1/icons/{spec}` resolving `mdi:`, `si:`,
 `sh:` (dashboard-icons) and URLs, with a disk cache and an offline pack; never a hard CDN dependency. ⇉
 **L3 · Hardening pass** · 1 d · deps: K2 — CSP and security headers, `go test -fuzz` on the document
