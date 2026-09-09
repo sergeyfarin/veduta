@@ -244,8 +244,22 @@ previous generation. No old invocation can publish after the scheduler swap (gen
 and asset checks fail closed, but the API view is not a single atomic config+runtime snapshot yet.
 If runtime composition (for example, lock parsing) fails after config validation, `/config/status`
 also still reports the config generation as valid while the error is present only in logs.
-Priority: before multi-user/auth work makes reload observability more important; replace polling
-with a post-validation generation callback or publish a composed application snapshot.
+The original deadline (before multi-user/auth work) has passed. K2 would add another writer through
+`config.Apply`, making this gap easier to trigger and harder for an importer to report accurately.
+Priority: **before K2**; replace polling with a post-validation generation callback or publish a
+composed application snapshot, and make runtime-composition failures part of config status.
+
+### Rule transitions are not committed atomically with their event and notification
+
+J2/J3 persist a fired or resolved transition in three steps: append `rule.fired`/`rule.resolved`,
+enqueue each notification, then write `rule_state`. Dedupe limits repeated deliveries, but a crash
+or database error between those steps can leave an event or outbox row committed while the durable
+rule state still describes the previous transition. On restart the manager can therefore append a
+duplicate event and, after the cooldown window, enqueue the same transition again. Wrong-signal-type
+episodes do not have this gap: J3's follow-up persists their marker before emitting the event.
+Priority: **before L3/release hardening**; add a storage transaction that commits the rule state,
+transition event, all outbox rows, and any channel suspension meta-event together. Keep network
+delivery outside that transaction and add crash-boundary tests for fired and resolved transitions.
 
 ### Asset format coverage is narrower than the architecture's final allowlist
 

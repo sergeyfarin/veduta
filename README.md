@@ -38,8 +38,8 @@ Phase J is done: declared signal history and events feed durable, manifest-check
 credential-safe ntfy/webhook outbox with bounded retries and flood controls. Next up: Phase K. See
 [docs/02-implementation-plan.md](docs/02-implementation-plan.md) for the full
 milestone table and what's marked **DONE**, and [docs/03-backlog.md](docs/03-backlog.md) for
-open gaps found along the way (currently: a config/schema asymmetry, and how Jellyfin's real auth
-header exposed a real limit in `${secret:NAME}`).
+open gaps found along the way. K1 is unblocked; coherent config/runtime publication is required
+before K2, and atomic rule-transition persistence is required before release hardening.
 
 The contract suite in `internal/contracts` is the CI gate from the first commit —
 `mise run contracts`.
