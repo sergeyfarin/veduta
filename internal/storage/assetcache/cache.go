@@ -62,11 +62,6 @@ func (c *Cache) GetOrFetch(ctx context.Context, key, connectionID string, fetch 
 	if err != nil || len(decoded) != sha256.Size {
 		return Result{}, fmt.Errorf("assetcache: invalid cache key")
 	}
-	if result, ok, err := c.get(ctx, key); err != nil {
-		return Result{}, err
-	} else if ok {
-		return result, nil
-	}
 	c.mu.Lock()
 	if existing := c.flights[key]; existing != nil {
 		c.mu.Unlock()
@@ -80,8 +75,16 @@ func (c *Cache) GetOrFetch(ctx context.Context, key, connectionID string, fetch 
 	f := &flight{done: make(chan struct{})}
 	c.flights[key] = f
 	c.mu.Unlock()
-	f.result, f.err = fetch(ctx)
-	if f.err == nil {
+	needsPut := false
+	if cached, ok, cacheErr := c.get(ctx, key); cacheErr != nil {
+		f.err = cacheErr
+	} else if ok {
+		f.result = cached
+	} else {
+		needsPut = true
+		f.result, f.err = fetch(ctx)
+	}
+	if f.err == nil && needsPut {
 		f.err = c.put(ctx, key, connectionID, f.result)
 	}
 	c.mu.Lock()
