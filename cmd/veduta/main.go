@@ -38,6 +38,7 @@ import (
 	"veduta.dev/veduta/internal/config"
 	"veduta.dev/veduta/internal/connections"
 	"veduta.dev/veduta/internal/fixtures"
+	"veduta.dev/veduta/internal/notify"
 	"veduta.dev/veduta/internal/rules"
 	"veduta.dev/veduta/internal/scheduler"
 	"veduta.dev/veduta/internal/secrets"
@@ -231,7 +232,7 @@ func serve(args []string) error {
 		if err != nil {
 			return err
 		}
-		registry, _, runtimeGeneration, err := buildRuntime(ctx, snapshot, store.Status().Generation, *configPath, db, instanceKey, tokens, auditLog, logger)
+		registry, _, runtimeGeneration, notificationChannels, err := buildRuntime(ctx, snapshot, store.Status().Generation, *configPath, db, instanceKey, tokens, auditLog, logger)
 		if err != nil {
 			return fmt.Errorf("build runtime: %w", err)
 		}
@@ -239,7 +240,10 @@ func serve(args []string) error {
 			closeRuntimeGeneration(runtimeGeneration, logger)
 			return fmt.Errorf("start schedules: %w", err)
 		}
-		ruleManager := rules.New(ctx, db, manager, logger)
+		dispatcher := notify.NewDispatcher(db, notificationChannels, logger, notify.DispatcherConfig{})
+		ruleManager := rules.NewWithNotifier(ctx, db, manager, logger, func(alertCtx context.Context, alert rules.Alert) error {
+			return dispatcher.Enqueue(alertCtx, notify.Message{RuleID: alert.RuleID, Event: alert.Event, Severity: alert.Severity, Title: "Veduta rule " + alert.Event, Body: "Rule " + alert.RuleID + " " + alert.Event}, alert.Channels)
+		})
 		if err = ruleManager.Apply(ctx, runtimeGeneration.RuleDefinitions, runtimeGeneration.RuleDeclarations); err != nil {
 			ruleManager.Close()
 			closeRuntimeGeneration(runtimeGeneration, logger)
@@ -274,7 +278,14 @@ func serve(args []string) error {
 		reloads.Add(1)
 		go func() {
 			defer reloads.Done()
-			reloadRuntime(ctx, store, manager, ruleManager, dynamic, db, instanceKey, tokens, cfg.Auth, cfg.ForwardAuth, auditLog, *configPath, runtimes, logger)
+			if dispatchErr := dispatcher.Run(ctx); dispatchErr != nil && !errors.Is(dispatchErr, context.Canceled) {
+				logger.Error("notification dispatcher stopped", "error", dispatchErr)
+			}
+		}()
+		reloads.Add(1)
+		go func() {
+			defer reloads.Done()
+			reloadRuntime(ctx, store, manager, ruleManager, dispatcher, dynamic, db, instanceKey, tokens, cfg.Auth, cfg.ForwardAuth, auditLog, *configPath, runtimes, logger)
 		}()
 	}
 
@@ -297,7 +308,7 @@ func serve(args []string) error {
 	return nil
 }
 
-func reloadRuntime(ctx context.Context, store *config.Store, manager *scheduler.Manager, ruleManager *rules.Manager, dynamic *connections.Dynamic, db *storage.Store, instanceKey []byte, tokens *assettokens.Service, authService *auth.Service, forwardAuth *auth.Forward, auditLog *audit.Log, configPath string, runtimes *runtimeHolder, logger *slog.Logger) {
+func reloadRuntime(ctx context.Context, store *config.Store, manager *scheduler.Manager, ruleManager *rules.Manager, dispatcher *notify.Dispatcher, dynamic *connections.Dynamic, db *storage.Store, instanceKey []byte, tokens *assettokens.Service, authService *auth.Service, forwardAuth *auth.Forward, auditLog *audit.Log, configPath string, runtimes *runtimeHolder, logger *slog.Logger) {
 	var generation = store.Status().Generation
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
@@ -312,7 +323,7 @@ func reloadRuntime(ctx context.Context, store *config.Store, manager *scheduler.
 			continue
 		}
 		snapshot := store.Snapshot()
-		registry, _, next, err := buildRuntime(ctx, snapshot, status.Generation, configPath, db, instanceKey, tokens, auditLog, logger)
+		registry, _, next, nextChannels, err := buildRuntime(ctx, snapshot, status.Generation, configPath, db, instanceKey, tokens, auditLog, logger)
 		if err != nil {
 			logger.Error("runtime reload rejected", "error", err)
 			continue
@@ -340,12 +351,15 @@ func reloadRuntime(ctx context.Context, store *config.Store, manager *scheduler.
 			}
 		}
 		previousRules, previousDeclarations := ruleManager.Definitions()
+		previousChannels := dispatcher.Channels()
 		if err = ruleManager.Apply(ctx, next.RuleDefinitions, next.RuleDeclarations); err != nil {
 			closeRuntimeGeneration(next, logger)
 			logger.Error("runtime reload rejected", "error", err)
 			continue
 		}
+		dispatcher.Apply(nextChannels)
 		if err = manager.Apply(ctx, next.Definitions); err != nil {
+			dispatcher.Apply(previousChannels)
 			rollbackErr := ruleManager.Apply(ctx, previousRules, previousDeclarations)
 			if rollbackErr == nil {
 				rollbackErr = ruleManager.Evaluate(ctx)
@@ -396,22 +410,22 @@ func closeRuntimeGeneration(generation *appcore.Generation, logger *slog.Logger)
 	}
 }
 
-func buildRuntime(ctx context.Context, snapshot *config.Snapshot, generation uint64, configPath string, db *storage.Store, instanceKey []byte, tokens *assettokens.Service, auditLog *audit.Log, logger *slog.Logger) (connections.Registry, map[string]string, *appcore.Generation, error) {
+func buildRuntime(ctx context.Context, snapshot *config.Snapshot, generation uint64, configPath string, db *storage.Store, instanceKey []byte, tokens *assettokens.Service, auditLog *audit.Log, logger *slog.Logger) (connections.Registry, map[string]string, *appcore.Generation, map[string]notify.Channel, error) {
 	resolved, diags := secrets.ResolveAll(snapshot.SecretRefs, secrets.DefaultResolver())
 	if diags.HasErrors() {
-		return nil, nil, nil, fmt.Errorf("resolve secrets:\n%s", diags.String())
+		return nil, nil, nil, nil, fmt.Errorf("resolve secrets:\n%s", diags.String())
 	}
 	registry, err := connections.New(snapshot.Config.Connections, resolved, logger)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("build connection registry: %w", err)
+		return nil, nil, nil, nil, fmt.Errorf("build connection registry: %w", err)
 	}
 	material, err := connections.MaterialHMACs(snapshot.Config.Connections, resolved, instanceKey)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	revisions, err := db.SyncConnectionRevisions(ctx, material)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	eventSink := func(eventCtx context.Context, pluginID string, event capabilities.Event) error {
 		data, marshalErr := json.Marshal(event.Data)
@@ -422,9 +436,14 @@ func buildRuntime(ctx context.Context, snapshot *config.Snapshot, generation uin
 	}
 	built, err := appcore.BuildGenerationWithAuditAndEvents(ctx, snapshot, generation, configPath, registry, revisions, tokens, filepath.Join(db.DataDir(), "wasm-cache"), auditLog, eventSink, logger)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
-	return registry, revisions, built, nil
+	channels, err := notify.BuildChannels(snapshot.Config.Notifications.Channels, resolved, nil)
+	if err != nil {
+		_ = built.Close(context.Background())
+		return nil, nil, nil, nil, err
+	}
+	return registry, revisions, built, channels, nil
 }
 
 func recordGenerationAudit(ctx context.Context, log *audit.Log, generation uint64, built *appcore.Generation, logger *slog.Logger) {

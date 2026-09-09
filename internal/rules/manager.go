@@ -29,16 +29,29 @@ type Manager struct {
 	states        map[string]storage.RuleState
 	timers        map[string]*time.Timer
 	wrongReported map[string]bool
+	notify        func(context.Context, Alert) error
+	active        bool
+}
+
+// Alert is the credential-free notification request produced by a rule transition.
+type Alert struct {
+	RuleID, Event, Severity string
+	Channels                []string
 }
 
 // New starts a rule manager subscribed to scheduler state commits.
 func New(parent context.Context, store *storage.Store, cards *scheduler.Manager, logger *slog.Logger) *Manager {
+	return NewWithNotifier(parent, store, cards, logger, nil)
+}
+
+// NewWithNotifier also sends fired and resolved transitions to a durable notification sink.
+func NewWithNotifier(parent context.Context, store *storage.Store, cards *scheduler.Manager, logger *slog.Logger, notifier func(context.Context, Alert) error) *Manager {
 	if logger == nil {
 		logger = slog.Default()
 	}
 	ctx, cancel := context.WithCancel(parent)
 	updates, unsubscribe := cards.Subscribe(32)
-	manager := &Manager{store: store, scheduler: cards, logger: logger, ctx: ctx, cancel: cancel, unsubscribe: unsubscribe, definitions: map[string]Definition{}, declarations: map[string]CardDefinition{}, states: map[string]storage.RuleState{}, timers: map[string]*time.Timer{}, wrongReported: map[string]bool{}}
+	manager := &Manager{store: store, scheduler: cards, logger: logger, ctx: ctx, cancel: cancel, unsubscribe: unsubscribe, definitions: map[string]Definition{}, declarations: map[string]CardDefinition{}, states: map[string]storage.RuleState{}, timers: map[string]*time.Timer{}, wrongReported: map[string]bool{}, notify: notifier}
 	go func() {
 		for {
 			select {
@@ -94,12 +107,18 @@ func (m *Manager) Apply(ctx context.Context, definitions []Definition, declarati
 	m.definitions, m.declarations, m.states = defs, declarations, states
 	m.timers = map[string]*time.Timer{}
 	m.wrongReported = map[string]bool{}
+	m.active = false
 	m.mu.Unlock()
 	return nil
 }
 
 // Evaluate evaluates every rule against one coherent scheduler snapshot.
-func (m *Manager) Evaluate(ctx context.Context) error { return m.evaluateAll(ctx) }
+func (m *Manager) Evaluate(ctx context.Context) error {
+	m.mu.Lock()
+	m.active = true
+	m.mu.Unlock()
+	return m.evaluateAll(ctx)
+}
 
 // Definitions returns a copy suitable for rolling back a configuration transaction.
 func (m *Manager) Definitions() ([]Definition, map[string]CardDefinition) {
@@ -127,6 +146,9 @@ func (m *Manager) evaluateAll(ctx context.Context) error {
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if !m.active {
+		return nil
+	}
 	cards := make(map[string]state.CardState)
 	for _, card := range m.scheduler.States() {
 		cards[card.CardID] = card
@@ -172,6 +194,12 @@ func (m *Manager) evaluateLocked(ctx context.Context, id string, cards map[strin
 			if err = m.appendRuleEvent(ctx, definition, "rule.fired", now); err != nil {
 				return err
 			}
+			if m.notify != nil {
+				err = m.notify(ctx, Alert{RuleID: definition.ID, Event: "fired", Severity: definition.Severity, Channels: definition.Notify})
+				if err != nil {
+					return err
+				}
+			}
 			current.FiredAt = now
 			current.ResolvedAt = time.Time{}
 		} else if current.FiredAt.IsZero() {
@@ -183,6 +211,12 @@ func (m *Manager) evaluateLocked(ctx context.Context, id string, cards map[strin
 			if definition.Resolve {
 				if err = m.appendRuleEvent(ctx, definition, "rule.resolved", now); err != nil {
 					return err
+				}
+				if m.notify != nil {
+					err = m.notify(ctx, Alert{RuleID: definition.ID, Event: "resolved", Severity: definition.Severity, Channels: definition.Notify})
+					if err != nil {
+						return err
+					}
 				}
 			}
 			current.ResolvedAt = now

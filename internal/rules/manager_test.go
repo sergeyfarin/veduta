@@ -87,6 +87,27 @@ func TestWrongSignalTypeEmitsOncePerBadEpisode(t *testing.T) {
 	waitForEvents(t, store, "rule.signal-type", 2)
 }
 
+func TestFiredRuleCallsNotificationSink(t *testing.T) {
+	store, cards, original, declarations := ruleHarness(t, float64(95))
+	original.Close()
+	var alert rules.Alert
+	manager := rules.NewWithNotifier(context.Background(), store, cards, nil, func(_ context.Context, value rules.Alert) error {
+		alert = value
+		return nil
+	})
+	defer manager.Close()
+	definition := compileRule(t, config.Rule{ID: "hot", When: `signal("server", "cpu") > 90`, Severity: "critical", Notify: []string{"phone"}}, declarations)
+	if err := manager.Apply(context.Background(), []rules.Definition{definition}, declarations); err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.Evaluate(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if alert.RuleID != "hot" || alert.Event != "fired" || alert.Severity != "critical" || len(alert.Channels) != 1 || alert.Channels[0] != "phone" {
+		t.Fatalf("alert=%+v", alert)
+	}
+}
+
 func ruleHarness(t *testing.T, initial any) (*storage.Store, *scheduler.Manager, *rules.Manager, map[string]rules.CardDefinition) {
 	t.Helper()
 	store, err := storage.Open(context.Background(), t.TempDir())

@@ -34,8 +34,8 @@ second execution engine), and D5 (connection health and admin endpoints: `GET /a
 and green in CI, closing out Phase D; spikes S2 (upstream API reality check), S3 (expr vs cel
 bake-off), S4 (visual prototype), Phases E–G, and Phase H (password and forward authentication,
 privileged-operation gating, and persistent audit) and Phase I (Docker and host metrics) are done.
-Phase J is underway: J1 persists declared numeric history and structured plugin events, and J2
-adds manifest-checked three-valued rules with durable debounce timers. Next up: J3 notifications. See
+Phase J is done: declared signal history and events feed durable, manifest-checked rules, and a
+credential-safe ntfy/webhook outbox with bounded retries and flood controls. Next up: Phase K. See
 [docs/02-implementation-plan.md](docs/02-implementation-plan.md) for the full
 milestone table and what's marked **DONE**, and [docs/03-backlog.md](docs/03-backlog.md) for
 open gaps found along the way (currently: a config/schema asymmetry, and how Jellyfin's real auth

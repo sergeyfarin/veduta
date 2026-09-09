@@ -34,7 +34,7 @@ func TestMigrationsAreCompleteAndIdempotent(t *testing.T) {
 		got[n] = true
 	}
 	_ = rows.Close()
-	for _, n := range []string{"schema_migrations", "settings", "users", "sessions", "card_state", "signal_history", "events", "plugin_kv", "connection_state", "asset_cache", "rule_state", "notifications", "audit_log"} {
+	for _, n := range []string{"schema_migrations", "settings", "users", "sessions", "card_state", "signal_history", "events", "plugin_kv", "connection_state", "asset_cache", "rule_state", "notifications", "notification_channel_state", "audit_log"} {
 		if !got[n] {
 			t.Errorf("missing table %s", n)
 		}

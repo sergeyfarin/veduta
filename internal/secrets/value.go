@@ -8,8 +8,7 @@
 // internal/connections (upstream auth injection), internal/notify (channel tokens) and
 // internal/auth (the admin password hash) may call it - enforced by
 // internal/contracts.TestSecretRevealBoundary, a source-scanning test, not by Go visibility
-// (Reveal must be exported for those packages to use it at all). None of those three packages
-// exist yet (Phases D/F/H); the boundary test's allowlist is ready for them.
+// (Reveal must be exported for those packages to use it at all).
 package secrets
 
 import "encoding/json"

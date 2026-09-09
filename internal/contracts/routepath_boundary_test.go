@@ -38,6 +38,7 @@ var routepathAllowlist = map[string]string{
 	filepath.Join("internal", "app", "runtime.go"):                 "local filesystem paths: integration manifest and lock files next to the config",
 	filepath.Join("internal", "app", "assets.go"):                  "local filesystem paths: current integration manifest and lock files used for revocation checks",
 	filepath.Join("internal", "storage", "assetcache", "cache.go"): "local filesystem path: content-addressed asset cache files",
+	filepath.Join("internal", "notify", "notify.go"):               "URL construction: escaping the configured ntfy topic, not authorizing an integration route",
 }
 
 // TestRoutepathBoundary is D1b's own AC: "no other package in the tree performs path comparison

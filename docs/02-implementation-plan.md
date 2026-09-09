@@ -1437,10 +1437,15 @@ snapshots, while persisted independent deadline timers fire even without new car
 resolved, and wrong-type events use J1's event store. Tests cover the full freshness table,
 flapping, sustained truth, restart mid-window, fresh-only resolution, inaccessible blocks, dynamic
 reference rejection, and load-time unknown card/signal rejection.
-**J3 · Notifications** · 1 d · deps: J2 — `Notifier` interface, ntfy and webhook implementations,
+**J3 · Notifications** · 1 d · deps: J2 · **DONE** — `Notifier` interface, ntfy and webhook implementations,
 outbox with dedupe key, capped retry, per-channel rate limit and hourly ceiling, auto-suspend on flood.
 Tests: delivery retried on 5xx and abandoned after N; dedupe suppresses duplicates inside the cooldown;
 a notification body never contains a secret; the hourly cap suspends and emits one meta-event.
+Landed with credential-owning ntfy and JSON webhook transports, redirects disabled, and sanitized
+transport errors. A persistent outbox recovers interrupted sends, retries transient failures with a
+capped exponential delay, abandons permanent/fully retried failures, and deduplicates both active
+and recently completed deliveries. Per-channel cooldown and hourly ceilings are enforced before
+enqueue; flood suspension persists across restarts and emits one event per suspension window.
 
 ### Phase K — Homepage importer (2 d)
 
