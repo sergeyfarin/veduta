@@ -33,7 +33,8 @@ second execution engine), and D5 (connection health and admin endpoints: `GET /a
 `POST /api/v1/connections/{id}/test`, DNS/TCP/TLS/auth/HTTP-status classified separately) are done
 and green in CI, closing out Phase D; spikes S2 (upstream API reality check), S3 (expr vs cel
 bake-off), S4 (visual prototype), Phases E–G, and Phase H (password and forward authentication,
-privileged-operation gating, and persistent audit) are done. Next up: Phase I. See
+privileged-operation gating, and persistent audit) and I1 (Docker container overview) are done.
+Next up: I2 host metrics. See
 [docs/02-implementation-plan.md](docs/02-implementation-plan.md) for the full
 milestone table and what's marked **DONE**, and [docs/03-backlog.md](docs/03-backlog.md) for
 open gaps found along the way (currently: a config/schema asymmetry, and how Jellyfin's real auth
@@ -105,6 +106,7 @@ This repository currently contains:
 | [internal/connections/routepath/](internal/connections/routepath/) | The one route-canonicalisation and glob-matching routine every authority check shares — fuzz-tested |
 | [internal/capabilities/](internal/capabilities/) | The capability broker: three independent route policies, header/query allowlisting, per-invocation budgets, typed denials |
 | [internal/integrations/](internal/integrations/) | The lock file: canonical manifest digest, permission diff, two-step digest-bound approval — `veduta integration list\|diff\|approve` and `GET/POST /api/v1/integrations...` both call into it; also the frozen `Runtime`/`Instance` contract every runtime implements |
+| [docs/docker.md](docs/docker.md) | Read-only Docker socket-proxy deployment and connection guidance |
 | [internal/integrations/manifestload/](internal/integrations/manifestload/) | Parses and statically validates a declarative manifest: pre-parse byte/depth/node/alias limits, schema validation, the four-node template grammar, load-time slot/capability/route/signal checks |
 | [internal/integrations/declarative/](internal/integrations/declarative/) | The declarative runtime: an `expr` environment where native collection builtins keep their syntax but are call-boundary charged against a shared budget, the pipeline executor, output-document assembly through `widgets.Validate` |
 | [internal/integrations/httpjson/](internal/integrations/httpjson/) | The generic HTTP/JSON card (`integration: http-json`): synthesises a manifest and a self-approving lock entry from one card's `params`/`view:`, then runs it through the unmodified declarative runtime |

@@ -25,6 +25,21 @@ type registry struct {
 	mu          sync.RWMutex
 	connections map[string]*Connection
 	clients     map[string]*client // http-kind connections only
+	docker      map[string]*dockerClient
+}
+
+// DockerGET performs one fixed-surface, read-only Engine API request.
+func (r *registry) DockerGET(ctx context.Context, id, path string) (*Response, error) {
+	r.mu.RLock()
+	client, ok := r.docker[id]
+	r.mu.RUnlock()
+	if ok {
+		return client.get(ctx, path)
+	}
+	if _, exists := r.Get(id); exists {
+		return nil, ErrNotDocker
+	}
+	return nil, ErrUnknownConnection
 }
 
 // ErrUnknownConnection is returned by Do and Health for an id the registry has no Connection for.

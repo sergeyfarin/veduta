@@ -26,6 +26,59 @@ func (immichRegistry) Get(id string) (*connections.Connection, bool) {
 	return &connections.Connection{ID: id, Kind: connections.KindHTTP, HTTP: &connections.HTTPConfig{}}, true
 }
 
+type dockerRegistry struct{}
+
+func (dockerRegistry) Get(id string) (*connections.Connection, bool) {
+	return &connections.Connection{ID: id, Kind: connections.KindDocker, Docker: &connections.DockerConfig{}}, true
+}
+
+func (dockerRegistry) Do(context.Context, string, connections.Request) (*connections.Response, error) {
+	return nil, connections.ErrNotHTTP
+}
+
+func (dockerRegistry) Health(context.Context, string) connections.Health { return connections.Health{} }
+
+func (dockerRegistry) DockerGET(context.Context, string, string) (*connections.Response, error) {
+	return &connections.Response{StatusCode: http.StatusOK, Body: []byte(`[{"Id":"abc","Names":["/web"],"Image":"nginx:latest","State":"running","Status":"Up 1 hour","Created":1788890400}]`)}, nil
+}
+
+func TestBuildGenerationRunsBuiltinDockerIntegration(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "veduta.yaml")
+	source := `version: 1
+auth: { mode: none }
+connections:
+  local: { kind: docker, endpoint: "unix:///var/run/docker.sock" }
+integrations:
+  - { id: docker, source: builtin }
+sections:
+  - cards:
+      - id: containers
+        integration: docker
+        operation: containers
+        slots: { server: local }
+`
+	if err := os.WriteFile(configPath, []byte(source), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, diags := config.LoadPath(configPath)
+	if diags.HasErrors() {
+		t.Fatal(diags.String())
+	}
+	generation, err := BuildGeneration(context.Background(), snapshot, 1, configPath, dockerRegistry{}, map[string]string{}, nil, filepath.Join(dir, "wasm-cache"), slog.Default())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = generation.Close(context.Background()) }()
+	if len(generation.Definitions) != 1 || generation.Definitions[0].Source.Runtime != state.RuntimeBuiltin || generation.Definitions[0].Run == nil {
+		t.Fatalf("definition=%+v", generation.Definitions)
+	}
+	document, err := generation.Definitions[0].Run(context.Background())
+	if err != nil || document.Title != "Containers" {
+		t.Fatalf("document=%+v err=%v", document, err)
+	}
+}
+
 func TestBuildGenerationLoadsApprovedWASMRuntime(t *testing.T) {
 	dir := t.TempDir()
 	pluginDir := filepath.Join(dir, "plugins", "jellyfin")

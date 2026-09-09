@@ -52,3 +52,18 @@ func (d *Dynamic) Health(ctx context.Context, id string) Health {
 	}
 	return r.Health(ctx, id)
 }
+
+// DockerGET delegates a core-only Docker request to the current coherent generation.
+func (d *Dynamic) DockerGET(ctx context.Context, id, path string) (*Response, error) {
+	d.mu.RLock()
+	r := d.current
+	d.mu.RUnlock()
+	if r == nil {
+		return nil, ErrUnknownConnection
+	}
+	docker, ok := r.(DockerRegistry)
+	if !ok {
+		return nil, ErrNotDocker
+	}
+	return docker.DockerGET(ctx, id, path)
+}

@@ -24,6 +24,7 @@ func New(connections map[string]config.Connection, resolved map[string]secrets.V
 	r := &registry{
 		connections: make(map[string]*Connection, len(connections)),
 		clients:     make(map[string]*client, len(connections)),
+		docker:      make(map[string]*dockerClient),
 	}
 	for id, cfg := range connections {
 		conn, err := buildConnection(id, cfg, resolved)
@@ -31,12 +32,19 @@ func New(connections map[string]config.Connection, resolved map[string]secrets.V
 			return nil, err
 		}
 		r.connections[id] = conn
-		if conn.Kind == KindHTTP {
+		switch conn.Kind {
+		case KindHTTP:
 			c, err := newHTTPClient(id, conn.HTTP, logger)
 			if err != nil {
 				return nil, err
 			}
 			r.clients[id] = c
+		case KindDocker:
+			c, err := newDockerClient(id, conn.Docker)
+			if err != nil {
+				return nil, err
+			}
+			r.docker[id] = c
 		}
 	}
 	return r, nil

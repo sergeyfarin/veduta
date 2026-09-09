@@ -18,6 +18,7 @@ import (
 	"veduta.dev/veduta/internal/connections"
 	"veduta.dev/veduta/internal/integrations"
 	"veduta.dev/veduta/internal/integrations/declarative"
+	dockerintegration "veduta.dev/veduta/internal/integrations/docker"
 	"veduta.dev/veduta/internal/integrations/httpjson"
 	"veduta.dev/veduta/internal/integrations/manifestload"
 	wasmrt "veduta.dev/veduta/internal/integrations/wasm"
@@ -95,6 +96,27 @@ func BuildGenerationWithAudit(ctx context.Context, snap *config.Snapshot, genera
 			d.SlotRevisions = string(slotRevisionJSON)
 			d.Refresh = parseDuration(card.Refresh, time.Minute)
 			d.Timeout = 10 * time.Second
+			if card.Integration == "docker" {
+				declared, exists := snap.IntegrationByID("docker")
+				connectionID, bound := card.Slots["server"]
+				connection, connected := reg.Get(connectionID)
+				dockerRegistry, supported := reg.(connections.DockerRegistry)
+				if !exists || declared.Source != "builtin" || !bound || !connected || connection.Kind != connections.KindDocker || !supported || card.Operation != "containers" {
+					d.Disabled = state.ReasonConfigError
+					built.Definitions = append(built.Definitions, d)
+					continue
+				}
+				d.Source.Runtime = state.RuntimeBuiltin
+				d.Source.IntegrationVersion = "1.0.0"
+				d.ManifestDigest = "docker-builtin-v1"
+				d.Key = definitionKey(d.ManifestDigest, card.Operation, card.Slots, slotRevisions, card.Params)
+				dockerConnectionID := connectionID
+				d.Run = func(c context.Context) (widgets.Document, error) {
+					return dockerintegration.Containers(c, dockerRegistry, dockerConnectionID)
+				}
+				built.Definitions = append(built.Definitions, d)
+				continue
+			}
 			if card.Integration == "http-json" {
 				slot, connID := firstSlot(card.Slots)
 				conn, _ := reg.Get(connID)

@@ -49,7 +49,17 @@ func (r *registry) Health(ctx context.Context, id string) Health {
 		return Health{Error: ErrUnknownConnection.Error()}
 	}
 	if conn.Kind != KindHTTP {
-		return Health{Error: ErrNotHTTP.Error()}
+		resp, err := r.DockerGET(ctx, id, "/containers/json?limit=1")
+		if err != nil {
+			return Health{Stage: StageTCP, Error: err.Error()}
+		}
+		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+			return Health{Stage: StageAuth, StatusCode: resp.StatusCode, Error: http.StatusText(resp.StatusCode)}
+		}
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			return Health{Stage: StageStatus, StatusCode: resp.StatusCode, Error: http.StatusText(resp.StatusCode)}
+		}
+		return Health{Reachable: true, StatusCode: resp.StatusCode}
 	}
 	resp, err := r.Do(ctx, id, Request{Method: http.MethodGet, Path: "/"})
 	if err != nil {

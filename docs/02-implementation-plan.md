@@ -1392,13 +1392,16 @@ denials. Auth-mode changes require restart so a hot reload cannot retain stale m
 
 ### Phase I — Docker and host metrics (2 d)
 
-**I1 · Docker connection and integration** · 1.5 d · deps: D1, D3
+**I1 · Docker connection and integration** · 1.5 d · deps: D1, D3 · **DONE**
 Creates: `internal/connections/docker.go` (~200 LOC over the Engine API via unix socket or TCP; no
 `docker/docker` dependency), a builtin `docker` integration (container list, state, health, image,
 uptime; optional stats), compose docs for the socket proxy.
 Tests: against recorded Engine API responses; a socket-proxy-restricted endpoint returning 403
 degrades gracefully; the Docker capability is not reachable from any plugin (asserted).
 AC: a card lists containers with per-container status; actions remain disabled.
+Landed as a core-only `DockerRegistry` extension with Unix/TCP transports, a bounded fixed GET
+allowlist, Docker-aware connection health, the builtin container card, and a socket-proxy compose
+guide. Plugin-facing `Registry.Do` continues to reject Docker-kind connections.
 
 **I2 · Host overview via Glances/Beszel** · 0.5 d · deps: D3
 Creates: `plugins/glances/manifest.yaml` (CPU, memory, disks, network, sensors, uptime) and a
