@@ -22,6 +22,7 @@ import (
 	"veduta.dev/veduta/internal/config"
 	"veduta.dev/veduta/internal/connections"
 	"veduta.dev/veduta/internal/fixtures"
+	"veduta.dev/veduta/internal/icons"
 	"veduta.dev/veduta/internal/scheduler"
 	"veduta.dev/veduta/internal/state"
 	"veduta.dev/veduta/internal/storage"
@@ -72,6 +73,7 @@ type Config struct {
 	Registry   connections.Registry
 	Scheduler  *scheduler.Manager
 	AssetProxy *AssetProxy
+	IconProxy  *icons.Resolver
 	EventStore *storage.Store
 }
 
@@ -186,6 +188,9 @@ func (s *Server) routes() http.Handler {
 	}
 	if s.cfg.EventStore != nil {
 		s.routeEvents(mux)
+	}
+	if s.cfg.IconProxy != nil {
+		s.routeIcons(mux)
 	}
 	if s.cfg.ConfigStore != nil {
 		s.routeConfig(mux)

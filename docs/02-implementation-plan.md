@@ -1497,8 +1497,15 @@ walks the authoritative v1 schema into the checked-in field table; CI runs its `
 also formats the generator, so schema/reference drift is a build failure. The guides link the
 actual CLI validation, trust approval, secret-resolution, Homepage rollback, and Rust/WASM paths
 rather than duplicating the architecture narrative. ⇉
-**L2 · Icon proxy and cache** · 0.5 d — `GET /api/v1/icons/{spec}` resolving `mdi:`, `si:`,
-`sh:` (dashboard-icons) and URLs, with a disk cache and an offline pack; never a hard CDN dependency. ⇉
+**L2 · Icon proxy and cache** · 0.5 d · **DONE** — `GET /api/v1/icons/{spec}` resolving `mdi:`,
+`si:`, `sh:` (dashboard-icons) and URLs, with a disk cache and an offline pack; never a hard CDN
+dependency. Landed with version/commit-pinned upstream mappings, the existing integrity-checked
+SQLite LRU cache, request coalescing, bounded image validation, isolated response headers, and a
+seven-icon embedded pack covering every shipped integration plus starter MDI/Simple Icons specs.
+The remote client DNS-pins public addresses and rejects loopback, private, link-local, carrier NAT,
+benchmark, multicast and reserved destinations on initial and redirected requests. Frontend icon
+rendering uses the proxy for cards and document list/action items and falls back to deterministic
+text when an icon is unavailable. Third-party origins and licences are recorded. ⇉
 **L3 · Hardening pass** · 1 d · deps: K2 — CSP and security headers, `go test -fuzz` on the document
 validator,
 manifest parser and token verifier; the import-boundary test (`integrations/*` may not import

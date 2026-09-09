@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { WidgetDocument } from '../types/widget';
+  import Icon from '../Icon.svelte';
 
   // Rendered, real, and permanently disabled in 0.1 (docs/02-implementation-plan.md B4): the
   // buttons a card declares are visible, but there is no wiring behind them yet. Executing an
@@ -20,7 +21,7 @@
         class:danger={action.danger}
         title="Actions are not available yet"
       >
-        {#if action.icon}<span class="icon" aria-hidden="true">{action.icon}</span>{/if}
+        {#if action.icon}<span class="icon" aria-hidden="true"><Icon spec={action.icon} /></span>{/if}
         {action.label}
       </button>
     {/each}
@@ -65,6 +66,10 @@
     color: color-mix(in oklab, var(--v-error) 60%, var(--v-muted));
   }
   .icon {
+    width: 14px;
+    height: 14px;
+    display: grid;
+    place-items: center;
     font-size: 12px;
   }
 </style>

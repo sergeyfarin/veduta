@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { WidgetDocument } from '../types/widget';
   import { formatValue } from '../format';
+  import Icon from '../Icon.svelte';
 
   // Empty items is a legal, deliberate state (schemas/widget-document.v1.schema.json's own
   // description: "No active streams" is a state, not a bug) - rendered as `empty`, never as a
@@ -16,7 +17,7 @@
   {:else}
     {#each block.items as item, i (i)}
       <div class="row level-{item.level ?? 'unknown'}">
-        {#if item.icon}<span class="icon" aria-hidden="true">{item.icon}</span>{/if}
+        {#if item.icon}<span class="icon" aria-hidden="true"><Icon spec={item.icon} /></span>{/if}
         <span class="text">
           <span class="name">{item.title}</span>
           {#if item.subtitle}<span class="subtitle">{item.subtitle}</span>{/if}

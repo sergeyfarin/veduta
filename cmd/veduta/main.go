@@ -39,6 +39,7 @@ import (
 	"veduta.dev/veduta/internal/config"
 	"veduta.dev/veduta/internal/connections"
 	"veduta.dev/veduta/internal/fixtures"
+	"veduta.dev/veduta/internal/icons"
 	"veduta.dev/veduta/internal/notify"
 	"veduta.dev/veduta/internal/rules"
 	"veduta.dev/veduta/internal/scheduler"
@@ -272,6 +273,7 @@ func serve(args []string) error {
 		if err != nil {
 			return fmt.Errorf("open asset cache: %w", err)
 		}
+		cfg.IconProxy = icons.New(assetCache)
 		cfg.AssetProxy = &api.AssetProxy{Tokens: tokens, Store: db, Cache: assetCache, Registry: dynamic,
 			Authorize: func(callCtx context.Context, payload assettokens.Payload) (bool, error) {
 				return appcore.AssetAuthorized(callCtx, store.Snapshot(), *configPath, dynamic, payload)

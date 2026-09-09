@@ -38,7 +38,8 @@ Phase J is done: declared signal history and events feed durable, manifest-check
 credential-safe ntfy/webhook outbox with bounded retries and flood controls. Phase K is done:
 `veduta import homepage` parses Homepage YAML, maps services and bookmarks, creates disabled
 connections and integrations for review, and atomically applies a comment-preserving config edit.
-Config reloads activate a complete runtime generation before publishing it. Next up: Phase L. See
+Config reloads activate a complete runtime generation before publishing it. Phase L1/L2 documentation
+and the local-first icon proxy/cache are done; next is the L3 hardening pass. See
 [docs/02-implementation-plan.md](docs/02-implementation-plan.md) for the full
 milestone table and what's marked **DONE**, and [docs/03-backlog.md](docs/03-backlog.md) for
 open gaps found along the way. Rule transitions and their event/outbox effects now persist in one

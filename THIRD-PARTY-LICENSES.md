@@ -73,5 +73,13 @@ first-party plugins, not into the Go host.
 | `serde` | MIT OR Apache-2.0 |
 | `serde_json` | MIT OR Apache-2.0 |
 
+## Embedded offline icon pack
+
+| Source | Version | Licence |
+| --- | --- | --- |
+| Homarr Labs Dashboard Icons | commit `c1f7e6b91c9e23317ac72b81f0ee3f9a4ac14aec` | Apache-2.0 |
+| Material Design Icons (`@mdi/svg`) | 7.4.47 | Apache-2.0 |
+| Simple Icons | 16.29.0 | CC0-1.0 (trademark rights are not waived) |
+
 A generated `THIRD-PARTY-NOTICES.md` covering the shipped frontend bundle and
 the complete locked Rust dependency graph is a release task (L4).

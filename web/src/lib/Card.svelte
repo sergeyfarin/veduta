@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
+  import Icon from './Icon.svelte';
   import Status from './Status.svelte';
   import type { CardState, Span, StatusLevel } from './types';
 
@@ -13,7 +14,7 @@
    */
   interface Props {
     title: string;
-    /** Short glyph or initials until the icon proxy lands (milestone L2). */
+    /** Literal glyph/initials, a named mdi:/si:/sh: icon, or an HTTP(S) URL. */
     icon?: string;
     href?: string;
     state?: CardState;
@@ -83,7 +84,7 @@
 
 <article class="card" class:stale={state === 'stale'} {style}>
   <header>
-    {#if icon}<span class="icon" aria-hidden="true">{icon}</span>{/if}
+    {#if icon}<span class="icon" aria-hidden="true"><Icon spec={icon} /></span>{/if}
     {#if href}
       <h3><a {href} rel="noreferrer">{title}</a></h3>
     {:else}

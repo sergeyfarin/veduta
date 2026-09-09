@@ -59,6 +59,11 @@ Start from [`examples/veduta.yaml`](../examples/veduta.yaml) to connect real ser
 ./veduta integration approve my-integration --config veduta.yaml
 ```
 
+Card, list-item, and action icons accept literal glyphs, absolute HTTP(S) URLs, or `mdi:name`,
+`si:name`, and `sh:name` identifiers. Veduta serves all remote icons through its own bounded disk
+cache. Common first-party icons are embedded, and a failed fetch falls back to text, so rendering
+the dashboard never depends on a browser reaching a CDN.
+
 The server watches the primary file and sibling `conf.d/*.yaml` files. A changed configuration is validated and its complete runtime is activated before publication; a failed reload leaves the previous generation running and reports diagnostics through the configuration-status API.
 
 For containers, persistence, and health checks, continue with the [Docker guide](docker.md). To bring an existing Homepage setup across, use the [migration guide](migration.md).
