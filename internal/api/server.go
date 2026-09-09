@@ -24,6 +24,7 @@ import (
 	"veduta.dev/veduta/internal/fixtures"
 	"veduta.dev/veduta/internal/scheduler"
 	"veduta.dev/veduta/internal/state"
+	"veduta.dev/veduta/internal/storage"
 	"veduta.dev/veduta/internal/version"
 	"veduta.dev/veduta/web"
 )
@@ -71,6 +72,7 @@ type Config struct {
 	Registry   connections.Registry
 	Scheduler  *scheduler.Manager
 	AssetProxy *AssetProxy
+	EventStore *storage.Store
 }
 
 // errBothFixturesAndConfigStore documents why New refuses to build a server with both set: they
@@ -181,6 +183,9 @@ func (s *Server) routes() http.Handler {
 	s.routeIdentity(mux)
 	if s.cfg.Auth != nil {
 		s.routeAuth(mux)
+	}
+	if s.cfg.EventStore != nil {
+		s.routeEvents(mux)
 	}
 	if s.cfg.ConfigStore != nil {
 		s.routeConfig(mux)

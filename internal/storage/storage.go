@@ -145,6 +145,13 @@ type CardRecord struct {
 
 // PutCard validates and persists a card state.
 func (s *Store) PutCard(ctx context.Context, r CardRecord) error {
+	return s.PutCardWithSignals(ctx, r, nil)
+}
+
+// PutCardWithSignals atomically persists a card state and the numeric history samples produced
+// by that same execution. A failed or superseded state commit can therefore never leave samples
+// which do not correspond to a visible card execution.
+func (s *Store) PutCardWithSignals(ctx context.Context, r CardRecord, signals map[string]float64) error {
 	if err := r.State.Validate(); err != nil {
 		return err
 	}
@@ -153,8 +160,20 @@ func (s *Store) PutCard(ctx context.Context, r CardRecord) error {
 		return err
 	}
 	e := r.State.Execution
-	_, err = s.db.ExecContext(ctx, `INSERT INTO card_state(card_id,card_hash,manifest_digest,approval_revision,slot_revisions,envelope,state,generated_at,expires_at,next_run_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(card_id) DO UPDATE SET card_hash=excluded.card_hash,manifest_digest=excluded.manifest_digest,approval_revision=excluded.approval_revision,slot_revisions=excluded.slot_revisions,envelope=excluded.envelope,state=excluded.state,generated_at=excluded.generated_at,expires_at=excluded.expires_at,next_run_at=excluded.next_run_at,updated_at=excluded.updated_at`, r.State.CardID, r.CardHash, r.ManifestDigest, r.ApprovalRevision, r.SlotRevisions, b, e.State, nullString(e.GeneratedAt), nullString(e.ExpiresAt), nullString(e.NextRunAt), time.Now().UTC().Format(time.RFC3339Nano))
-	return err
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err = tx.ExecContext(ctx, `INSERT INTO card_state(card_id,card_hash,manifest_digest,approval_revision,slot_revisions,envelope,state,generated_at,expires_at,next_run_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(card_id) DO UPDATE SET card_hash=excluded.card_hash,manifest_digest=excluded.manifest_digest,approval_revision=excluded.approval_revision,slot_revisions=excluded.slot_revisions,envelope=excluded.envelope,state=excluded.state,generated_at=excluded.generated_at,expires_at=excluded.expires_at,next_run_at=excluded.next_run_at,updated_at=excluded.updated_at`, r.State.CardID, r.CardHash, r.ManifestDigest, r.ApprovalRevision, r.SlotRevisions, b, e.State, nullString(e.GeneratedAt), nullString(e.ExpiresAt), nullString(e.NextRunAt), time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+		return err
+	}
+	for name, value := range signals {
+		if _, err = tx.ExecContext(ctx, `INSERT OR REPLACE INTO signal_history(card_id,signal,ts,value) VALUES(?,?,?,?)`, r.State.CardID, name, e.GeneratedAt, value); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 // GetCard restores a card only when its configuration hash still matches.

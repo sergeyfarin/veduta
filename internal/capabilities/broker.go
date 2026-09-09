@@ -33,7 +33,15 @@ type broker struct {
 	audit            Audit
 	logger           *slog.Logger
 	assets           *assettokens.Service
+	events           func(context.Context, string, Event) error
 	fallbackRevision [16]byte
+}
+
+// NewBrokerWithAssetsAndEvents also persists authorised plugin events through sink.
+func NewBrokerWithAssetsAndEvents(registry connections.Registry, cache Cache, audit Audit, logger *slog.Logger, service *assettokens.Service, sink func(context.Context, string, Event) error) Broker {
+	b := NewBrokerWithAssets(registry, cache, audit, logger, service).(*broker)
+	b.events = sink
+	return b
 }
 
 // NewBroker builds a standalone Broker with an ephemeral asset authority for tests and isolated
@@ -209,6 +217,12 @@ func (b *broker) Emit(ctx context.Context, g Grant, e Event) error {
 		return g.consumeHostCall()
 	}); err != nil {
 		return err
+	}
+	if e.Type == "" {
+		return errors.New("capabilities: event type is required")
+	}
+	if b.events != nil {
+		return b.events(ctx, g.PluginID, e)
 	}
 	b.logger.Info("event emitted", "plugin", g.PluginID, "type", e.Type)
 	return nil

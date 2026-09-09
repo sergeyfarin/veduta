@@ -353,6 +353,22 @@ func TestBroker_Emit_HappyPath(t *testing.T) {
 	}
 }
 
+func TestBroker_Emit_PersistsThroughSink(t *testing.T) {
+	var pluginID string
+	var emitted capabilities.Event
+	b := capabilities.NewBrokerWithAssetsAndEvents(nil, capabilities.NewMemCache(), capabilities.NewMemAudit(), discardLogger(), nil, func(_ context.Context, plugin string, event capabilities.Event) error {
+		pluginID, emitted = plugin, event
+		return nil
+	})
+	g := fullGrant(nil)
+	if err := b.Emit(context.Background(), g, capabilities.Event{Type: "card-error", Data: map[string]any{"card": "x"}}); err != nil {
+		t.Fatal(err)
+	}
+	if pluginID != g.PluginID || emitted.Type != "card-error" {
+		t.Fatalf("plugin=%q event=%+v", pluginID, emitted)
+	}
+}
+
 // TestBroker_CachePut_BytesBudgetSpecifically covers cacheBytesKB distinctly from cacheEntries -
 // few large writes exhaust bytes before they exhaust the entry count.
 func TestBroker_CachePut_BytesBudgetSpecifically(t *testing.T) {

@@ -61,7 +61,12 @@ func BuildGeneration(ctx context.Context, snap *config.Snapshot, generation uint
 
 // BuildGenerationWithAudit builds a generation and persists broker denials through auditSink.
 func BuildGenerationWithAudit(ctx context.Context, snap *config.Snapshot, generation uint64, configPath string, reg connections.Registry, revisions map[string]string, assets *assettokens.Service, wasmCacheDir string, auditSink capabilities.Audit, logger *slog.Logger) (_ *Generation, err error) {
-	broker := capabilities.NewBrokerWithAssets(reg, capabilities.NewMemCache(), auditSink, logger, assets)
+	return BuildGenerationWithAuditAndEvents(ctx, snap, generation, configPath, reg, revisions, assets, wasmCacheDir, auditSink, nil, logger)
+}
+
+// BuildGenerationWithAuditAndEvents also connects authorised plugin events to persistence.
+func BuildGenerationWithAuditAndEvents(ctx context.Context, snap *config.Snapshot, generation uint64, configPath string, reg connections.Registry, revisions map[string]string, assets *assettokens.Service, wasmCacheDir string, auditSink capabilities.Audit, eventSink func(context.Context, string, capabilities.Event) error, logger *slog.Logger) (_ *Generation, err error) {
+	broker := capabilities.NewBrokerWithAssetsAndEvents(reg, capabilities.NewMemCache(), auditSink, logger, assets, eventSink)
 	built := &Generation{}
 	loaded := make(map[string]struct{})
 	declarativeRuntime := declarative.New(broker)
@@ -195,6 +200,7 @@ func BuildGenerationWithAudit(ctx context.Context, snap *config.Snapshot, genera
 				built.Definitions = append(built.Definitions, d)
 				continue
 			}
+			d.HistorySignals = historicalSignals(op.Signals)
 			var runtime integrations.Runtime
 			switch m.Runtime {
 			case "declarative":
@@ -237,6 +243,16 @@ func BuildGenerationWithAudit(ctx context.Context, snap *config.Snapshot, genera
 		}
 	}
 	return built, nil
+}
+
+func historicalSignals(signals []manifestload.SignalDecl) map[string]struct{} {
+	out := make(map[string]struct{})
+	for _, signal := range signals {
+		if signal.History && signal.Type == "number" {
+			out[signal.Name] = struct{}{}
+		}
+	}
+	return out
 }
 
 func grant(m *manifestload.Manifest, l *integrations.LockEntry, c config.Card, reg connections.Registry, revisions map[string]string, generation uint64, approvalRevision, cardHash string) capabilities.Grant {

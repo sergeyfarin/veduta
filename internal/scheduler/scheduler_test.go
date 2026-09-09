@@ -5,12 +5,14 @@ package scheduler_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"veduta.dev/veduta/internal/scheduler"
 	"veduta.dev/veduta/internal/state"
+	"veduta.dev/veduta/internal/storage"
 	"veduta.dev/veduta/internal/widgets"
 )
 
@@ -39,6 +41,66 @@ func TestSharedFlightAndViewerIndependentScheduling(t *testing.T) {
 	if calls.Load() != 1 {
 		t.Fatalf("calls=%d want 1", calls.Load())
 	}
+}
+
+func TestOnlyDeclaredNumericHistorySignalsAreStored(t *testing.T) {
+	store, err := storage.Open(context.Background(), t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = store.Close() }()
+	manager := scheduler.New(store)
+	defer manager.Close()
+	definition := scheduler.Definition{ID: "card", Hash: "card", Refresh: time.Hour, HistorySignals: map[string]struct{}{"kept": {}}, Run: func(context.Context) (widgets.Document, error) {
+		return widgets.Document{Blocks: []widgets.Block{}, Signals: map[string]widgets.Signal{"kept": {Value: float64(12)}, "ignored": {Value: float64(99)}}}, nil
+	}}
+	if err = manager.Apply(context.Background(), []scheduler.Definition{definition}); err != nil {
+		t.Fatal(err)
+	}
+	waitForState(t, manager, "card", state.StateOK)
+	rows, err := store.DB().Query(`SELECT signal,value FROM signal_history WHERE card_id='card'`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = rows.Close() }()
+	if !rows.Next() {
+		t.Fatal("declared signal was not stored")
+	}
+	var name string
+	var value float64
+	if err := rows.Scan(&name, &value); err != nil || name != "kept" || value != 12 || rows.Next() {
+		t.Fatalf("name=%q value=%v err=%v", name, value, err)
+	}
+}
+
+func TestHistoricalSignalTypeChangeIsRejected(t *testing.T) {
+	manager := scheduler.New(nil)
+	defer manager.Close()
+	definition := scheduler.Definition{ID: "card", Hash: "card", Refresh: time.Hour, HistorySignals: map[string]struct{}{"cpu": {}}, Run: func(context.Context) (widgets.Document, error) {
+		return widgets.Document{Blocks: []widgets.Block{}, Signals: map[string]widgets.Signal{"cpu": {Value: "twelve"}}}, nil
+	}}
+	if err := manager.Apply(context.Background(), []scheduler.Definition{definition}); err != nil {
+		t.Fatal(err)
+	}
+	card := waitForState(t, manager, "card", state.StateError)
+	if card.Execution.Error == nil || !strings.Contains(card.Execution.Error.Message, "changed type") {
+		t.Fatalf("error=%+v", card.Execution.Error)
+	}
+}
+
+func waitForState(t *testing.T, manager *scheduler.Manager, id string, wanted state.ExecutionState) state.CardState {
+	t.Helper()
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		card, _ := manager.State(id)
+		if card.Execution.State == wanted {
+			return card
+		}
+		time.Sleep(time.Millisecond)
+	}
+	card, _ := manager.State(id)
+	t.Fatalf("state=%s, want %s", card.Execution.State, wanted)
+	return state.CardState{}
 }
 
 func TestFailureKeepsLastGoodThenOpensCircuit(t *testing.T) {
@@ -71,7 +133,12 @@ func TestFailureKeepsLastGoodThenOpensCircuit(t *testing.T) {
 }
 
 func TestConfigSwapFencesAnOldInvocation(t *testing.T) {
-	m := scheduler.New(nil)
+	store, err := storage.Open(context.Background(), t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = store.Close() }()
+	m := scheduler.New(store)
 	defer m.Close()
 	ctx := context.Background()
 	started := make(chan struct{})
@@ -79,14 +146,14 @@ func TestConfigSwapFencesAnOldInvocation(t *testing.T) {
 	oldRun := func(context.Context) (widgets.Document, error) {
 		close(started)
 		<-release
-		return widgets.Document{Blocks: []widgets.Block{}}, nil
+		return widgets.Document{Blocks: []widgets.Block{}, Signals: map[string]widgets.Signal{"value": {Value: float64(1)}}}, nil
 	}
-	if err := m.Apply(ctx, []scheduler.Definition{{ID: "a", Hash: "old", Key: "old", Refresh: time.Hour, Run: oldRun}}); err != nil {
+	if err := m.Apply(ctx, []scheduler.Definition{{ID: "a", Hash: "old", Key: "old", Refresh: time.Hour, HistorySignals: map[string]struct{}{"value": {}}, Run: oldRun}}); err != nil {
 		t.Fatal(err)
 	}
 	<-started
-	if err := m.Apply(ctx, []scheduler.Definition{{ID: "a", Hash: "new", Key: "new", Refresh: time.Hour, Run: func(context.Context) (widgets.Document, error) {
-		return widgets.Document{Blocks: []widgets.Block{}}, nil
+	if err := m.Apply(ctx, []scheduler.Definition{{ID: "a", Hash: "new", Key: "new", Refresh: time.Hour, HistorySignals: map[string]struct{}{"value": {}}, Run: func(context.Context) (widgets.Document, error) {
+		return widgets.Document{Blocks: []widgets.Block{}, Signals: map[string]widgets.Signal{"value": {Value: float64(2)}}}, nil
 	}}}); err != nil {
 		t.Fatal(err)
 	}
@@ -101,6 +168,13 @@ func TestConfigSwapFencesAnOldInvocation(t *testing.T) {
 			t.Fatalf("new invocation did not commit: %+v", cs)
 		}
 		time.Sleep(time.Millisecond)
+	}
+	var samples, total float64
+	if err := store.DB().QueryRow(`SELECT count(*),sum(value) FROM signal_history WHERE card_id='a'`).Scan(&samples, &total); err != nil {
+		t.Fatal(err)
+	}
+	if samples != 1 || total != 2 {
+		t.Fatalf("samples=%v total=%v; superseded invocation wrote history", samples, total)
 	}
 }
 

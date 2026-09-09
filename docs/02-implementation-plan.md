@@ -1413,9 +1413,13 @@ deployment guidance for a one-command Glances API container.
 
 ### Phase J — Events, rules, notifications (2.5 d)
 
-**J1 · Events and signal history** · 0.5 d · deps: F3 — writes declared numeric signals with
+**J1 · Events and signal history** · 0.5 d · deps: F3 · **DONE** — writes declared numeric signals with
 `history: true` to `signal_history`, appends events, prunes on a janitor, exposes `GET /api/v1/events`.
 Tests: only declared signals are stored; a signal that changes type is rejected rather than coerced.
+Landed with card state and its samples in one SQLite transaction under the scheduler generation
+fence, persistent capability-broker events with bounded validated JSON, and a newest-first bounded
+events API. Existing janitor retention now covers both stores. The regression suite also proves a
+superseded invocation cannot leave history from an obsolete configuration generation.
 **J2 · Rules** · 1.5 d · deps: J1, S3 — `expr` predicate over `signal(card, name)` and `state(card)`
 only, + `for:` debounce + severity + resolve; pure evaluator over
 `(prev signals, new signals, history, execution state)`.

@@ -33,6 +33,7 @@ import (
 	"veduta.dev/veduta/internal/audit"
 	"veduta.dev/veduta/internal/auth"
 	"veduta.dev/veduta/internal/canonical"
+	"veduta.dev/veduta/internal/capabilities"
 	assettokens "veduta.dev/veduta/internal/capabilities/assets"
 	"veduta.dev/veduta/internal/config"
 	"veduta.dev/veduta/internal/connections"
@@ -194,6 +195,7 @@ func serve(args []string) error {
 			return fmt.Errorf("configure audit log: %w", auditErr)
 		}
 		cfg.Audit = auditLog
+		cfg.EventStore = db
 		switch snapshot.Config.Auth.Mode {
 		case config.AuthPassword:
 			admin := snapshot.Config.Auth.Admin
@@ -382,7 +384,14 @@ func buildRuntime(ctx context.Context, snapshot *config.Snapshot, generation uin
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	built, err := appcore.BuildGenerationWithAudit(ctx, snapshot, generation, configPath, registry, revisions, tokens, filepath.Join(db.DataDir(), "wasm-cache"), auditLog, logger)
+	eventSink := func(eventCtx context.Context, pluginID string, event capabilities.Event) error {
+		data, marshalErr := json.Marshal(event.Data)
+		if marshalErr != nil {
+			return marshalErr
+		}
+		return db.AppendEvent(eventCtx, storage.Event{Type: event.Type, Severity: "info", Source: pluginID, Data: data})
+	}
+	built, err := appcore.BuildGenerationWithAuditAndEvents(ctx, snapshot, generation, configPath, registry, revisions, tokens, filepath.Join(db.DataDir(), "wasm-cache"), auditLog, eventSink, logger)
 	if err != nil {
 		return nil, nil, nil, err
 	}

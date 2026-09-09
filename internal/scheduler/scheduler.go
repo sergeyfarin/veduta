@@ -27,6 +27,7 @@ type Definition struct {
 	Source                                                         state.Source
 	Run                                                            RunFunc
 	Disabled                                                       state.DisabledReason
+	HistorySignals                                                 map[string]struct{}
 	generation                                                     uint64
 }
 
@@ -217,6 +218,14 @@ func (m *Manager) refresh(ctx context.Context, d Definition) error {
 		return m.commit(ctx, d, state.Disabled(id, nil, state.ReasonConfigError))
 	}
 	doc, dur, runErr := m.runShared(ctx, d)
+	var history map[string]float64
+	if runErr == nil {
+		var historyErr error
+		history, historyErr = historicalValues(d, doc)
+		if historyErr != nil {
+			runErr = historyErr
+		}
+	}
 	if runErr == nil {
 		ttl := d.Refresh
 		if doc.Hints != nil && doc.Hints.TTLSeconds > 0 && time.Duration(doc.Hints.TTLSeconds)*time.Second < ttl {
@@ -229,7 +238,7 @@ func (m *Manager) refresh(ctx context.Context, d Definition) error {
 		m.failures[id] = 0
 		delete(m.openUntil, id)
 		m.mu.Unlock()
-		return m.commit(ctx, d, state.OK(id, doc, d.Source, ttl, dur))
+		return m.commitWithHistory(ctx, d, state.OK(id, doc, d.Source, ttl, dur), history)
 	}
 	m.mu.Lock()
 	m.failures[id]++
@@ -255,6 +264,22 @@ func (m *Manager) refresh(ctx context.Context, d Definition) error {
 	cs.Execution.ConsecutiveFailures = failures
 	cs.Execution.NextRunAt = retry.UTC().Format(time.RFC3339Nano)
 	return m.commit(ctx, d, cs)
+}
+
+func historicalValues(d Definition, doc widgets.Document) (map[string]float64, error) {
+	out := make(map[string]float64, len(d.HistorySignals))
+	for name := range d.HistorySignals {
+		signal, ok := doc.Signals[name]
+		if !ok || signal.Value == nil {
+			continue
+		}
+		value, ok := signal.Value.(float64)
+		if !ok {
+			return nil, errors.New("scheduler: historical signal " + name + " changed type")
+		}
+		out[name] = value
+	}
+	return out, nil
 }
 
 func (m *Manager) runShared(ctx context.Context, d Definition) (widgets.Document, time.Duration, error) {
@@ -300,6 +325,10 @@ func (m *Manager) runShared(ctx context.Context, d Definition) (widgets.Document
 }
 
 func (m *Manager) commit(ctx context.Context, d Definition, cs state.CardState) error {
+	return m.commitWithHistory(ctx, d, cs, nil)
+}
+
+func (m *Manager) commitWithHistory(ctx context.Context, d Definition, cs state.CardState, history map[string]float64) error {
 	if err := cs.Validate(); err != nil {
 		return err
 	}
@@ -310,7 +339,7 @@ func (m *Manager) commit(ctx context.Context, d Definition, cs state.CardState) 
 		return ErrSuperseded
 	}
 	if m.store != nil {
-		if err := m.store.PutCard(ctx, storage.CardRecord{CardHash: d.Hash, ManifestDigest: d.ManifestDigest, ApprovalRevision: d.ApprovalRevision, SlotRevisions: d.SlotRevisions, State: cs}); err != nil {
+		if err := m.store.PutCardWithSignals(ctx, storage.CardRecord{CardHash: d.Hash, ManifestDigest: d.ManifestDigest, ApprovalRevision: d.ApprovalRevision, SlotRevisions: d.SlotRevisions, State: cs}, history); err != nil {
 			m.mu.Unlock()
 			return err
 		}
