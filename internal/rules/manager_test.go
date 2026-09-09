@@ -76,10 +76,17 @@ func TestWrongSignalTypeEmitsOncePerBadEpisode(t *testing.T) {
 	if err := manager.Evaluate(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	setCardRun(t, cards, "96", nil)
-	time.Sleep(15 * time.Millisecond)
+	manager.Close()
+	restarted := rules.New(context.Background(), store, cards, nil)
+	defer restarted.Close()
+	if err := restarted.Apply(context.Background(), []rules.Definition{definition}, declarations); err != nil {
+		t.Fatal(err)
+	}
+	if err := restarted.Evaluate(context.Background()); err != nil {
+		t.Fatal(err)
+	}
 	if got := countEvents(t, store, "rule.signal-type"); got != 1 {
-		t.Fatalf("wrong-type events=%d want=1", got)
+		t.Fatalf("wrong-type events after restart=%d want=1", got)
 	}
 	setCardRun(t, cards, float64(20), nil)
 	time.Sleep(15 * time.Millisecond)

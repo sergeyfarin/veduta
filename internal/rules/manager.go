@@ -17,20 +17,19 @@ import (
 
 // Manager evaluates rules on card changes and owns persisted debounce wake-ups.
 type Manager struct {
-	store         *storage.Store
-	scheduler     *scheduler.Manager
-	logger        *slog.Logger
-	ctx           context.Context
-	cancel        context.CancelFunc
-	unsubscribe   func()
-	mu            sync.Mutex
-	definitions   map[string]Definition
-	declarations  map[string]CardDefinition
-	states        map[string]storage.RuleState
-	timers        map[string]*time.Timer
-	wrongReported map[string]bool
-	notify        func(context.Context, Alert) error
-	active        bool
+	store        *storage.Store
+	scheduler    *scheduler.Manager
+	logger       *slog.Logger
+	ctx          context.Context
+	cancel       context.CancelFunc
+	unsubscribe  func()
+	mu           sync.Mutex
+	definitions  map[string]Definition
+	declarations map[string]CardDefinition
+	states       map[string]storage.RuleState
+	timers       map[string]*time.Timer
+	notify       func(context.Context, Alert) error
+	active       bool
 }
 
 // Alert is the credential-free notification request produced by a rule transition.
@@ -51,7 +50,7 @@ func NewWithNotifier(parent context.Context, store *storage.Store, cards *schedu
 	}
 	ctx, cancel := context.WithCancel(parent)
 	updates, unsubscribe := cards.Subscribe(32)
-	manager := &Manager{store: store, scheduler: cards, logger: logger, ctx: ctx, cancel: cancel, unsubscribe: unsubscribe, definitions: map[string]Definition{}, declarations: map[string]CardDefinition{}, states: map[string]storage.RuleState{}, timers: map[string]*time.Timer{}, wrongReported: map[string]bool{}, notify: notifier}
+	manager := &Manager{store: store, scheduler: cards, logger: logger, ctx: ctx, cancel: cancel, unsubscribe: unsubscribe, definitions: map[string]Definition{}, declarations: map[string]CardDefinition{}, states: map[string]storage.RuleState{}, timers: map[string]*time.Timer{}, notify: notifier}
 	go func() {
 		for {
 			select {
@@ -106,7 +105,6 @@ func (m *Manager) Apply(ctx context.Context, definitions []Definition, declarati
 	}
 	m.definitions, m.declarations, m.states = defs, declarations, states
 	m.timers = map[string]*time.Timer{}
-	m.wrongReported = map[string]bool{}
 	m.active = false
 	m.mu.Unlock()
 	return nil
@@ -171,14 +169,14 @@ func (m *Manager) evaluateLocked(ctx context.Context, id string, cards map[strin
 		return err
 	}
 	current := m.states[id]
-	if len(evaluation.WrongTypes) > 0 && !m.wrongReported[id] {
+	if len(evaluation.WrongTypes) > 0 && !current.WrongType {
 		data, _ := json.Marshal(map[string]any{"rule": id, "signals": evaluation.WrongTypes})
 		if err = m.store.AppendEvent(ctx, storage.Event{Type: "rule.signal-type", Severity: "warning", Source: "rules", Message: "Declared signal has the wrong runtime type", Data: data}); err != nil {
 			return err
 		}
-		m.wrongReported[id] = true
+		current.WrongType = true
 	} else if len(evaluation.WrongTypes) == 0 {
-		m.wrongReported[id] = false
+		current.WrongType = false
 	}
 	if timer := m.timers[id]; timer != nil {
 		timer.Stop()
