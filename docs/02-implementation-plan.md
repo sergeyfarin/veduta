@@ -1464,7 +1464,7 @@ Homepage shapes, unmodified settings/global-widget options, and a shared Docker-
 `homepage.widgets[n]` labels and dotted header names are reconstructed without losing their source
 shape. Unknown widget types and unsupported labels are retained where possible and reported as
 warnings; malformed document structure remains a hard parse error.
-**K2 · Map and apply** · 1 d · deps: K1, D3 — group→section, service→card,
+**K2 · Map and apply** · 1 d · deps: K1, D3 · **DONE** — group→section, service→card,
 `widget.type`→integration
 (a mapping table covering the ~25 most common types, everything else → `http-json` or a link-only card),
 `widget.url`→connection (deduplicated by base URL), `widget.key`→a `${secret:…}` reference plus a
@@ -1473,6 +1473,20 @@ survive; imported connections start **disabled pending review** (C-level trust b
 AC: `veduta import homepage --dir ./homepage-config` prints
 `Imported 34 services · 29 complete · 3 without widgets · 2 need manual configuration`, writes a valid
 config, and never writes a secret value into YAML.
+Landed with an explicit 39-type mapping table, rich mappings for the shipped Immich, Jellyfin,
+Glances and Beszel plugins, and transparent link-only fallbacks for known widgets without a Veduta
+metrics integration. URLs deduplicate into disabled HTTP connections; source key values are never
+copied, and become deterministic `${secret:HOMEPAGE_*_KEY}` references plus a sorted environment
+variable checklist. Plugin declarations are also disabled pending source and permission review.
+`config.Apply` edits the YAML node tree, merges cards into matching sections, preserves comments
+and flow/block styles, validates the complete primary-plus-conf.d result, preserves file mode and
+atomically replaces the primary file. `veduta import homepage` exposes the workflow and prints the
+bounded summary and warnings from the acceptance criterion.
+
+K2 also closed a trust-boundary gap exposed by its acceptance criterion: connections previously
+had no `enabled` field, while integration `enabled` was decoded but ignored. Both now default to
+enabled for existing configurations and are enforced by runtime construction. Disabled connection
+secret references are intentionally dormant until review and enablement.
 
 ### Phase L — Release readiness (3 d)
 

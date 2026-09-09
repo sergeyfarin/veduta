@@ -100,9 +100,10 @@ type Layout struct {
 // rather than being modelled as an interface - direct field access, no type assertion at call
 // sites. See UnmarshalYAML in yamltypes.go.
 type Connection struct {
-	Kind   string // http | docker
-	HTTP   *HTTPConnection
-	Docker *DockerConnection
+	Kind    string // http | docker
+	Enabled *bool  // nil means the schema default: true
+	HTTP    *HTTPConnection
+	Docker  *DockerConnection
 }
 
 // HTTPConnection is connections.*.kind == http. Connections own every URL, credential, TLS
@@ -156,9 +157,12 @@ type DockerConnection struct {
 type Integration struct {
 	ID          string `yaml:"id"`
 	Source      string `yaml:"source"`
-	Enabled     bool   `yaml:"enabled"`
+	Enabled     *bool  `yaml:"enabled"` // nil means the schema default: true
 	Description string `yaml:"description"`
 }
+
+// IsEnabled applies the schema default without forcing callers to understand pointer presence.
+func (i Integration) IsEnabled() bool { return i.Enabled == nil || *i.Enabled }
 
 // Section groups cards under an optional heading.
 type Section struct {

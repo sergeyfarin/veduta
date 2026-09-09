@@ -22,12 +22,17 @@ type SecretLocation struct {
 }
 
 // secretLocations walks the merged tree (Content only, per yamlmerge.go's own reasoning about
-// Alias-safety) collecting every occurrence of the ${secret:NAME} syntax.
+// Alias-safety) collecting every active occurrence of the ${secret:NAME} syntax. A disabled
+// connection is retained for review but is not constructed, so its credentials are not required
+// until it is enabled.
 func secretLocations(root *yaml.Node, m *merger) []SecretLocation {
 	var out []SecretLocation
 	var walk func(n *yaml.Node)
 	walk = func(n *yaml.Node) {
 		if n == nil {
+			return
+		}
+		if disabledConnectionNode(n) {
 			return
 		}
 		if n.Kind == yaml.ScalarNode {
@@ -43,4 +48,12 @@ func secretLocations(root *yaml.Node, m *merger) []SecretLocation {
 	}
 	walk(root)
 	return out
+}
+
+func disabledConnectionNode(node *yaml.Node) bool {
+	if node.Kind != yaml.MappingNode {
+		return false
+	}
+	kind, enabled := mapLookup(node, "kind"), mapLookup(node, "enabled")
+	return kind != nil && (kind.Value == "http" || kind.Value == "docker") && enabled != nil && enabled.Tag == "!!bool" && enabled.Value == "false"
 }

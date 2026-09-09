@@ -27,6 +27,9 @@ func New(connections map[string]config.Connection, resolved map[string]secrets.V
 		docker:      make(map[string]*dockerClient),
 	}
 	for id, cfg := range connections {
+		if cfg.Enabled != nil && !*cfg.Enabled {
+			continue
+		}
 		conn, err := buildConnection(id, cfg, resolved)
 		if err != nil {
 			return nil, err

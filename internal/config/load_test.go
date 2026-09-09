@@ -428,3 +428,22 @@ notifications:
 		t.Errorf("both occurrences report the same line %d, want two distinct lines", toks[0].Line)
 	}
 }
+
+func TestLoad_DisabledConnectionDoesNotRequireItsSecret(t *testing.T) {
+	dir := t.TempDir()
+	path := write(t, dir, "veduta.yaml", minimalValid+`
+connections:
+  imported:
+    kind: http
+    enabled: false
+    baseUrl: http://service.example.test
+    auth: {type: bearer, value: "${secret:NOT_SET_UNTIL_REVIEWED}"}
+`)
+	snapshot, diagnostics := config.Load(path)
+	if diagnostics.HasErrors() {
+		t.Fatal(diagnostics.String())
+	}
+	if len(snapshot.SecretRefs) != 0 {
+		t.Fatalf("disabled connection exposed active secret refs: %#v", snapshot.SecretRefs)
+	}
+}

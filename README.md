@@ -35,9 +35,10 @@ and green in CI, closing out Phase D; spikes S2 (upstream API reality check), S3
 bake-off), S4 (visual prototype), Phases E–G, and Phase H (password and forward authentication,
 privileged-operation gating, and persistent audit) and Phase I (Docker and host metrics) are done.
 Phase J is done: declared signal history and events feed durable, manifest-checked rules, and a
-credential-safe ntfy/webhook outbox with bounded retries and flood controls. Phase K is underway:
-K1 parses Homepage YAML and Docker labels into a format-neutral import model, and config reloads
-now activate a complete runtime generation before publishing it. K2 mapping/apply is next. See
+credential-safe ntfy/webhook outbox with bounded retries and flood controls. Phase K is done:
+`veduta import homepage` parses Homepage YAML, maps services and bookmarks, creates disabled
+connections and integrations for review, and atomically applies a comment-preserving config edit.
+Config reloads activate a complete runtime generation before publishing it. Next up: Phase L. See
 [docs/02-implementation-plan.md](docs/02-implementation-plan.md) for the full
 milestone table and what's marked **DONE**, and [docs/03-backlog.md](docs/03-backlog.md) for
 open gaps found along the way. Atomic rule-transition persistence remains required before release

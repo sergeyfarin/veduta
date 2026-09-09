@@ -160,7 +160,7 @@ func BuildGenerationWithAuditAndEvents(ctx context.Context, snap *config.Snapsho
 				continue
 			}
 			in, ok := snap.IntegrationByID(card.Integration)
-			if !ok {
+			if !ok || !in.IsEnabled() {
 				d.Disabled = state.ReasonIntegrationMissing
 				built.Definitions = append(built.Definitions, d)
 				continue

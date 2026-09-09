@@ -9,6 +9,7 @@
 //	veduta integration diff <id>        print the permission diff since the last approval
 //	veduta integration approve <id>     review the diff and record approval in veduta.lock.yaml
 //	veduta plugin validate <file.wasm>   run sandbox and ABI conformance checks
+//	veduta import homepage --dir <path>  import Homepage configuration
 //	veduta --check-config [--config path]   validate a config file and print diagnostics
 //
 // Password authentication permits a non-loopback bind; other modes remain gated until H2.
@@ -75,8 +76,10 @@ func run(args []string) error {
 		return integrationCmd(args)
 	case "plugin":
 		return pluginCmd(args)
+	case "import":
+		return importCmd(args)
 	default:
-		return fmt.Errorf("unknown command %q (try: serve, version, manifest, integration, plugin)", cmd)
+		return fmt.Errorf("unknown command %q (try: serve, version, manifest, integration, plugin, import)", cmd)
 	}
 }
 

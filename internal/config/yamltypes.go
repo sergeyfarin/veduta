@@ -14,12 +14,14 @@ import (
 // depth for a caller that decodes without validating first, not the primary gate.
 func (c *Connection) UnmarshalYAML(value *yaml.Node) error {
 	var probe struct {
-		Kind string `yaml:"kind"`
+		Kind    string `yaml:"kind"`
+		Enabled *bool  `yaml:"enabled"`
 	}
 	if err := value.Decode(&probe); err != nil {
 		return err
 	}
 	c.Kind = probe.Kind
+	c.Enabled = probe.Enabled
 	switch probe.Kind {
 	case "http":
 		var h HTTPConnection

@@ -76,6 +76,26 @@ func TestNew_MissingResolvedSecretFailsLoudly(t *testing.T) {
 	}
 }
 
+func TestNew_SkipsDisabledConnectionBeforeResolvingIt(t *testing.T) {
+	disabled := false
+	cfg := map[string]config.Connection{
+		"imported": {
+			Kind:    "http",
+			Enabled: &disabled,
+			HTTP: &config.HTTPConnection{BaseURL: "://invalid", Auth: config.ConnectionAuth{
+				Type: "bearer", Value: config.SecretRef{Name: "NOT_CONFIGURED_YET"},
+			}},
+		},
+	}
+	registry, err := connections.New(cfg, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := registry.Get("imported"); ok {
+		t.Fatal("disabled connection was constructed")
+	}
+}
+
 func TestNew_LiteralAuthValueWorksWithoutAnySecret(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer literal-token-value" {

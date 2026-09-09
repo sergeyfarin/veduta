@@ -432,6 +432,11 @@
         "kind": {
           "const": "http"
         },
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Disabled connections retain imported settings but are never constructed or used until reviewed."
+        },
         "baseUrl": {
           "type": "string",
           "maxLength": 512,
@@ -631,6 +636,11 @@
       "properties": {
         "kind": {
           "const": "docker"
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Disabled connections retain imported settings but are never constructed or used until reviewed."
         },
         "endpoint": {
           "type": "string",
