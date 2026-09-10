@@ -577,7 +577,7 @@ wraps its logger in `secrets.NewHandler` unconditionally, so scrubbing is active
 not by remembering to opt in.
 
 Two real gaps this milestone was explicitly asked to close, both found and written down before
-C1 was called done (see docs/03-backlog.md, now moved to its Resolved section with full detail):
+C1 was called done (see docs/03-backlog-resolved.md for the full detail):
 
 - `SecretRef` had no position. Fixed not by adding fields to `SecretRef` (ambiguous whenever a
   name is referenced more than once, and would need a reflection-based walk matching decoded

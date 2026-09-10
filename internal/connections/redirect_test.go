@@ -51,11 +51,12 @@ func TestRedirectPolicy_NoAllowedPathsMeansAnyPathOnTheSameHostIsFine(t *testing
 // TestRedirectPolicy_RefusesRedirectOutsideAllowedPaths is the regression test for the core of
 // the finding: an authorised request to a path under an allowed subtree could redirect - same
 // host, same scheme, within maxRedirects - to a DIFFERENT path on that same connection the
-// administrator never allowed. Neither the manifest route grant nor the lock's approved route is
-// re-checked against the redirect target (that residual gap is recorded in docs/03-backlog.md,
-// since closing it needs the broker's Grant plumbed into this policy); this at least confines the
-// connection's own allowedPaths - "the only thing standing between a card and every path on that
-// connection" per docs/01-architecture.md - to actually applying on a followed redirect too.
+// administrator never allowed. This layer confines the connection's own allowedPaths - "the only
+// thing standing between a card and every path on that connection" per docs/01-architecture.md -
+// to actually applying on a followed redirect too. The residual gap it does NOT close - re-checking
+// the lock's approved route against the redirect target - was closed separately by
+// capabilities.Grant.AuthorizesRedirect, plumbed in through redirectauth.go; see
+// docs/03-backlog-resolved.md and TestBroker_HTTP_RedirectToAnUnapprovedRouteIsDenied.
 func TestRedirectPolicy_RefusesRedirectOutsideAllowedPaths(t *testing.T) {
 	base := mustParseURL(t, "https://svc.example/")
 	policy := redirectPolicy(base, 1, []string{"/api/public"})

@@ -6,9 +6,9 @@
 // is recorded in veduta.lock.yaml.
 //
 // Scope note: docs/02-implementation-plan.md's D2b entry also names sudo-window enforcement and
-// an audited approval trail. H1 sessions now exist; the sudo endpoint and internal/audit remain
-// H2 work. This package owns the canonical digest, lock file, permission diff, and CLI plus REST
-// access to approve. The remaining sudo/audit gap is recorded in docs/03-backlog.md.
+// an audited approval trail. H2 delivered both - POST /api/v1/auth/sudo, a re-authentication
+// window and persistent audit records (see docs/03-backlog-resolved.md). This package owns the
+// canonical digest, lock file, permission diff, and CLI plus REST access to approve.
 package integrations
 
 import (
@@ -112,8 +112,8 @@ func ManifestFile(dir string) (string, error) { return findManifestFile(dir) }
 // found in a second review pass that a manifest this large would otherwise be fully allocated
 // before any check could reject it (see readBoundedFile's own doc comment). Kept as its own
 // constant rather than shared with manifestload's: the two packages are deliberately independent
-// (see docs/03-backlog.md's note on Limits/Manifest type duplication), and both happen to land on
-// the same 256 KiB a manifest has no legitimate reason to exceed.
+// (see docs/03-backlog-resolved.md's note on Limits/Manifest type duplication), and both happen
+// to land on the same 256 KiB a manifest has no legitimate reason to exceed.
 const maxManifestBytes = 256 << 10
 
 // LoadManifest loads and digests the manifest in dir. The file is read exactly once: found in

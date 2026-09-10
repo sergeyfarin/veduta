@@ -33,10 +33,10 @@ type budget struct {
 // immediately, since net/http itself watches ctx, but would leave a long-running expr-only loop
 // (map/filter/sortBy with no HTTP call inside it) running until the wall-clock deadline anyway,
 // ctx.Err() notwithstanding. Checking ctx.Err() here closes that for every charge/template call,
-// which is the finest granularity this budget can observe (see docs/03-backlog.md for the
-// coarser, expr-internal limitation this does not and cannot close: expr's own native builtin
-// loops are not preemptible mid-iteration without forking expr, a call already made and recorded
-// in docs/02-implementation-plan.md's D3 entry).
+// which is the finest granularity this budget can observe (see docs/03-backlog-resolved.md's S3
+// entry for the coarser, expr-internal limitation this does not and cannot close: expr's own
+// native builtin loops are not preemptible mid-iteration without forking expr, a call already
+// made and recorded in docs/02-implementation-plan.md's D3 entry).
 func (b *budget) check() error {
 	if b.ctx != nil {
 		if err := b.ctx.Err(); err != nil {

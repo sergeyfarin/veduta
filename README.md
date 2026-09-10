@@ -111,7 +111,8 @@ This repository currently contains:
 | [docs/00-review-and-prior-art.md](docs/00-review-and-prior-art.md) | Competitive research, reuse decisions, and eight rounds of adversarial review with verdicts |
 | [docs/01-architecture.md](docs/01-architecture.md) | Architecture, every contract (schemas, Go interfaces, REST, SQLite), threat model, decision log |
 | [docs/02-implementation-plan.md](docs/02-implementation-plan.md) | Spikes, dependency-ordered milestones, and an executable issue backlog |
-| [docs/03-backlog.md](docs/03-backlog.md) | Gaps, issues and improvement opportunities found along the way, not yet their own milestone |
+| [docs/03-backlog.md](docs/03-backlog.md) | Open gaps and decisions found along the way, not yet their own milestone |
+| [docs/03-backlog-resolved.md](docs/03-backlog-resolved.md) | The closed half: what each gap was and where the fix landed |
 | [docs/spikes/](docs/spikes/) | S2 (upstream API findings) and S4 (visual prototype, HTML+CSS) write-ups |
 | [docs/dev-environment.md](docs/dev-environment.md) | Headless-VM notes: no system browser, how UI changes actually get verified |
 | [hack/capture-upstream-fixtures.sh](hack/capture-upstream-fixtures.sh) | Captures real Immich/Jellyfin responses as reviewed fixtures |
