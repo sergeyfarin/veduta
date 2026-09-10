@@ -81,5 +81,8 @@ first-party plugins, not into the Go host.
 | Material Design Icons (`@mdi/svg`) | 7.4.47 | Apache-2.0 |
 | Simple Icons | 16.29.0 | CC0-1.0 (trademark rights are not waived) |
 
-A generated `THIRD-PARTY-NOTICES.md` covering the shipped frontend bundle and
-the complete locked Rust dependency graph is a release task (L4).
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) is the generated companion to this file: it
+covers the shipped frontend bundle (read from Rollup's real module graph, so it lists what the
+browser receives rather than the build tooling above) and the complete locked Rust dependency
+graph rather than only the direct crates. This file stays the curated policy record — it is where
+a dependency's justification lives, and where the compatibility rules above are enforced.
