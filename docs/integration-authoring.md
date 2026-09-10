@@ -65,3 +65,9 @@ sha256sum plugins/my-integration/my-integration.wasm
 The validator applies production import restrictions and resource limits, instantiates the module without WASI, and smoke-invokes the ABI. [`plugins/jellyfin`](../plugins/jellyfin) is the complete example for multiple broker requests, typed mapping, asset references, signals, and partial-data notices.
 
 Before publishing an integration, test error and partial-data paths with captured, reviewed fixtures; verify all output through the Widget Document validator; and review the exact `integration diff` an administrator will see.
+
+## The ABI is experimental
+
+Veduta is pre-1.0, and the WebAssembly guest ABI, the host functions exposed by [`sdk/rust`](../sdk/rust), and the manifest schema **will change between releases**. This is stated plainly rather than discovered: a WASM integration you publish today should be expected to need a rebuild, a new module hash, and a fresh approval on upgrade.
+
+That is a deliberate consequence of the trust model rather than an accident of it. `veduta.lock.yaml` pins the manifest digest and the module SHA-256, so a module built against an older ABI is refused at load with a printed permission diff — it fails closed instead of running against host functions whose meaning has shifted. Declarative integrations are the more stable surface: they are data, not compiled code, and are the recommended starting point unless an integration genuinely needs cross-request logic.

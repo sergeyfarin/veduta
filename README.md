@@ -10,6 +10,21 @@ services and machines, performs a small set of **explicitly approved actions**, 
 Its distinguishing bet: **community integrations are sandboxed by design**. An integration
 describes what it wants; the core decides whether it is allowed, and holds every credential.
 
+![The Veduta dashboard rendering the checked-in showcase: media posters, host metrics, container
+state, notes and disk usage, with cards in ok, stale, error, loading and disabled
+states](web/tests/visual.spec.ts-snapshots/dashboard-light-chromium-linux.png)
+
+That image is not a marketing shot taken by hand — it is the visual-regression baseline the test
+suite compares against on every push ([`web/tests/visual.spec.ts`](web/tests/visual.spec.ts)),
+rendered from the checked-in showcase fixtures with a frozen clock. If the interface changes, CI
+fails until the baseline is regenerated, so the screenshot cannot drift away from the product.
+
+> **Experimental: the plugin ABI will change.** Veduta is pre-1.0. The WebAssembly guest ABI, the
+> host functions in [`sdk/rust`](sdk/rust), and the integration manifest schema are **not** stable
+> yet and will break between releases. Manifest digests and module hashes are pinned in
+> `veduta.lock.yaml` precisely so an incompatible plugin fails closed rather than misbehaving —
+> expect to rebuild and re-approve third-party plugins when you upgrade.
+
 ## Status
 
 Design complete and frozen. Implementation under way: Phase A (repository bootstrap, embedded

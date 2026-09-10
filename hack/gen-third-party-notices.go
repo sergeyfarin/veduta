@@ -37,7 +37,15 @@ const (
 	goLicenses   = "THIRD-PARTY-LICENSES.md"
 	outputPath   = "THIRD-PARTY-NOTICES.md"
 	wasmTarget   = "wasm32-unknown-unknown"
+
+	// A second, byte-identical copy: //go:embed cannot reach above its own package directory, and
+	// a running instance has to be able to serve the notices without the repository present.
+	// internal/notices has a test asserting the two copies match, so neither can drift alone.
+	embedPath = "internal/notices/NOTICES.md"
 )
+
+// outputs is every file `generate` produces; -check verifies all of them.
+var outputs = []string{outputPath, embedPath}
 
 // Every crate reachable as a normal dependency of these is disclosed.
 var rustCrates = []string{
@@ -86,19 +94,23 @@ func main() {
 		fatal(err)
 	}
 	if *check {
-		current, readErr := os.ReadFile(outputPath)
-		if readErr != nil {
-			fatal(fmt.Errorf("read %s: %w", outputPath, readErr))
-		}
-		if !bytes.Equal(current, generated) {
-			fatal(fmt.Errorf("%s is stale; run go run ./hack/gen-third-party-notices.go", outputPath))
+		for _, path := range outputs {
+			current, readErr := os.ReadFile(path)
+			if readErr != nil {
+				fatal(fmt.Errorf("read %s: %w", path, readErr))
+			}
+			if !bytes.Equal(current, generated) {
+				fatal(fmt.Errorf("%s is stale; run go run ./hack/gen-third-party-notices.go", path))
+			}
 		}
 		return
 	}
-	// #nosec G306 -- an attribution document is meant to be world-readable; it contains only
-	// public package names, versions and licence identifiers.
-	if err = os.WriteFile(outputPath, generated, 0o644); err != nil {
-		fatal(fmt.Errorf("write %s: %w", outputPath, err))
+	for _, path := range outputs {
+		// #nosec G306 -- an attribution document is meant to be world-readable; it contains only
+		// public package names, versions and licence identifiers.
+		if err = os.WriteFile(path, generated, 0o644); err != nil {
+			fatal(fmt.Errorf("write %s: %w", path, err))
+		}
 	}
 }
 

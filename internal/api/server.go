@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"log/slog"
 	"net"
@@ -23,6 +24,7 @@ import (
 	"veduta.dev/veduta/internal/connections"
 	"veduta.dev/veduta/internal/fixtures"
 	"veduta.dev/veduta/internal/icons"
+	"veduta.dev/veduta/internal/notices"
 	"veduta.dev/veduta/internal/scheduler"
 	"veduta.dev/veduta/internal/state"
 	"veduta.dev/veduta/internal/storage"
@@ -182,6 +184,7 @@ func (s *Server) routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/v1/health", s.handleHealth)
 	mux.HandleFunc("GET /api/v1/version", s.handleVersion)
+	mux.HandleFunc("GET /api/v1/notices", s.handleNotices)
 	s.routeIdentity(mux)
 	if s.cfg.Auth != nil {
 		s.routeAuth(mux)
@@ -337,6 +340,18 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 // the corresponding source.
 func (s *Server) handleVersion(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, version.Current())
+}
+
+// handleNotices serves the third-party attribution document. Like /version it is unauthenticated:
+// the licences of the bundled code require the notice to travel with the distribution, and a
+// disclosure that only logged-in administrators can reach is not one. It is served as plain text
+// rather than markdown so browsers display it instead of offering a download.
+func (s *Server) handleNotices(w http.ResponseWriter, _ *http.Request) {
+	// The document is fixed at build time, so it is safe to cache for a long while; a new build
+	// serves a new one.
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	_, _ = io.WriteString(w, notices.Markdown())
 }
 
 // maxRequestBodyBytes bounds every request body server-wide - milestone A3's own "Creates" list

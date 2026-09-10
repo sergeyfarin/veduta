@@ -138,7 +138,9 @@ func (s *Server) authenticate(next http.Handler) http.Handler {
 		return next
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/api/v1/health" || r.URL.Path == "/api/v1/version" || (r.URL.Path == "/api/v1/auth/session" && r.Method == http.MethodPost && s.cfg.Auth != nil) || !isAPIPath(r.URL.Path) {
+		// /notices joins /health and /version as unauthenticated: it is a licence disclosure that
+		// must travel with the distribution, and one only an administrator can reach is not one.
+		if r.URL.Path == "/api/v1/health" || r.URL.Path == "/api/v1/version" || r.URL.Path == "/api/v1/notices" || (r.URL.Path == "/api/v1/auth/session" && r.Method == http.MethodPost && s.cfg.Auth != nil) || !isAPIPath(r.URL.Path) {
 			next.ServeHTTP(w, r)
 			return
 		}

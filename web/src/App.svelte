@@ -192,9 +192,15 @@
     {/each}
   {/if}
 
+  <!--
+    AGPL section 13 requires a running instance to offer its corresponding source; the bundled
+    third-party licences require their attribution to travel with the distribution. Both are
+    served by the binary itself, so neither depends on reaching github.com.
+  -->
   <footer>
     {#if build}
-      veduta {build.version} · <a href={build.sourceUrl}>source</a>
+      veduta {build.version} · <a href={build.sourceUrl}>source</a> ·
+      <a href="/api/v1/notices">third-party notices</a>
     {:else}
       <span class="muted">API not reachable</span>
     {/if}

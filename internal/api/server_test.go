@@ -148,6 +148,20 @@ func TestHealthAndVersion(t *testing.T) {
 	if info.SourceURL == "" {
 		t.Error("version response must carry the source URL")
 	}
+
+	// The attribution the bundled licences require must be reachable from the running instance,
+	// as text a browser will display rather than download.
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/notices", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /api/v1/notices = %d, want 200", rec.Code)
+	}
+	if ct := rec.Header().Get("Content-Type"); ct != "text/plain; charset=utf-8" {
+		t.Errorf("notices content type = %q", ct)
+	}
+	if !strings.Contains(rec.Body.String(), "# Third-party notices") {
+		t.Error("notices response is not the attribution document")
+	}
 }
 
 func TestUnknownRouteIs404(t *testing.T) {
