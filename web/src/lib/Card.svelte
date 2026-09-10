@@ -125,6 +125,12 @@
 <style>
   .card {
     background: var(--v-surface);
+    /* Clean never defines --v-blur-filter, so this resolves to `none` - and `none` is the one
+     * value that does NOT create a containing block or force GPU compositing, which a
+     * blur(0) would. That is why the preset supplies the whole filter value rather than a
+     * radius: Clean must not match a rule that sets a filter at all. See
+     * docs/decisions/0002-theming-and-visual-customisation.md decision 5. */
+    backdrop-filter: var(--v-blur-filter, none);
     border: 1px solid var(--v-border);
     border-radius: var(--v-r-lg);
     box-shadow: var(--v-shadow);

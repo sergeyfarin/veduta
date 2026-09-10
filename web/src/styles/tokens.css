@@ -112,3 +112,81 @@ body {
   outline-offset: 2px;
   border-radius: var(--v-r-sm);
 }
+
+/* ── Veil: the translucent preset ────────────────────────────────────────────────────────────
+ *
+ * Selected by dashboard.appearance, applied as data-appearance="veil" on <html>. A preset owns
+ * its own effect mechanics - surface alpha, blur, backdrop - and they are deliberately not
+ * configurable; see docs/decisions/0002-theming-and-visual-customisation.md.
+ *
+ * The default backdrop is a GRADIENT, not a shipped photograph. That is not a shortcut: a
+ * veduta is the Italian genre of wide topographical views, whose defining device is aerial
+ * perspective - distance rendered as haze lightening toward the horizon - which is what these
+ * two stops are. It also costs zero bytes in the binary, needs no font/image licence, flips with
+ * the colour scheme (a JPEG cannot), and - the part that matters for the contrast contract - has
+ * a luminance range that is EXACTLY computable at build time.
+ *
+ * Why exactly computable: the stops interpolate each sRGB channel monotonically, and relative
+ * luminance is monotonic in each channel, so composited luminance along the gradient is bounded
+ * by the two stops. TestVeilContrast composites --v-veil-tint at --v-veil-alpha over each stop
+ * and runs the same pairs TestTokenContrast runs on the opaque palette. Blurring a smooth
+ * gradient does not widen that range - a gradient is already low-frequency - so backdrop-filter
+ * does not invalidate the bound. A user-supplied photograph has no such bound, which is why that
+ * case needs a scrim and worst-case (pure black / pure white) evaluation instead.
+ *
+ * --v-faint is the one neutral Veil must redefine. At 4.71:1 on opaque white it sits 0.21 above
+ * the AA floor, so ANY translucency sinks it - the same arithmetic that produced the .dimmed bug
+ * TestStaleStateContrast guards. Veil darkens it to #68686f, which clears at 5.09:1 against the
+ * darkest composited surface. Everything else in the palette already clears unchanged.
+ */
+
+:root[data-appearance="veil"] {
+  --v-veil-alpha: 0.78;
+  --v-veil-tint: 255 255 255;
+  --v-backdrop-from: #b4c9e4;   /* daylit sky */
+  --v-backdrop-to: #f0dcc4;     /* warm horizon haze */
+
+  --v-surface: rgb(var(--v-veil-tint) / var(--v-veil-alpha));
+  --v-surface-2: rgb(var(--v-veil-tint) / 0.55);
+  --v-border: #d5dbe4;
+  --v-faint: #68686f;
+  --v-blur-filter: blur(16px) saturate(1.4);
+  --v-shadow: 0 1px 2px rgb(30 40 60 / 8%), 0 8px 28px rgb(30 40 60 / 10%);
+}
+
+:root[data-appearance="veil"][data-theme="dark"],
+:root[data-appearance="veil"]:not([data-theme="light"]) {
+  --v-veil-tint: 23 23 26;
+  --v-backdrop-from: #1b2c58;   /* deep dusk sky */
+  --v-backdrop-to: #46264a;     /* plum horizon glow */
+  --v-border: #33333c;
+  --v-faint: #8b8b95;
+  --v-shadow: 0 1px 2px rgb(0 0 0 / 50%), 0 8px 28px rgb(0 0 0 / 34%);
+}
+
+/* The dark block above uses :not([data-theme="light"]) so it also applies under the system dark
+ * preference. That would wrongly win in system-LIGHT too, so the light values are restated here
+ * for exactly that case: explicit light, or no explicit choice while the system prefers light. */
+@media (prefers-color-scheme: light) {
+  :root[data-appearance="veil"]:not([data-theme="dark"]) {
+    --v-veil-tint: 255 255 255;
+    --v-backdrop-from: #b4c9e4;
+    --v-backdrop-to: #f0dcc4;
+    --v-border: #d5dbe4;
+    --v-faint: #68686f;
+    --v-shadow: 0 1px 2px rgb(30 40 60 / 8%), 0 8px 28px rgb(30 40 60 / 10%);
+  }
+}
+
+/* The backdrop goes on the ROOT element, not body. A root background is propagated to the canvas
+ * and therefore covers the whole page however tall it grows; body's would be painted only within
+ * body's own box, and `fixed` sizes a background to the VIEWPORT, so a full-page render showed the
+ * gradient compressed into the first viewport-height and the canvas below it still --v-bg. */
+:root[data-appearance="veil"] {
+  background: linear-gradient(170deg, var(--v-backdrop-from) 0%, var(--v-backdrop-to) 100%);
+  background-repeat: no-repeat;
+}
+
+:root[data-appearance="veil"] body {
+  background: transparent;
+}

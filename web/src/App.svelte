@@ -5,7 +5,7 @@
   import Section from './lib/Section.svelte';
   import Skeleton from './lib/Skeleton.svelte';
   import Login from './lib/Login.svelte';
-  import { apply, next, stored, type Theme } from './lib/theme';
+  import { apply, applyAppearance, next, stored, type Theme } from './lib/theme';
   import { formatRelativeTime } from './lib/format';
   import { isStale, isError, isDisabled, isPending, type CardState as CardEnvelope } from './lib/types/cardstate';
   import type { Dashboard } from './lib/types/dashboard';
@@ -69,6 +69,7 @@
     ])
       .then(([d, cards]) => {
         dashboard = d;
+        applyAppearance(d.appearance);
         cardsById = new Map(cards.map((c) => [c.cardId, c]));
         loadError = null;
       })

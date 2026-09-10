@@ -18,6 +18,10 @@ export interface DashboardSection {
   cards: CardDescriptor[];
 }
 
+/** The visual preset chosen by dashboard.appearance. Not the light/dark axis - see lib/theme.ts. */
+export type Appearance = 'clean' | 'veil';
+
 export interface Dashboard {
+  appearance?: Appearance;
   sections: DashboardSection[];
 }

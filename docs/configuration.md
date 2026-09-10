@@ -50,7 +50,7 @@ Unknown fields are rejected. A required field can still be conditional on a sele
 | `connections.<name>.tls.insecureSkipVerify` | boolean | no | false | — | — |
 | `connections.<name>.tls.serverName` | string | no | — | — | — |
 | `dashboard` | object | no | — | — | — |
-| `dashboard.appearance` | "clean" | no | "clean" | — | Visual preset for this instance. A preset owns its own surface opacity, scrim, border, shadow and blur; those are deliberately not configurable. Only 'clean' is implemented today - the enum widens as presets ship, which is backward-compatible, whereas admitting a value before its preset exists would accept configuration that silently does nothing. This is NOT the light/dark axis: that is a per-viewer browser preference and is not configured here. |
+| `dashboard.appearance` | "clean" \| "veil" | no | "clean" | — | Visual preset for this instance. 'clean' is the opaque-card default; 'veil' is translucent, with blurred card surfaces over a generated backdrop. A preset owns its own surface opacity, blur, backdrop and shadow; those are deliberately not configurable. The enum admits only presets that exist, and widens as presets ship. This is NOT the light/dark axis: that is a per-viewer browser preference and is not configured here. |
 | `dashboard.groupBy` | "section" \| "tag" | no | "section" | — | How cards are arranged. 'section' uses the order in this file; 'tag' regroups by the cards' tags. The viewer may switch at runtime; this is the default. |
 | `dashboard.layout` | object | no | — | — | — |
 | `dashboard.layout.columns` | integer | no | 4 | minimum=1; maximum=8 | — |

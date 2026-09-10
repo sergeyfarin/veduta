@@ -28,6 +28,11 @@ actions, and notifies when something needs attention.
 - A Svelte 5 single-page app embedded in the binary, with renderers for every block type: status,
   metrics, key–value, progress, list, text/markdown, image, image grid, poster grid, table and
   actions.
+- Two visual presets, chosen per instance with `dashboard.appearance`: **Clean** (the opaque
+  default) and **Veil** (translucent, blurred cards over a generated dusk gradient). Light and dark
+  remain a per-viewer browser preference and are deliberately not configured — `dashboard.theme`,
+  which never had a reader, is gone. Veil's contrast is proven in CI by compositing its surface
+  over both gradient stops rather than being checked by eye.
 - The Widget Document and CardState envelopes, with Go and TypeScript types generated from one
   JSON Schema so the two halves cannot disagree.
 - Live updates over SSE with heartbeats, an event replay ring, `Last-Event-ID` resumption and

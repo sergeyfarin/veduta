@@ -52,7 +52,11 @@ type Section struct {
 // Dashboard is exactly the body of GET /dashboard: pages, sections and card descriptors, no
 // data (docs/01-architecture.md section 9).
 type Dashboard struct {
-	Sections []Section `json:"sections"`
+	// Appearance is the visual preset (clean | veil). Empty means clean. It rides on this
+	// endpoint rather than a separate one so a viewer never paints Clean first and then swaps -
+	// the layout fetch that decides what to draw also decides how it is drawn.
+	Appearance string    `json:"appearance,omitempty"`
+	Sections   []Section `json:"sections"`
 }
 
 // Bundle is everything --fixtures serves: the layout, every card's current envelope, and the

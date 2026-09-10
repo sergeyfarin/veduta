@@ -10,14 +10,25 @@ services and machines, performs a small set of **explicitly approved actions**, 
 Its distinguishing bet: **community integrations are sandboxed by design**. An integration
 describes what it wants; the core decides whether it is allowed, and holds every credential.
 
-![The Veduta dashboard rendering the checked-in showcase: media posters, host metrics, container
-state, notes and disk usage, with cards in ok, stale, error, loading and disabled
+![The Veduta dashboard in the Clean preset, light: media posters, host metrics, container state,
+notes and disk usage, with cards in ok, stale, error, loading and disabled
 states](web/tests/visual.spec.ts-snapshots/dashboard-light-chromium-linux.png)
 
-That image is not a marketing shot taken by hand — it is the visual-regression baseline the test
+*Clean, light — the default.*
+
+![The same dashboard in the Veil preset, dark: translucent blurred cards over a deep blue-to-plum
+dusk gradient](web/tests/visual.spec.ts-snapshots/dashboard-veil-dark-chromium-linux.png)
+
+*Veil, dark — translucent cards over a generated backdrop, set with `dashboard.appearance: veil`.*
+
+Neither image is a marketing shot taken by hand — both are visual-regression baselines the test
 suite compares against on every push ([`web/tests/visual.spec.ts`](web/tests/visual.spec.ts)),
 rendered from the checked-in showcase fixtures with a frozen clock. If the interface changes, CI
-fails until the baseline is regenerated, so the screenshot cannot drift away from the product.
+fails until the baselines are regenerated, so the screenshots cannot drift away from the product.
+
+Light and dark follow your browser; the preset is the instance's own setting. Veil's backdrop is a
+generated gradient rather than a shipped photograph — which is why its text contrast can be proven
+arithmetically in CI rather than eyeballed (`TestVeilContrast`).
 
 > **Experimental: the plugin ABI will change.** Veduta is pre-1.0. The WebAssembly guest ABI, the
 > host functions in [`sdk/rust`](sdk/rust), and the integration manifest schema are **not** stable

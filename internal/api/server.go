@@ -283,7 +283,11 @@ func (s *Server) routeConfig(mux *http.ServeMux) {
 			}
 			sections = append(sections, out)
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"sections": sections})
+		appearance := snapshot.Config.Dashboard.Appearance
+		if appearance == "" {
+			appearance = "clean"
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"appearance": appearance, "sections": sections})
 	})
 	mux.HandleFunc("GET /api/v1/cards", func(w http.ResponseWriter, r *http.Request) {
 		if s.cfg.Scheduler != nil {
