@@ -1285,7 +1285,10 @@ user needs that, the webhook channel hands off to n8n/Node-RED, which is the cor
   SvelteKit's router/prerender/adapter layer buys nothing when Go serves everything.
 - **No component library.** A ~15-token design system (`--v-bg`, `--v-surface`, `--v-text`,
   `--v-muted`, `--v-accent`, radii, spacing scale, two font sizes families), light and dark,
-  themeable via CSS custom properties. Themes are CSS files, not JS.
+  themeable via CSS custom properties. ~~Themes are CSS files, not JS.~~ **Superseded
+  (2026-09-10):** a theme is a named set of token *values* — data, not a file and not JS — so the
+  config layer can validate it. See
+  [decisions/0002-theming-and-visual-customisation.md](decisions/0002-theming-and-visual-customisation.md).
 - **The renderer is trusted and closed.** One Svelte component per block type, a registry keyed by
   `type`, unknown types render a labelled placeholder (forward compatibility). No `{@html}`, ever.
 - **Layout:** CSS Grid with per-card column/row spans declared in YAML, `grid-auto-flow: dense`,
