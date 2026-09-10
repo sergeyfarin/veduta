@@ -166,6 +166,13 @@ AGPL-3.0-or-later for the core; Apache-2.0 for `sdk/`, `schemas/` and first-part
 with an explicit plugin exception so community integrations stay under whatever license their
 authors choose. See [LICENSING.md](LICENSING.md).
 
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) lists everything Veduta redistributes, generated
+from what is actually shipped rather than from what the manifests declare; a running instance
+serves it at `/api/v1/notices` and links it from the footer, next to the AGPL section 13 source
+link. [TRADEMARK.md](TRADEMARK.md) covers use of the name — permissive, and short.
+
+Release history is in [CHANGELOG.md](CHANGELOG.md).
+
 ## Non-goals
 
 Time-series database, log aggregation, workflow builder, config-driven RBAC for large

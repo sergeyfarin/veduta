@@ -1,0 +1,191 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+name: Release
+
+# Publishing is deliberately tag-triggered rather than automatic on main: cutting a release is a
+# decision, not a side effect of merging. workflow_dispatch with dry_run builds and verifies
+# everything while publishing nothing, so the pipeline can be exercised without spending a version
+# number on it.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Build and verify without publishing anything'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+env:
+  # A dispatch run is a dry run unless explicitly told otherwise; a tag push never is.
+  DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+
+jobs:
+  binaries:
+    name: Binaries and checksums
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # version strings come from tags
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.27'
+
+      - run: pnpm install --frozen-lockfile
+      # Built once and reused by every target: the SPA is architecture-independent, and rebuilding
+      # it per platform would risk four subtly different bundles in one release.
+      - run: pnpm --filter veduta-web build
+
+      - name: Resolve version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            version="${GITHUB_REF_NAME}"
+          else
+            version="0.0.0-dispatch-$(git rev-parse --short HEAD)"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Releasing $version"
+
+      # Each archive carries the licences and the generated attribution alongside the binary:
+      # the notices are embedded and served by the binary too, but a licence obligation is not
+      # satisfied by requiring the recipient to run the program to read it.
+      - name: Cross-compile and package
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          commit="$(git rev-parse --short HEAD)"
+          ldflags="-s -w -X veduta.dev/veduta/internal/version.Version=${VERSION} -X veduta.dev/veduta/internal/version.Commit=${commit}"
+          for target in linux/amd64 linux/arm64 linux/arm/v7 darwin/arm64; do
+            goos="${target%%/*}"
+            rest="${target#*/}"
+            goarch="${rest%%/*}"
+            goarm=""
+            label="${goos}-${goarch}"
+            if [ "$rest" != "$goarch" ]; then
+              goarm="${rest#*/v}"
+              label="${goos}-${goarch}v${goarm}"
+            fi
+            echo "building $label"
+            staging="dist/veduta-${VERSION}-${label}"
+            mkdir -p "$staging"
+            CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" GOARM="$goarm" \
+              go build -trimpath -ldflags "$ldflags" -o "$staging/veduta" ./cmd/veduta
+            cp LICENSE LICENSING.md LICENSE-PLUGIN-EXCEPTION.txt THIRD-PARTY-NOTICES.md README.md "$staging/"
+            tar -czf "${staging}.tar.gz" -C dist "$(basename "$staging")"
+            rm -rf "$staging"
+          done
+          cd dist && sha256sum ./*.tar.gz > SHA256SUMS && cat SHA256SUMS
+
+      # Proves the artefact runs and reports the version it claims, before anyone downloads it.
+      - name: Verify the linux-amd64 artefact
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          tar -xzf "dist/veduta-${VERSION}-linux-amd64.tar.gz" -C /tmp
+          got="$(/tmp/veduta-${VERSION}-linux-amd64/veduta version --json | grep -o '"version": "[^"]*"' | cut -d'"' -f4)"
+          [ "$got" = "$VERSION" ] || { echo "binary reports $got, expected $VERSION"; exit 1; }
+          test -s "/tmp/veduta-${VERSION}-linux-amd64/THIRD-PARTY-NOTICES.md"
+          echo "artefact reports $got and carries its notices"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-binaries
+          path: dist/
+          retention-days: 7
+
+  image:
+    name: Multi-arch image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write # provenance attestation
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        if: env.DRY_RUN != 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/metadata-action@v5
+        id: meta
+        with:
+          images: ghcr.io/${{ github.repository }}
+          # :latest only for a real, non-prerelease tag - a dispatch run must never move it.
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ github.event_name == 'push' && !contains(github.ref_name, '-') }}
+            type=raw,value=dispatch-{{sha}},enable=${{ github.event_name == 'workflow_dispatch' }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64,linux/arm/v7
+          push: ${{ env.DRY_RUN != 'true' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ github.event_name == 'push' && github.ref_name || format('0.0.0-dispatch-{0}', github.sha) }}
+            COMMIT=${{ github.sha }}
+          provenance: true
+          sbom: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  release:
+    name: GitHub release
+    needs: [binaries, image]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v6
+        with:
+          name: release-binaries
+          path: dist
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          prerelease=""
+          case "$GITHUB_REF_NAME" in *-*) prerelease="--prerelease";; esac
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --title "$GITHUB_REF_NAME" \
+            --notes "See [CHANGELOG.md](https://github.com/${GITHUB_REPOSITORY}/blob/${GITHUB_REF_NAME}/CHANGELOG.md).
+
+          Container image: \`ghcr.io/${GITHUB_REPOSITORY}:${GITHUB_REF_NAME#v}\`
+
+          Verify a download against \`SHA256SUMS\`:
+
+          \`\`\`sh
+          sha256sum --check --ignore-missing SHA256SUMS
+          \`\`\`
+
+          **The plugin ABI is experimental and will change between releases.** Third-party WASM
+          plugins must be rebuilt and re-approved on upgrade." \
+            $prerelease

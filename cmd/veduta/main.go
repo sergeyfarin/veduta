@@ -3,6 +3,7 @@
 // Command veduta serves the dashboard.
 //
 //	veduta serve [--listen host:port]   run the HTTP server
+//	veduta health [--addr url]          probe a running instance; non-zero exit if unhealthy
 //	veduta version [--json]             print build identity
 //	veduta manifest digest <file>...    print the canonical digest of an integration manifest
 //	veduta integration list             show every declared integration's lock status
@@ -21,7 +22,9 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -71,6 +74,8 @@ func run(args []string) error {
 		return serve(args)
 	case "version":
 		return printVersion(args)
+	case "health":
+		return healthCmd(args)
 	case "manifest":
 		return manifestCmd(args)
 	case "integration":
@@ -80,7 +85,7 @@ func run(args []string) error {
 	case "import":
 		return importCmd(args)
 	default:
-		return fmt.Errorf("unknown command %q (try: serve, version, manifest, integration, plugin, import)", cmd)
+		return fmt.Errorf("unknown command %q (try: serve, health, version, manifest, integration, plugin, import)", cmd)
 	}
 }
 
@@ -568,5 +573,37 @@ func printVersion(args []string) error {
 		return enc.Encode(info)
 	}
 	fmt.Printf("veduta %s (%s)\nsource: %s\n", info.Version, info.Commit, info.SourceURL)
+	return nil
+}
+
+// healthCmd probes a running instance's /api/v1/health and exits non-zero if it is not serving.
+// It exists because the container image is distroless: the binary is the only executable in it,
+// so a Docker HEALTHCHECK (or a compose healthcheck) has nothing else to call. Keeping the probe
+// in the binary also means it cannot drift from the endpoint it checks.
+func healthCmd(args []string) error {
+	fs := flag.NewFlagSet("health", flag.ContinueOnError)
+	addr := fs.String("addr", "http://127.0.0.1:8099", "base URL of the instance to probe")
+	timeout := fs.Duration("timeout", 5*time.Second, "how long to wait for a response")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), *timeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, *addr+"/api/v1/health", nil)
+	if err != nil {
+		return err
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	// Drain so the connection can be reused, and bound it: this is an unauthenticated endpoint
+	// and the probe should not be a way to make the CLI read an unbounded body.
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4<<10))
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("health check returned HTTP %d", resp.StatusCode)
+	}
 	return nil
 }
