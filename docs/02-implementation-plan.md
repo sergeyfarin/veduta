@@ -1531,9 +1531,41 @@ rows, and flood-suspension meta-events now commit together, with crash-boundary 
 the visual-regression suite, and an explicit "experimental: the plugin ABI will change" note.
 Live S2 validation cleared 2026-09-09: Immich confirmed, E3 cold-latency AC met, and the Jellyfin
 manifest/plugin rewritten to Approach A (single sorted `GET /Items`, module rebuilt and
-re-approved) after the live pass showed `/Users/Me` is unusable with an API key. L1–L3 done; L4's
-remaining work is the release packaging itself (multi-arch images, checksums, changelog,
-`THIRD-PARTY-NOTICES.md`, the AGPL §13 source link, trademark note, generated screenshot).
+re-approved) after the live pass showed `/Users/Me` is unusable with an API key.
+
+**DONE 2026-09-10, except cutting the tag** — every deliverable is built and verified; pushing
+`v0.1.0` is deliberately left to a human, since publishing is a decision rather than a build step.
+
+- **Generated `THIRD-PARTY-NOTICES.md`.** Built from what is actually shipped, not from what the
+  manifests declare — that distinction was not cosmetic: `web/package.json` lists only
+  devDependencies while the bundle carries Svelte's runtime, and the curated Rust table listed
+  three crates where the real closure is forty. A Vite plugin records Rollup's module graph;
+  `hack/gen-third-party-notices.go` walks `cargo metadata`'s normal-dependency closure. Both
+  artefacts are committed and drift-checked in CI.
+- **Served from the UI.** `internal/notices` embeds it (a second generated copy, since `//go:embed`
+  cannot reach the repository root; a test asserts the two are byte-identical).
+  `GET /api/v1/notices` is unauthenticated alongside `/health` and `/version` — a disclosure only
+  an administrator can reach is not one. The footer reads `veduta <version> · source ·
+  third-party notices`.
+- **AGPL §13 source link.** Already present in the footer and `/api/v1/version`; verified.
+- **Screenshot from the visual-regression suite.** The README points at the baseline PNG itself,
+  so CI forces it to track the UI and it cannot become a stale marketing shot. Baselines were
+  regenerated and re-verified in a fresh pinned Playwright container.
+- **Experimental-ABI note.** README, `docs/integration-authoring.md` and `CHANGELOG.md`, framed as
+  a consequence of the trust model: lock-pinned digests make an ABI-stale module fail closed.
+- **Multi-arch images and checksums.** `Dockerfile` cross-compiles on `$BUILDPLATFORM` onto
+  distroless/static:nonroot — no shell, 37.6 MB, uid 65532. `veduta health` was added because that
+  base image has nothing else for a `HEALTHCHECK` to call. `release.yml` is tag-triggered with a
+  `workflow_dispatch` dry-run mode, which was exercised: four archives built, checksums verified,
+  each carrying the licences and the attribution beside the binary, architectures confirmed as
+  aarch64 / ARM EABI5 / Mach-O arm64, and the shipped binary run to check it reports the version
+  it claims. The image job built all three Linux platforms without pushing.
+- **Changelog and trademark policy.** `CHANGELOG.md` states the pre-1.0 carve-out plainly;
+  `TRADEMARK.md` is permissive about naming and explicit that Simple Icons' CC0 waives copyright
+  but not trademark.
+
+To release: push a `v0.1.0` tag. The workflow publishes the GHCR image (with provenance and SBOM),
+uploads the archives and `SHA256SUMS`, and creates the GitHub release.
 
 ---
 

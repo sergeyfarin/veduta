@@ -53,12 +53,15 @@ Phase J is done: declared signal history and events feed durable, manifest-check
 credential-safe ntfy/webhook outbox with bounded retries and flood controls. Phase K is done:
 `veduta import homepage` parses Homepage YAML, maps services and bookmarks, creates disabled
 connections and integrations for review, and atomically applies a comment-preserving config edit.
-Config reloads activate a complete runtime generation before publishing it. Phase L1–L3 release
-documentation, local-first icon handling, and hardening are done. The live S2 Immich/Jellyfin
-validation cleared on 2026-09-09: Immich is confirmed and E3's "six photos under 2 s cold" AC is
-met (~90 ms on a LAN Immich); the Jellyfin plugin was rewritten to a single sorted `GET /Items`
-(a Jellyfin API key has no associated user, so the earlier `/Users/Me` step could not work) and
-its Wasm module rebuilt and re-approved. L4's remaining work is the release packaging itself. See
+Config reloads activate a complete runtime generation before publishing it. Phase L is done: release
+documentation, local-first icon handling, hardening, and L4's packaging — a distroless multi-arch
+container image, checksummed release archives, a generated and UI-served `THIRD-PARTY-NOTICES.md`,
+a changelog and a trademark policy. The live S2 Immich/Jellyfin validation cleared on 2026-09-09:
+Immich is confirmed and E3's "six photos under 2 s cold" AC is met (~90 ms on a LAN Immich); the
+Jellyfin plugin was rewritten to a single sorted `GET /Items` (a Jellyfin API key has no associated
+user, so the earlier `/Users/Me` step could not work) and its Wasm module rebuilt and re-approved.
+**0.1.0 is built and verified but not yet tagged** — the release workflow is triggered by pushing a
+`v0.1.0` tag. See
 [docs/02-implementation-plan.md](docs/02-implementation-plan.md) for the full
 milestone table and what's marked **DONE**, and [docs/03-backlog.md](docs/03-backlog.md) for
 open gaps found along the way. Rule transitions and their event/outbox effects now persist in one
@@ -112,6 +115,11 @@ This repository currently contains:
 | [docs/spikes/](docs/spikes/) | S2 (upstream API findings) and S4 (visual prototype, HTML+CSS) write-ups |
 | [docs/dev-environment.md](docs/dev-environment.md) | Headless-VM notes: no system browser, how UI changes actually get verified |
 | [hack/capture-upstream-fixtures.sh](hack/capture-upstream-fixtures.sh) | Captures real Immich/Jellyfin responses as reviewed fixtures |
+| [hack/gen-third-party-notices.go](hack/gen-third-party-notices.go) | Generates THIRD-PARTY-NOTICES.md from the shipped bundle and the resolved crate graph |
+| [Dockerfile](Dockerfile) | Distroless multi-arch image; cross-compiles rather than emulating the target |
+| [.github/workflows/release.yml](.github/workflows/release.yml) | Tag-triggered release: archives, checksums, GHCR image, GitHub release (with a dry-run mode) |
+| [CHANGELOG.md](CHANGELOG.md) | Release history, and the pre-1.0 plugin-ABI carve-out |
+| [TRADEMARK.md](TRADEMARK.md) | Use of the name; permissive, and short |
 | [schemas/](schemas/) | JSON Schemas: Widget Document, card-state envelope, plugin manifest, integration lock, configuration |
 | [examples/veduta.yaml](examples/veduta.yaml) | Target configuration file (validates against the config schema) |
 | [plugins/](plugins/) | Four integrations: Immich, Glances and Beszel (declarative), plus Jellyfin (WASM) |
