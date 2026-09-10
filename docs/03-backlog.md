@@ -17,6 +17,7 @@ priority (which milestone should absorb it, or "before X" for a hard blocker).
 | Open item | Area | Priority |
 | --- | --- | --- |
 | [Does Jellyfin still earn being the WASM proof case?](#open-question-does-jellyfin-still-earn-being-the-wasm-proof-case) | Plugins | Open decision |
+| [SSE per-session cap leaks a slot when a slow consumer is dropped](#sse-per-session-cap-leaks-a-slot-when-a-slow-consumer-is-dropped) | API | Medium |
 | [`ContainsSecretInDocument` has no production caller](#containssecretindocument-has-no-production-caller) | Secrets | Medium |
 | [Asset format coverage is narrower than the allowlist](#asset-format-coverage-is-narrower-than-the-architectures-final-allowlist) | Assets | 0.2 transform milestone |
 | [Asset-cache startup does not reconcile orphan files](#asset-cache-startup-does-not-reconcile-orphan-files) | Assets | Low |
@@ -58,6 +59,36 @@ a missing layer rather than an open hole, which is why it is here and not a rele
 Priority: medium - wire it into the scheduler's publish path (reject or blank the document and
 surface an error state), with a test that a document carrying a configured secret never reaches
 `/api/v1/cards`.
+
+### SSE per-session cap leaks a slot when a slow consumer is dropped
+
+Found reviewing [03-backlog-resolved.md](03-backlog-resolved.md)'s "Resolved in H1: SSE per-session
+cap" entry, whose closing claim - "disconnect removes both counters atomically" - holds only for an
+orderly disconnect. It does not hold for F4's drop-slow-consumers path, and the two features were
+built one milestone apart without the interaction being re-checked.
+
+`internal/api/sse.go`'s `publish` drops a consumer whose 32-deep buffer is full with `close(ch)` +
+`delete(h.clients, ch)`, and never touches `h.sessions`. The `done` closure `subscribe` returns -
+the only place that decrements `h.sessions[sessionID]` - is guarded by `if _, ok := h.clients[ch];
+ok`, which is already false for a client `publish` removed, so it returns without decrementing
+either. The process-wide `maxSSEClients` counter is released correctly; only the per-session one
+leaks.
+
+Effect: a session whose streams are dropped `maxSSEClientsPerSession` (4) times accumulates a
+permanent count of 4 and is refused every subsequent SSE subscription for the life of the process,
+with `len(h.clients) == 0`. Reconnects do not clear it - the counter is keyed by the hashed session
+ID, which survives reconnection - so recovery needs a restart or a fresh login. A slow or
+backgrounded browser tab on a busy dashboard is enough to trigger it; no hostile client is needed.
+
+Confirmed with a probe against the current code: after four subscriptions for one session are all
+dropped by `publish`, `h.sessions["sess"]` is still 4 while `h.clients` is empty, and the next
+`subscribe` for that session is rejected.
+
+Priority: medium - a live-update outage for one user, self-inflicted and not a security boundary,
+but it fails closed in the annoying direction and has no operator-visible symptom. Fix is small:
+decrement the session counter in `publish`'s drop path, ideally by routing both removal sites
+through one `removeClient(ch)` helper that owns both counters, plus a regression test that drops a
+session's streams via `publish` and then subscribes again successfully.
 
 ### Asset format coverage is narrower than the architecture's final allowlist
 

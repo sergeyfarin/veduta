@@ -219,7 +219,13 @@ shows a persistent warning whenever authentication is disabled.
 
 F4 capped the process at 128 streams and dropped slow consumers without blocking publication.
 H1 now keys a second counter by the hashed server-side session ID and permits four streams per
-session; disconnect removes both counters atomically.
+session; an orderly disconnect removes both counters atomically.
+
+**Correction (2026-09-10):** "removes both counters atomically" was asserted for disconnect in
+general and is only true of an orderly one. F4's drop-slow-consumers path releases the
+process-wide counter but not the per-session one, permanently exhausting a session's budget - see
+the open entry in [03-backlog.md](03-backlog.md). The per-session cap itself is implemented as
+described; its release path is not complete.
 
 ## Resolved before K2 and L3
 
