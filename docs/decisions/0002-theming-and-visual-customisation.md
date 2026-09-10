@@ -1,152 +1,180 @@
-# Theming: bounded presets and typed knobs, no user-authored CSS
+# Theming: two fixed presets, no public knobs, no user-authored CSS
 
-Status: accepted, 2026-09-10. Supersedes the "themes are CSS files" line in
-[01-architecture.md](../01-architecture.md) §13. Revisit after 0.2 only if a
-trigger below is met.
+Status: accepted 2026-09-10, amended the same day after review. Revisit under the
+triggers below.
+
+The amendment matters enough to state plainly: the first draft renamed
+`dashboard.theme` to carry the preset axis, and planned to derive a public knob
+vocabulary from whichever design tokens turned out to differ between the two
+presets. Both were wrong, and both are reversed here. What survives is the
+security and accessibility posture, which review did not challenge.
 
 ## Decision
 
-Ship theming as **data, not files, and not code**. A theme is a named preset of
-design-token values. The dashboard picks one, and a small set of typed knobs
-tunes it. No user-authored CSS, ever, and no server-side theme editor.
+Ship theming as **two fixed, curated presets** — Clean and Veil — selected by one
+config field. No user-authored CSS. No theme editor. No public knobs until real
+demand exists, and none derived from implementation details when it does.
 
-Concretely, seven decisions:
+1. **`dashboard.appearance`, defaulting to `clean`.** One field, one axis: the
+   instance's visual preset. The enum admits only presets that actually exist —
+   today just `clean` — and widens as presets ship. Widening an enum is
+   backward-compatible; admitting `veil` before the preset is built would accept
+   configuration that silently does nothing, which is the same defect as the
+   `dashboard.theme` field this decision removes.
+2. **The light/dark axis is not configured at all.** It stays a per-viewer
+   browser preference in `localStorage`, as it already is. It is not the same
+   axis as the preset and must not share a name with it — see Evidence.
+3. **`dashboard.theme` is removed, not narrowed.** It was a published v1 field
+   whose shipped meaning was the colour scheme. Redefining it to mean the preset
+   would have broken every config copied from the shipped example.
+4. **Presets are private implementations.** A preset owns its surface opacity,
+   scrim, border alpha, shadow and blur. Those are mechanics, not user choices,
+   and they are deliberately not configurable — which is what keeps the
+   combination space small enough to validate at all.
+5. **Clean and Veil share component structure and semantic tokens.** They do not
+   share an "effect vocabulary": blur, scrim and surface alpha are Veil-private.
+   Clean is not "Veil with the effects set to zero" — that framing leaks
+   special-effect mechanics into the base design, and is also literally wrong,
+   because a zero-radius `backdrop-filter` still creates a stacking context and
+   forces GPU compositing per card. Clean must not have the property at all.
+6. **Fixed presets are validated in CI, not at config load.** Two built-in
+   presets are a closed set: contrast is a build-time property of the shipped
+   CSS. Config-load semantic validation becomes necessary only if users can ever
+   *combine* appearance values, which today they cannot.
+7. **If public options ever ship, they express intent, not mechanics.** The
+   plausible shape is `preset`, `accent` as a named palette, and a background
+   reference — never `surfaceAlpha`, `scrimFloor`, `borderAlpha`, `blurRadius`.
+   Config is a public API; design tokens are implementation. Deriving the former
+   from the latter would freeze internals into a v1 schema and recreate the
+   combinatorial validation problem this decision avoids.
 
-1. **A theme is a named set of token values.** Not a CSS file, not JS. This
-   replaces §13's "Themes are CSS files, not JS", which predates the token layer
-   actually existing and is the wrong shape for a config-as-code product.
-2. **Clean is the degenerate case of the same vocabulary.** Surface alpha 100%,
-   blur 0, no background image. Veil — the translucent, gethomepage-flavoured
-   look — is the identical vocabulary with different numbers. One mechanism, not
-   two, and no cascade-conflict question between "the theme's opacity" and
-   "your opacity".
-3. **`dashboard.theme` becomes a validated enum and is actually wired up.** It
-   currently exists in the published v1 schema as a free-form `"string"` that
-   nothing reads; see Evidence.
-4. **The light/dark axis stays per-viewer; the theme is per-instance.** Light
-   and dark remain a browser-local preference in `localStorage`, as today. The
-   theme and its knobs are deployment identity and live in config. No per-user
-   theme storage, and therefore no new persistence layer and no question about
-   whether a theme is an admin operation.
-5. **The UI previews and emits YAML; it never persists.** A theme picker with
-   live preview that produces a config fragment to paste. This is not a new
-   position — it is D5 ("YAML is the single source of truth ... avoids duelling
-   stores; GUI is additive later") applied to appearance.
-6. **Every knob is constrained so that no combination can produce an
-   inaccessible dashboard**, enforced by a semantic check at config-load time in
-   the shape of `validateAuthNone` — a `config.Diagnostic` surfaced by
-   `--check-config`, not a runtime surprise.
-7. **Sequencing: the enum and Veil first, the knob vocabulary second.** Build
-   Veil with hardcoded token values, observe which tokens actually differ from
-   Clean, and promote *those* to typed config. Knob names in a published v1
-   schema are permanent; discovering them beats guessing them.
+### Accessibility guarantee
 
-### Knob constraints that follow
+Stated precisely, because the first draft overclaimed. Config validation cannot
+guarantee accessibility in general: motion, forced colours, zoom, focus
+visibility, font rendering, browser differences and integration-authored content
+all sit outside it. What is guaranteed:
 
-- **Accent is a pair, or a name that maps to a pair.** Never a single hex.
-- **Font is an enum of bundled stacks, each defining both the text face and the
-  numeric face.** No free strings, so no webfont URL, so no outbound request
-  from a viewer's browser to a third-party host — a privacy regression a
-  self-hosted product must not ship. The paired numeric face preserves the
-  tabular-numeral guarantee `--v-font-num` exists for.
-- **A background image makes a scrim mandatory**, and contrast is computed
-  against the scrim's guaranteed luminance floor rather than against the photo.
-  This is what makes the check possible in Go at all.
-- **Blur is applied conditionally, never as `blur(0)`.** A zero-radius
-  `backdrop-filter` still creates a stacking context and forces GPU compositing
-  per card; Clean must not pay Veil's cost on the Pi-class and tablet hardware
-  this product targets.
+> Every shipped preset satisfies the documented contrast matrix in both colour
+> schemes, and status and authentication UI remains distinguishable without
+> relying on colour alone.
+
+For a translucent preset over an arbitrary backdrop, contrast is evaluated
+across the whole compositing chain against **worst-case source pixels — pure
+black and pure white — not a representative photograph**. Note the bound runs in
+both directions: a dark scrim under light text caps composited luminance from
+above, while a light scrim under dark text imposes a floor. Veil ships both
+colour schemes, so both bounds are tested.
 
 ## Evidence from this codebase
 
-**The token layer is ready; the enforcement layer is not.** Everything visual
-already routes through ~15 custom properties in `web/src/styles/tokens.css`, and
-`TestComponentsUseTokensNotHardcodedColours`
-(`internal/contracts/contrast_test.go`) mechanically forbids a colour literal
-anywhere in `web/src` outside that one file. That is why presets-as-data is
-cheap. But the contrast parser is hex-only — `(--v-[a-z0-9-]+):\s*(#[0-9a-fA-F]{6})\s*;`
-— so the moment `--v-surface` becomes translucent the token is dropped and
-`TestTokenContrast` fails with "token missing". It fails loudly, which is
-correct; the danger is that the cheap fix is to stop checking that pair. The
-parser must be generalised to run per theme *before* Veil lands, not after.
+**`dashboard.theme` already meant the colour scheme, publicly.** It shipped in
+`examples/veduta.yaml` as `theme: auto`, with a comment advertising
+`auto | light | dark | <custom theme name>`; it was listed in the generated
+`docs/configuration.md`; and it appeared in five test fixtures. `dashboard` is
+`additionalProperties: false`, so narrowing that field to `clean | veil` would
+have made any config copied from the example fail to load. The first draft's
+claim — that nothing could depend on a field nothing reads — was wrong: the
+project advertised it, which is a form of depending on it.
 
-**A single accent hex cannot serve both schemes — measured, not assumed.** The
-shipped light accent `#2f6f4f` scores **2.99:1** against the dark surface
-`#17171a`, one hundredth below the 3:1 floor `TestTokenContrast` already
-enforces. The dark accent `#6fb894` scores **2.34:1** on white. Sweeping the
-sRGB cube, only **32.8%** of colours clear 3:1 against *both* surfaces, against
-57.3% for the light surface alone: a free colour picker hands the user a failing
-dashboard roughly two times in three. A single accent is not impossible — the
-best available is about 4.23:1 on its worse side — but the safe region is too
-narrow to expose as an unconstrained control.
+**The collision was worst for the users the importer courts.**
+`testdata/homepage/settings.yaml`, the gethomepage import fixture, contains
+`theme: dark`. gethomepage's own `theme` key means light/dark. Reusing the word
+for the preset axis would have contradicted the prior mental model of exactly
+the audience `internal/homepageimport` exists to serve. (The importer drops the
+key today, so removing the field breaks nothing there.)
+
+**The token layer is ready; the enforcement layer is not.** Everything visual
+routes through ~15 custom properties in `web/src/styles/tokens.css`, and
+`TestComponentsUseTokensNotHardcodedColours` forbids a colour literal anywhere
+in `web/src` outside that file. But `TestTokenContrast` parses hex only —
+`(--v-[a-z0-9-]+):\s*(#[0-9a-fA-F]{6})\s*;` — so a translucent `--v-surface`
+drops out of the palette and the test fails with "token missing". It fails
+loudly, which is right; the hazard is that the cheap fix is to delete the pair
+and silently lose the guarantee. Generalising that parser to run per preset is a
+prerequisite of Veil, not a follow-up.
+
+**A single accent hex cannot serve both colour schemes — measured.** The shipped
+light accent `#2f6f4f` scores **2.99:1** against the dark surface `#17171a`, one
+hundredth under the 3:1 floor `TestTokenContrast` enforces; the dark accent
+`#6fb894` scores **2.34:1** on white. Sweeping sRGB, only **32.8%** of colours
+clear 3:1 against both surfaces, against 57.3% for light alone. This is why an
+accent option, if it ever ships, is a named palette resolving to a validated
+pair rather than a colour picker.
 
 **Translucency over photographs is the `.dimmed` bug with an unknown backdrop.**
 `--v-faint` sits at 4.71:1 on `--v-surface`, 0.21 above the AA floor, which is
 why `TestStaleStateContrast` exists: any opacity reduction on that token, even
-0.9, pushes it under. A translucent card over a user-supplied image is strictly
-worse, because the effective backdrop is unknown at build time. The project has
-already solved this once — `--v-overlay-text` and `--v-overlay-scrim` are
-documented as needing to stay legible "against ANY photo in either theme" — and
-that scrim is the mechanism Veil reuses to make contrast computable again.
+0.9, pushes it under. The project already solved the unknown-backdrop case once
+— `--v-overlay-text` and `--v-overlay-scrim` are documented as needing to stay
+legible "against ANY photo in either theme" — and that scrim is the mechanism
+Veil reuses.
 
-**`dashboard.theme` is a live, unvalidated commitment.** It is present in
-`schemas/config.v1.schema.json` as a bare `"string"` with no enum, parsed into
-`config.Theme` in `internal/config/types.go`, and read by nothing: the frontend
-selects only light/dark/auto, from `localStorage`. Narrowing a published v1
-field later is a breaking change, so the enum is added now, while in practice no
-deployment can depend on a field that does nothing.
-
-**The persistence question is already answered.** Config is hand-authored,
-comment-bearing YAML validated, activated and rolled back as a generation. A
-server that rewrites it to save a theme would destroy the user's comments;
+**The persistence question was already answered by D5.** Config is
+hand-authored, comment-bearing YAML, validated and activated as a generation. A
+server that rewrote it to save a theme would destroy the user's comments;
 writing to the SQLite `settings` table instead would create the duelling store
-D5 exists to prevent. Neither is necessary once the UI emits YAML instead of
-storing it.
+D5 exists to prevent.
 
 ## Options declined
 
-- **User-authored CSS, in a textarea or a file.** Unversionable, unvalidatable,
-  and a real surface: CSS can exfiltrate via `background: url()` with attribute
-  selectors and can obscure the persistent authentication-disabled warning H2
-  deliberately added. `{@html}` is banned outright; this is the same argument one
-  step weaker, and the same answer.
-- **A server-side "save as new theme" button.** Rejected on D5 grounds above.
-  Saving a theme is something the user already does — in their config file, in
-  git. Drag-and-drop persistence of layout and appearance is Homarr's turf, per
-  §13.
-- **macOS-like and Windows-like themes.** Three independent reasons. They are
-  design languages, not palettes, so a token swap yields "clean, but bluer" and
-  invites the complaint that it does not look like the thing. Their fonts are
-  not redistributable, and `--v-font` already begins
-  `system-ui, -apple-system, "Segoe UI"` — so on a Mac the Clean theme *already*
-  renders in the macOS system font, making a macOS theme that only looks right
-  on a Mac self-cancelling. And shipping themes under those names weeks after
-  adopting a trademark policy is an avoidable own-goal. Equivalent flavours may
-  ship under project-owned names.
-- **Themes as separate CSS files.** Workable, but it splits the vocabulary
-  across files, makes "theme plus knob overrides" a cascade-ordering question,
-  and cannot be validated by the config layer. Data can.
-- **Per-user themes.** Deferred, not refused. It requires answering whether a
-  theme is an admin operation or a viewer preference, and adds per-user storage,
-  for a product whose light/dark axis is already per-viewer and whose visual
-  identity is reasonably a property of the deployment.
-- **Freezing the full knob vocabulary in this pass.** Declined on sequencing
-  grounds; see decision 7 and the backlog entry it references.
+- **Narrowing `dashboard.theme` to a preset enum.** Declined for the breaking
+  change and the terminology collision above. Removing it pre-tag costs one
+  schema change; renaming its meaning would have cost users a failed load.
+- **Adding a `colorScheme` config field while separating the axes.** Declined as
+  an unneeded field. Light/dark is already per-viewer and works; a server-side
+  default for first-time viewers is a real feature, but not one anybody has
+  asked for, and it can be added later without ambiguity now that `appearance`
+  owns the other axis.
+- **Deriving public knobs from the Clean/Veil token diff.** Declined: that
+  derives a public API from an implementation diff, exposes coupled mechanics as
+  independent controls, and recreates the combinatorial validation problem.
+- **User-authored CSS, in a textarea or a file.** Unsupported through 0.x.
+  Unversionable, unvalidatable, and a real surface: CSS can exfiltrate via
+  `background: url()` with attribute selectors and can obscure the persistent
+  authentication-disabled warning H2 added. Reconsider only under the trigger
+  below — not "never", but not on aesthetic demand either.
+- **A server-side theme editor, or a preview UI that emits YAML.** The editor is
+  declined on D5 grounds. The YAML-emitting picker is *deferred* rather than
+  refused: with two presets and no options, a picker that cannot save is a
+  half-editor, and two screenshots in the documentation carry the same
+  information. Revisit when there are enough real choices that previewing a
+  combination is genuinely useful.
+- **macOS-like and Windows-like presets.** They are design languages, not
+  palettes, so a token swap yields "clean, but bluer". Their fonts are not
+  redistributable, and `--v-font` already begins
+  `system-ui, -apple-system, "Segoe UI"` — so on a Mac, Clean *already* renders
+  in the macOS system font, making a macOS preset that only looks right on a Mac
+  self-cancelling. And shipping presets under those names weeks after adopting a
+  trademark policy is an avoidable own-goal.
+- **Per-user presets.** Deferred. It requires deciding whether appearance is an
+  admin operation or a viewer preference, and adds per-user storage, for a
+  product whose light/dark axis is already per-viewer.
+
+## Open question
+
+Whether Veil's first version supports a **user-supplied background image** is not
+settled here. What is settled: it would be a local path served by Veduta, never
+an arbitrary URL — a third-party URL is an outbound request from every viewer's
+browser and a privacy regression for a self-hosted product — and a scrim would
+be mandatory, with contrast evaluated against worst-case pixels as above. The
+alternative for a first version is a bundled or generated backdrop, which is
+CI-validatable with no user input at all.
 
 ## Revisit triggers
 
-- **Per-user themes** become worth building if multi-user deployments report
-  that one instance genuinely serves audiences with different needs — a
+- **Public appearance options** are reconsidered when users ask for a specific
+  choice, one option at a time, expressed as intent. Not before, and not as a
+  batch.
+- **Per-user appearance** becomes worth building if multi-user deployments
+  report that one instance serves audiences with genuinely different needs — a
   high-contrast requirement being the strongest case, since that is
-  accessibility, not taste.
-- **The knob vocabulary is reopened** once Veil exists and the set of tokens
-  that actually differ between Clean and Veil is known. The current guess —
-  accent, font, background image, card opacity — is explicitly a guess; the real
-  set likely includes surface alpha, blur radius, scrim floor, border alpha and
-  shadow.
-- **User-authored CSS is reconsidered** only behind a documented threat model
-  covering exfiltration and UI obscuration, and only for a single-user
-  deployment mode. No such mode exists today.
-- **A third shipped theme** would be the point to check that presets-as-data has
-  not quietly grown into a styling language. If a theme needs a token the other
-  themes cannot express, the vocabulary is wrong, not the theme.
+  accessibility rather than taste.
+- **A preview UI** is revisited once there are several supported options.
+- **User-authored CSS** is reconsidered only behind a documented threat model
+  covering exfiltration and UI obscuration, and plausibly only for a
+  single-user deployment mode. No such mode exists today.
+- **A third preset** is the point to check that two presets have not quietly
+  become a styling language. If a preset needs a semantic token the others
+  cannot express, the shared vocabulary is wrong — but if it only needs its own
+  effect mechanics, that is working as intended.

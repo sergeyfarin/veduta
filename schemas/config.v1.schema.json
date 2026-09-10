@@ -211,8 +211,12 @@
           "type": "string",
           "maxLength": 64
         },
-        "theme": {
-          "type": "string"
+        "appearance": {
+          "enum": [
+            "clean"
+          ],
+          "default": "clean",
+          "description": "Visual preset for this instance. A preset owns its own surface opacity, scrim, border, shadow and blur; those are deliberately not configurable. Only 'clean' is implemented today - the enum widens as presets ship, which is backward-compatible, whereas admitting a value before its preset exists would accept configuration that silently does nothing. This is NOT the light/dark axis: that is a per-viewer browser preference and is not configured here."
         },
         "layout": {
           "type": "object",

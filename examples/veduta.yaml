@@ -16,7 +16,8 @@ auth:
 
 dashboard:
   title: Home
-  theme: auto                        # auto | light | dark | <custom theme name>
+  appearance: clean                  # the instance's visual preset; 'clean' is the only one so far.
+                                     # Light/dark is a per-viewer browser preference, not set here.
   layout: { columns: 4, gap: normal }
   groupBy: section                   # section | tag - the viewer can switch at runtime
 

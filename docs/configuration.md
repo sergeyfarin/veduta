@@ -50,11 +50,11 @@ Unknown fields are rejected. A required field can still be conditional on a sele
 | `connections.<name>.tls.insecureSkipVerify` | boolean | no | false | — | — |
 | `connections.<name>.tls.serverName` | string | no | — | — | — |
 | `dashboard` | object | no | — | — | — |
+| `dashboard.appearance` | "clean" | no | "clean" | — | Visual preset for this instance. A preset owns its own surface opacity, scrim, border, shadow and blur; those are deliberately not configurable. Only 'clean' is implemented today - the enum widens as presets ship, which is backward-compatible, whereas admitting a value before its preset exists would accept configuration that silently does nothing. This is NOT the light/dark axis: that is a per-viewer browser preference and is not configured here. |
 | `dashboard.groupBy` | "section" \| "tag" | no | "section" | — | How cards are arranged. 'section' uses the order in this file; 'tag' regroups by the cards' tags. The viewer may switch at runtime; this is the default. |
 | `dashboard.layout` | object | no | — | — | — |
 | `dashboard.layout.columns` | integer | no | 4 | minimum=1; maximum=8 | — |
 | `dashboard.layout.gap` | "tight" \| "normal" \| "loose" | no | — | — | — |
-| `dashboard.theme` | string | no | — | — | — |
 | `dashboard.title` | string | no | — | maxLength=64 | — |
 | `integrations` | array | no | — | — | Declares which integrations exist. It does NOT grant them anything: capabilities and routes come from veduta.lock.yaml, which the administrator approves explicitly. See integration-lock.v1.schema.json. |
 | `integrations[]` | object | no | — | — | — |

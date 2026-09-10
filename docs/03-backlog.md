@@ -19,7 +19,7 @@ priority (which milestone should absorb it, or "before X" for a hard blocker).
 | [Does Jellyfin still earn being the WASM proof case?](#open-question-does-jellyfin-still-earn-being-the-wasm-proof-case) | Plugins | Open decision |
 | [SSE per-session cap leaks a slot when a slow consumer is dropped](#sse-per-session-cap-leaks-a-slot-when-a-slow-consumer-is-dropped) | API | Medium |
 | [`ContainsSecretInDocument` has no production caller](#containssecretindocument-has-no-production-caller) | Secrets | Medium |
-| [Theme knob vocabulary is deliberately unfrozen](#theme-knob-vocabulary-is-deliberately-unfrozen) | Frontend | After Veil ships |
+| [Appearance options are deferred until asked for](#appearance-options-are-deferred-until-asked-for) | Frontend | On demand |
 | [Asset format coverage is narrower than the allowlist](#asset-format-coverage-is-narrower-than-the-architectures-final-allowlist) | Assets | 0.2 transform milestone |
 | [Asset-cache startup does not reconcile orphan files](#asset-cache-startup-does-not-reconcile-orphan-files) | Assets | Low |
 | [Lock-write race against a concurrent CLI approval](#the-lock-write-race-is-closed-only-within-one-process-not-against-a-concurrent-cli-approval) | Integrations | Low |
@@ -91,34 +91,28 @@ decrement the session counter in `publish`'s drop path, ideally by routing both 
 through one `removeClient(ch)` helper that owns both counters, plus a regression test that drops a
 session's streams via `publish` and then subscribes again successfully.
 
-### Theme knob vocabulary is deliberately unfrozen
+### Appearance options are deferred until asked for
 
-Recorded by [decisions/0002-theming-and-visual-customisation.md](decisions/0002-theming-and-visual-customisation.md),
-decision 7. That ADR accepts bounded theming - a `dashboard.theme` enum plus typed knobs - but
-deliberately does **not** freeze the knob set in the same pass.
+Recorded by [decisions/0002-theming-and-visual-customisation.md](decisions/0002-theming-and-visual-customisation.md).
+Veduta ships two fixed presets - `dashboard.appearance: clean | veil` - and no public knobs. A
+preset privately owns its surface opacity, scrim, border alpha, shadow and blur.
 
-The reason is that knob names go into the published v1 config schema, where narrowing or removing
-a field later is a breaking change; `dashboard.theme` itself is already an example of a v1 field
-shipped before anything read it. The candidate knobs named in discussion - accent, font stack,
-background image, card opacity - are a guess made before the second theme exists. The set that
-actually matters is whichever tokens differ between Clean and Veil once Veil is built, and that
-list probably includes surface alpha, blur radius, scrim floor, border alpha and shadow rather
-than the four above.
+This entry exists so the reasoning is not relitigated. An earlier draft of that ADR planned to
+build Veil, observe which design tokens differed from Clean, and promote those to typed config.
+That was rejected on review: it derives a public API from an implementation diff, exposes coupled
+design mechanics as if they were independent user choices, and recreates exactly the
+combinatorial validation problem the fixed-preset design avoids. Config expresses intent; tokens
+are implementation.
 
-So the order is: ship the `dashboard.theme` enum and build Veil with hardcoded token values,
-observe the real diff, then promote those tokens to typed config with the combination check
-described in the ADR (a `validateAuthNone`-shaped semantic check emitting a `config.Diagnostic` at
-`--check-config` time, so no knob combination can produce an inaccessible dashboard).
+If options are ever added they arrive one at a time, on real demand, in that intent-shaped form -
+a named accent palette rather than a hex pair (a single hex cannot clear 3:1 in both colour
+schemes; only 32.8% of sRGB can, and the shipped light accent misses on dark by 0.01), a
+local or proxied background reference rather than an arbitrary URL, possibly a small set of
+bundled font stacks. A preview UI waits until there are enough real choices to be worth
+previewing.
 
-One prerequisite is not optional and must land with Veil rather than after it: `TestTokenContrast`
-parses tokens with a hex-only regex (`internal/contracts/contrast_test.go`), so a translucent
-`--v-surface` drops out of the palette and the test fails with "token missing". It fails loudly,
-which is correct - the risk is that the cheap fix is to delete the pair from the list and silently
-lose the guarantee. Generalise the parser to run per theme, and add the scrim-floor contrast test,
-as part of building Veil.
-
-Priority: after Veil ships. Not blocking - the enum and the second theme are useful on their own,
-and holding the knobs back is the point of the entry, not a gap in it.
+Priority: on demand. Nothing here blocks anything; the entry is the record of a decision not to
+build, which is easy to forget and expensive to rediscover.
 
 ### Asset format coverage is narrower than the architecture's final allowlist
 

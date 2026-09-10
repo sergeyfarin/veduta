@@ -81,12 +81,18 @@ type ForwardAuth struct {
 	PrivilegedOperations PrivilegedOps `yaml:"privilegedOperations"`
 }
 
-// Dashboard is presentation-level configuration: title, theme, layout defaults.
+// Dashboard is presentation-level configuration: title, appearance preset, layout defaults.
+//
+// Appearance is the instance's visual preset and is NOT the light/dark axis: that
+// stays a per-viewer browser preference, deliberately unconfigured here. The two were one field
+// once - a free-form `theme` that nothing read - and gethomepage's own settings.yaml uses `theme`
+// for light/dark, so the collision was live for exactly the users the importer courts. See
+// docs/decisions/0002-theming-and-visual-customisation.md.
 type Dashboard struct {
-	Title   string `yaml:"title"`
-	Theme   string `yaml:"theme"`
-	Layout  Layout `yaml:"layout"`
-	GroupBy string `yaml:"groupBy"` // section | tag
+	Title      string `yaml:"title"`
+	Appearance string `yaml:"appearance"` // preset name; empty means clean
+	Layout     Layout `yaml:"layout"`
+	GroupBy    string `yaml:"groupBy"` // section | tag
 }
 
 // Layout is dashboard.layout.

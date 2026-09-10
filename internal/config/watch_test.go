@@ -165,7 +165,7 @@ auth:
   mode: none
 dashboard:
   title: %s
-  theme: auto
+  appearance: clean
   layout: {columns: 4, gap: normal}
   groupBy: section
 connections: {}

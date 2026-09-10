@@ -310,7 +310,7 @@ auth:
   mode: none
 dashboard:
   title: Home
-  theme: auto
+  groupBy: section
 sections:
   - title: Media
     cards:
@@ -319,7 +319,7 @@ sections:
 `)
 	write(t, dir, "conf.d/10-override.yaml", `
 dashboard:
-  theme: dark
+  groupBy: tag
 sections:
   - title: Overridden
     cards:
@@ -332,8 +332,8 @@ sections:
 	if snap.Config.Dashboard.Title != "Home" {
 		t.Errorf("title = %q, want the base file's value preserved", snap.Config.Dashboard.Title)
 	}
-	if snap.Config.Dashboard.Theme != "dark" {
-		t.Errorf("theme = %q, want overridden", snap.Config.Dashboard.Theme)
+	if snap.Config.Dashboard.GroupBy != "tag" {
+		t.Errorf("groupBy = %q, want overridden", snap.Config.Dashboard.GroupBy)
 	}
 	if len(snap.Config.Sections) != 1 || snap.Config.Sections[0].Title != "Overridden" {
 		t.Fatalf("sections = %+v, want the array replaced wholesale by conf.d", snap.Config.Sections)

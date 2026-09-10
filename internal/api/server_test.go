@@ -54,7 +54,7 @@ func TestConfigRoutesExposeSnapshotAndStatus(t *testing.T) {
 	body := []byte(`version: 1
 server: {listen: "127.0.0.1:8099"}
 auth: {mode: none}
-dashboard: {title: Home, theme: auto, layout: {columns: 4, gap: normal}, groupBy: section}
+dashboard: {title: Home, appearance: clean, layout: {columns: 4, gap: normal}, groupBy: section}
 connections: {}
 integrations: [{id: demo, source: builtin}]
 sections:
