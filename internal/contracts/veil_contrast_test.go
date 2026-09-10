@@ -190,3 +190,81 @@ func composite(tint rgb, alpha float64, backdrop rgb) rgb {
 		b: alpha*tint.b + (1-alpha)*backdrop.b,
 	}
 }
+
+// TestVeilImageContrast is the guarantee for the case arithmetic cannot bound on its own: a
+// user-supplied background image, whose pixels are unknown at build time.
+//
+// The gradient default is bounded by its two stops. A photograph is bounded by nothing, so the
+// contract is enforced instead by the mandatory scrim in tokens.css: the image contributes at
+// most (1 - --v-scrim-alpha) of the backdrop. This test therefore evaluates the extremes a
+// photograph can actually present - pure black and pure white - rather than a representative
+// image, which would say nothing about the next one the operator configures.
+//
+// Both extremes matter and for opposite reasons: in dark the scrim caps composited luminance from
+// above, because light text needs the backdrop to stay dark, and a white photograph is the
+// adversary; in light it imposes a floor, and a black photograph is. Testing only one would leave
+// half the contract unproven.
+func TestVeilImageContrast(t *testing.T) {
+	light, dark := palettes(t)
+	css := tokensCSS(t)
+	veilLight := blockBody(t, css, `:root[data-appearance="veil"] {`)
+	veilDark := blockBody(t, css, `:root[data-appearance="veil"]:not([data-theme="light"]) {`)
+	imageBlock := blockBody(t, css, `:root[data-appearance="veil"][data-backdrop="image"] {`)
+	imageDark := blockBody(t, css, `:root[data-appearance="veil"][data-backdrop="image"]:not([data-theme="light"]) {`)
+
+	surfaceAlpha := scalarIn(t, veilLight, "--v-veil-alpha")
+	scrimAlpha := scalarIn(t, imageBlock, "--v-scrim-alpha")
+
+	// The worst a photograph can be, in both directions. Nothing between these is worse.
+	extremes := map[string]rgb{"pure black": {r: 0, g: 0, b: 0}, "pure white": {r: 255, g: 255, b: 255}}
+
+	for _, scheme := range []struct {
+		name  string
+		base  palette
+		veil  string
+		scrim string
+		tint  string
+	}{
+		{"light", light, veilLight, imageBlock, veilLight},
+		{"dark", dark, veilDark, imageDark, veilDark},
+	} {
+		t.Run(scheme.name, func(t *testing.T) {
+			p := palette{}
+			for k, v := range scheme.base {
+				p[k] = v
+			}
+			for k, v := range hexTokensIn(veilLight) {
+				p[k] = v
+			}
+			if scheme.name == "dark" {
+				for k, v := range hexTokensIn(veilDark) {
+					p[k] = v
+				}
+			}
+			tint := tripleIn(t, firstWith(veilLight, scheme.tint, "--v-veil-tint"), "--v-veil-tint")
+			scrim := tripleIn(t, firstWith(imageBlock, scheme.scrim, "--v-scrim"), "--v-scrim")
+
+			for _, pr := range []struct {
+				tok string
+				min float64
+			}{
+				{"--v-text", 4.5}, {"--v-muted", 4.5}, {"--v-faint", 4.5},
+				{"--v-ok", 3.0}, {"--v-warn", 3.0}, {"--v-error", 3.0},
+				{"--v-accent", 3.0}, {"--v-border", 1.2},
+			} {
+				fg, ok := p[pr.tok]
+				if !ok {
+					t.Fatalf("token missing: %s", pr.tok)
+				}
+				for label, image := range extremes {
+					backdrop := composite(scrim, scrimAlpha, image)
+					surface := composite(tint, surfaceAlpha, backdrop)
+					if got := contrast(fg, surface); got < pr.min {
+						t.Errorf("%s over a %s background image (scrim %.2f, surface %.2f) = %.2f:1, want >= %.1f:1",
+							pr.tok, label, scrimAlpha, surfaceAlpha, got, pr.min)
+					}
+				}
+			}
+		})
+	}
+}

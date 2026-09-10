@@ -190,3 +190,44 @@ body {
 :root[data-appearance="veil"] body {
   background: transparent;
 }
+
+/* ── Veil with a configured background image ─────────────────────────────────────────────────
+ *
+ * The scrim is not decoration and is not optional. The generated gradient above has a luminance
+ * range known at build time; a user's photograph has none, so contrast can only be guaranteed by
+ * bounding what reaches the text. --v-scrim-alpha does that: at 0.80 the image contributes at
+ * most 20% of the backdrop, and TestVeilImageContrast proves every text token still clears its
+ * floor against BOTH extremes a photograph can present - pure black and pure white - rather than
+ * against a representative image, which would prove nothing about the next one.
+ *
+ * Note the bound runs in both directions: in dark the scrim caps composited luminance from above
+ * (light text needs the backdrop to stay dark), in light it imposes a floor. That is why each
+ * scheme has its own scrim colour rather than sharing one.
+ *
+ * The visible cost is real and deliberate: only part of the image shows through. Guaranteeing AA
+ * over an arbitrary photograph and showing that photograph at full strength are not compatible,
+ * and this project resolves that in favour of legibility.
+ */
+
+:root[data-appearance="veil"][data-backdrop="image"] {
+  --v-scrim-alpha: 0.8;
+  --v-scrim: 232 238 246;
+  background-image:
+    linear-gradient(rgb(var(--v-scrim) / var(--v-scrim-alpha)), rgb(var(--v-scrim) / var(--v-scrim-alpha))),
+    url("/api/v1/background");
+  background-size: cover, cover;
+  background-position: center, center;
+  background-attachment: fixed, fixed;
+  background-repeat: no-repeat, no-repeat;
+}
+
+:root[data-appearance="veil"][data-backdrop="image"][data-theme="dark"],
+:root[data-appearance="veil"][data-backdrop="image"]:not([data-theme="light"]) {
+  --v-scrim: 13 16 24;
+}
+
+@media (prefers-color-scheme: light) {
+  :root[data-appearance="veil"][data-backdrop="image"]:not([data-theme="dark"]) {
+    --v-scrim: 232 238 246;
+  }
+}

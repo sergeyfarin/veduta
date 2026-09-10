@@ -65,6 +65,11 @@ type Config struct {
 	// letting http.ServeMux panic on the resulting duplicate route registration.
 	Fixtures *fixtures.Bundle
 
+	// ConfigDir is the directory holding veduta.yaml. It is what a relative
+	// dashboard.background resolves against, so a background does not depend on the working
+	// directory veduta was started from.
+	ConfigDir string
+
 	// ConfigStore is the atomically reloadable real configuration. Until the scheduler lands,
 	// configured cards are returned honestly as pending so the production render path is usable.
 	// Mutually exclusive with Fixtures.
@@ -197,6 +202,7 @@ func (s *Server) routes() http.Handler {
 	}
 	if s.cfg.ConfigStore != nil {
 		s.routeConfig(mux)
+		s.routeBackground(mux)
 		if s.hub != nil {
 			s.routeSSE(mux)
 		}
@@ -287,7 +293,13 @@ func (s *Server) routeConfig(mux *http.ServeMux) {
 		if appearance == "" {
 			appearance = "clean"
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"appearance": appearance, "sections": sections})
+		// A boolean, not the path: the filesystem layout of the host is not the browser's
+		// business, and the image is always served from the one fixed route.
+		body := map[string]any{"appearance": appearance, "sections": sections}
+		if snapshot.Config.Dashboard.Background != "" {
+			body["background"] = true
+		}
+		writeJSON(w, http.StatusOK, body)
 	})
 	mux.HandleFunc("GET /api/v1/cards", func(w http.ResponseWriter, r *http.Request) {
 		if s.cfg.Scheduler != nil {

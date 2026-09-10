@@ -33,6 +33,10 @@ actions, and notifies when something needs attention.
   remain a per-viewer browser preference and are deliberately not configured — `dashboard.theme`,
   which never had a reader, is gone. Veil's contrast is proven in CI by compositing its surface
   over both gradient stops rather than being checked by eye.
+- `dashboard.background` points Veil at a local image, absolute or relative to the config file.
+  Veduta reads and serves it, so no viewer's browser fetches from a third-party host; content is
+  sniffed rather than trusted from the extension, and a mandatory scrim keeps every text token
+  above its contrast floor against any image, proven against pure black and pure white.
 - The Widget Document and CardState envelopes, with Go and TypeScript types generated from one
   JSON Schema so the two halves cannot disagree.
 - Live updates over SSE with heartbeats, an event replay ring, `Last-Event-ID` resumption and

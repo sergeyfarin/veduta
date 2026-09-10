@@ -151,15 +151,36 @@ D5 exists to prevent.
   admin operation or a viewer preference, and adds per-user storage, for a
   product whose light/dark axis is already per-viewer.
 
-## Open question
+## Resolved: the background image (2026-09-10)
 
-Whether Veil's first version supports a **user-supplied background image** is not
-settled here. What is settled: it would be a local path served by Veduta, never
-an arbitrary URL — a third-party URL is an outbound request from every viewer's
-browser and a privacy regression for a self-hosted product — and a scrim would
-be mandatory, with contrast evaluated against worst-case pixels as above. The
-alternative for a first version is a bundled or generated backdrop, which is
-CI-validatable with no user input at all.
+Veil ships with both a generated default and a user-supplied option, and the
+question above is settled as it was framed.
+
+`dashboard.background` is a **local path**, absolute or relative to the config
+file's directory — the rule `integrations.ResolveSource` already uses, so it does
+not depend on the working directory. It is never a URL: a third-party URL would
+make every viewer's browser fetch from a host the operator does not control.
+Veduta reads the file and serves it from one fixed route, and the browser is told
+only *whether* a background exists, never where it lives.
+
+Content is sniffed, not trusted from the extension. That is not a privilege
+boundary — the operator wrote the config and could already point `dataDir`
+anywhere — but a blast-radius limit on a typo: without it, a mistyped path turns
+the route into an arbitrary file read served to every viewer.
+`TestBackground_RefusesAFileThatIsNotAnImage` holds that line.
+
+The scrim is mandatory and lives in the CSS, not in a caller that could forget
+it: at `--v-scrim-alpha: 0.8` an image contributes at most 20% of the backdrop,
+and `TestVeilImageContrast` proves every text token clears its floor against both
+extremes a photograph can present. Each colour scheme carries its own scrim
+colour, because the bound runs in opposite directions — reusing one for both
+fails the test. The visible cost is real and accepted: guaranteeing AA over an
+arbitrary photograph and showing that photograph at full strength are not
+compatible, and this project resolves that toward legibility.
+
+A background under `appearance: clean` is a **configuration error**, not a
+silently ignored field — the schema requires `appearance: veil` alongside it.
+Accepting configuration that does nothing is the defect `dashboard.theme` was.
 
 ## Revisit triggers
 

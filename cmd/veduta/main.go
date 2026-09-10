@@ -181,6 +181,7 @@ func serve(args []string) error {
 			return fmt.Errorf("load config:\n%s", diags.String())
 		}
 		cfg.ConfigStore = store
+		cfg.ConfigDir = filepath.Dir(*configPath)
 		cfg.Listen = store.Snapshot().Config.Server.Listen
 		if *listen != "" {
 			cfg.Listen = *listen

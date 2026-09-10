@@ -49,8 +49,9 @@ Unknown fields are rejected. A required field can still be conditional on a sele
 | `connections.<name>.tls.caFile` | string | no | — | — | — |
 | `connections.<name>.tls.insecureSkipVerify` | boolean | no | false | — | — |
 | `connections.<name>.tls.serverName` | string | no | — | — | — |
-| `dashboard` | object | no | — | — | — |
+| `dashboard` | object | no | — | 1 conditional rule(s) | — |
 | `dashboard.appearance` | "clean" \| "veil" | no | "clean" | — | Visual preset for this instance. 'clean' is the opaque-card default; 'veil' is translucent, with blurred card surfaces over a generated backdrop. A preset owns its own surface opacity, blur, backdrop and shadow; those are deliberately not configurable. The enum admits only presets that exist, and widens as presets ship. This is NOT the light/dark axis: that is a per-viewer browser preference and is not configured here. |
+| `dashboard.background` | string | no | — | minLength=1; maxLength=1024 | Path to a background image for the 'veil' preset, absolute or relative to this configuration file's directory (the same rule integration sources use, so behaviour does not depend on the working directory). The file is read and served by Veduta at /api/v1/background - it is never a URL, because a third-party URL would make every viewer's browser fetch from a host the operator does not control. Content is sniffed, not trusted from the extension, and anything that is not a supported image is refused. A mandatory scrim is composited over it so text contrast holds against any image; that scrim is why only part of the image shows through. |
 | `dashboard.groupBy` | "section" \| "tag" | no | "section" | — | How cards are arranged. 'section' uses the order in this file; 'tag' regroups by the cards' tags. The viewer may switch at runtime; this is the default. |
 | `dashboard.layout` | object | no | — | — | — |
 | `dashboard.layout.columns` | integer | no | 4 | minimum=1; maximum=8 | — |

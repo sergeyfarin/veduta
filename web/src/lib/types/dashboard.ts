@@ -23,5 +23,7 @@ export type Appearance = 'clean' | 'veil';
 
 export interface Dashboard {
   appearance?: Appearance;
+  /** True when the instance configured a background image, served from /api/v1/background. */
+  background?: boolean;
   sections: DashboardSection[];
 }

@@ -91,6 +91,11 @@ type ForwardAuth struct {
 type Dashboard struct {
 	Title      string `yaml:"title"`
 	Appearance string `yaml:"appearance"` // preset name; empty means clean
+	// Background is a local image path for the veil preset, absolute or relative to the config
+	// file's directory. Never a URL: a third-party URL would make every viewer's browser fetch
+	// from a host the operator does not control. The schema refuses it unless appearance is veil,
+	// so it cannot be set somewhere it would silently do nothing.
+	Background string `yaml:"background"`
 	Layout     Layout `yaml:"layout"`
 	GroupBy    string `yaml:"groupBy"` // section | tag
 }

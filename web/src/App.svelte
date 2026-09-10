@@ -69,7 +69,7 @@
     ])
       .then(([d, cards]) => {
         dashboard = d;
-        applyAppearance(d.appearance);
+        applyAppearance(d.appearance, d.background ?? false);
         cardsById = new Map(cards.map((c) => [c.cardId, c]));
         loadError = null;
       })

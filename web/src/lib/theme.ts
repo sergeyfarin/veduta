@@ -49,11 +49,19 @@ export function next(theme: Theme): Theme {
  * Unlike the light/dark preference this is NOT stored: it is instance configuration, arriving
  * with the layout on every load, so there is nothing viewer-local to remember.
  */
-export function applyAppearance(appearance: string | undefined): void {
+export function applyAppearance(appearance: string | undefined, background = false): void {
   const root = document.documentElement;
   if (appearance === 'veil') {
     root.dataset.appearance = 'veil';
   } else {
     delete root.dataset.appearance;
+  }
+  // data-backdrop switches the root from the generated gradient to the configured image. The
+  // scrim that guarantees contrast over an unknown image is part of that CSS, not something a
+  // caller can forget to apply - see tokens.css and TestVeilImageContrast.
+  if (appearance === 'veil' && background) {
+    root.dataset.backdrop = 'image';
+  } else {
+    delete root.dataset.backdrop;
   }
 }
