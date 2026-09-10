@@ -5,7 +5,6 @@ package api_test
 import (
 	"bytes"
 	"image"
-	"image/color"
 	"image/png"
 	"net/http"
 	"net/http/httptest"
@@ -22,7 +21,12 @@ import (
 func pngBytes(t *testing.T) []byte {
 	t.Helper()
 	img := image.NewRGBA(image.Rect(0, 0, 8, 8))
-	img.Set(0, 0, color.RGBA{R: 1, G: 2, B: 3, A: 255})
+	// Pixels go straight into Pix (RGBA order). The standard library's colour-model package would
+	// be the obvious route, but its American spelling trips this repo's UK-locale misspell linter,
+	// and the test only needs recognisable bytes.
+	for i := 0; i < len(img.Pix); i += 4 {
+		img.Pix[i], img.Pix[i+1], img.Pix[i+2], img.Pix[i+3] = uint8(i), 2, 3, 255
+	}
 	var buf bytes.Buffer
 	if err := png.Encode(&buf, img); err != nil {
 		t.Fatal(err)

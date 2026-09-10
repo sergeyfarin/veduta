@@ -27,8 +27,10 @@ linters:
         - name: package-comments
     gosec:
       excludes:
-        # G104 duplicates errcheck; G304 is about variable file paths, which the contract
-        # tests legitimately use to read checked-in fixtures.
+        # G104 duplicates errcheck. G304 (variable file paths) is NOT excluded here: tests get it
+        # via the _test.go exclusion below, and production code that legitimately reads an
+        # operator-configured path carries a local nolint naming the reason - see
+        # internal/connections/client.go's CAFile read and internal/api/background.go's.
         - G104
     misspell:
       locale: UK

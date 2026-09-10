@@ -103,7 +103,7 @@ func readBackground(path string) ([]byte, time.Time, error) {
 	if info.Size() > maxBackgroundBytes {
 		return nil, time.Time{}, errBackgroundTooLarge
 	}
-	body, err := os.ReadFile(path)
+	body, err := os.ReadFile(path) //nolint:gosec // G304: operator-configured path from dashboard.background, not request input; sniffed before anything is served
 	if err != nil {
 		return nil, time.Time{}, err
 	}
