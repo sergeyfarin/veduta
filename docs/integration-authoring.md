@@ -2,7 +2,15 @@
 
 An integration declares what it needs; it does not grant itself authority. Veduta loads `manifest.yaml`, validates it, computes its canonical digest, and intersects its requests with the administrator's digest-bound entry in `veduta.lock.yaml`. The core owns connections and credentials. Integrations refer only to abstract slots.
 
-Use a declarative integration when requests, JSON selection, expressions, and Widget Document templates can describe the service. Use a WASM integration when an operation needs branching, several dependent requests, or more involved response mapping. Both runtimes use the same manifest, capability broker, limits, output validation, and approval flow.
+## Choosing a mechanism
+
+Three rungs, in order. Start at the lowest one that fits — **most integrations never leave the first two, and neither requires a compiler, a toolchain, or Rust.**
+
+1. **An `http-json` card, for a single endpoint.** No manifest, no new files: name a connection, a path, and the values to show. See the `adguard` card in [`examples/veduta.yaml`](../examples/veduta.yaml). It gets the same expression and resource budgets as any declarative integration.
+2. **A declarative manifest, for most integrations.** Up to eight requests, later requests using earlier results, conditional steps, structured bodies, filtering and mapping over JSON, iteration into cards and lists, broker-minted image references, and declared signals for history and alerts. All three of `plugins/immich`, `plugins/glances` and `plugins/beszel` are this, and `plugins/glances` alone makes six requests. Nothing here is compiled; a manifest is data.
+3. **A WASM plugin, only when logic genuinely demands it.** Loops with per-item requests, non-JSON parsing, error recovery, or branching the bounded template grammar cannot express. Rust is the supported SDK today; it is not a requirement for the rungs above, and the runtime itself is language-neutral — see [decisions/0001-backend-language.md](decisions/0001-backend-language.md).
+
+All three use the same capability broker, credential boundary, limits, output validation, and approval flow. Moving up a rung buys expressiveness, not authority: a WASM plugin can do nothing a manifest could not ask for.
 
 ## Manifest structure
 
@@ -53,7 +61,9 @@ The loader rejects duplicate YAML keys, excessive size or nesting, undeclared sl
 
 ## WASM integrations with Rust
 
-Rust is the supported compiled guest language. The SDK targets `wasm32-unknown-unknown` and produces modules without WASI imports, so filesystem, environment, clocks, sockets, and process APIs are unavailable unless Veduta exposes a specific broker operation.
+Rust is the supported compiled guest language — the one this repository ships a typed SDK for and has measured. It is not what the runtime enforces: the sandbox checks exports, the import allowlist, the ABI, the limits and the approved module hash, none of which are Rust-specific. [decisions/0001-backend-language.md](decisions/0001-backend-language.md) records what another toolchain would have to demonstrate.
+
+The SDK targets `wasm32-unknown-unknown` and produces modules without WASI imports, so filesystem, environment, clocks, sockets, and process APIs are unavailable unless Veduta exposes a specific broker operation.
 
 Build the starter module:
 

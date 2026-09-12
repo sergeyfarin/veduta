@@ -1,6 +1,7 @@
-# Backend language: Go core, Rust plugins
+# Backend language: Go core; optional WASM plugins with an initially Rust-only SDK
 
-Status: accepted, 2026-09-08. Revisit after 0.1 only if a trigger below is met.
+Status: accepted, 2026-09-08. Amended 2026-09-12 (scope of the guest-language half; see the
+amendment at the end). Revisit after 0.1 only if a trigger below is met.
 
 ## Decision
 
@@ -68,3 +69,39 @@ measurements and a migration prototype:
 
 Any future proposal must migrate one vertical slice behind the existing HTTP,
 schema, manifest, and golden-document contracts before changing this decision.
+
+## Amendment, 2026-09-12: what "Rust plugins" does and does not mean
+
+The original title, "Go core, Rust plugins", overstated Rust's role, and this document is the right
+place to correct it because it is the document that decided both halves.
+
+**Rust is the supported SDK for compiled WASM plugins. It is not a requirement for writing a Veduta
+integration, and the runtime is not Rust-aware.** Most integrations are YAML and always were:
+`docs/01-architecture.md` D12 makes declarative the primary extension mechanism for 0.1, and three
+of the four shipped integrations use it. Nobody connecting a service should need a Rust toolchain,
+and the authoring guide now leads with that ladder — an `http-json` card for a single endpoint, a
+declarative manifest for most integrations, and WASM only where real programming logic is needed.
+
+The runtime cannot tell which language produced a module. It enforces the required exports, the
+import allowlist (no WASI), ABI-compatible input and output, the resource limits, and the approved
+module hash. Any toolchain that satisfies those could be supported. Rust is supported today because
+this repository ships a typed SDK for it and has measured its output — about 250 KiB, sub-second
+cold validation, no WASI imports — not because the sandbox requires it.
+
+Another guest language becomes supported when a prototype demonstrates, with measurements:
+
+- `wasm32-unknown-unknown` (or equivalent) output with no forbidden imports,
+- module size and cold-validation time in the same class as the Rust guest, within the 32 MiB cap,
+- a pass through the G1 conformance suite and the S1a ARM budgets,
+- and a maintained PDK, so the ABI does not become this project's to own.
+
+Go is the obvious candidate and is already tracked in `docs/03-backlog.md` ("Go plugin SDK requires
+a maintained WASI-free toolchain"); it fails the first two criteria today. Python is further away:
+the official Extism Python PDK packages an interpreter into the module and requires WASI even when
+the plugin needs no system access, which conflicts directly with the no-WASI sandbox and the
+Pi-class size and latency targets. Running Python as a subprocess or sidecar would mean owning
+interpreter installation, process lifecycle, credential-safe IPC, filesystem and network
+sandboxing, and ARM packaging — and would abandon the single-binary promise (D1) for a language
+preference. Neither is planned; both are welcome as prototypes meeting the criteria above.
+
+Nothing about the host decision changes: the core stays Go, and the revisit triggers above stand.

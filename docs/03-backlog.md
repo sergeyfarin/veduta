@@ -17,6 +17,7 @@ priority (which milestone should absorb it, or "before X" for a hard blocker).
 | Open item | Area | Priority |
 | --- | --- | --- |
 | [Does Jellyfin still earn being the WASM proof case?](#open-question-does-jellyfin-still-earn-being-the-wasm-proof-case) | Plugins | Open decision |
+| [Should there be a frontend plugin surface at all?](#open-question-should-there-be-a-frontend-plugin-surface-at-all) | Frontend | Open decision |
 | [SSE per-session cap leaks a slot when a slow consumer is dropped](#sse-per-session-cap-leaks-a-slot-when-a-slow-consumer-is-dropped) | API | Medium |
 | [`ContainsSecretInDocument` has no production caller](#containssecretindocument-has-no-production-caller) | Secrets | Medium |
 | [Appearance options are deferred until asked for](#appearance-options-are-deferred-until-asked-for) | Frontend | On demand |
@@ -56,6 +57,35 @@ profile, so that is a defensible trade rather than a regression - but it is a de
 knowingly. `internal/integrations/wasm/jellyfin_scenarios_test.go` pins the behaviour any
 replacement has to reproduce (missing poster, missing year, PascalCase upstream, failing
 sub-request). Not blocking anything.
+
+### Open question: should there be a frontend plugin surface at all?
+
+Raised while deciding whether plugins must live inside the single binary (they need not - see
+[03-backlog-resolved.md](03-backlog-resolved.md)). The backend answer generalises badly to the
+frontend, and the question deserves recording rather than re-deriving.
+
+Today there is no frontend plugin surface, by two frozen decisions: D2 makes the Widget Document
+the *only* integration output, and the renderer is "trusted and closed" - one Svelte component per
+block type, a registry keyed by `type`, unknown types rendering a labelled placeholder, and no
+`{@html}` ever. A new block type is a deliberate core change, which is what keeps a compromised or
+merely careless integration from reaching the DOM.
+
+Three shapes were considered, none adopted:
+
+- **Keep it closed** (the status quo). New block types stay core changes. Costs nothing, and the
+  placeholder path means an old frontend degrades rather than breaks against a new block type.
+- **Build-time component plugins** - a plugin ships a Svelte component compiled into the SPA. No
+  untrusted runtime code, but it breaks the symmetry that makes the backend answer work: it is not
+  side-loadable at all, since adding one means rebuilding the frontend and therefore the binary.
+- **A sandboxed iframe block type** - plugin-supplied HTML/JS in a locked-down frame over
+  postMessage. Genuinely side-loadable, and by far the largest item: a new threat model, a new
+  protocol to version, and a direct challenge to D2, which is frozen precisely because the security
+  and consistency story rests on it.
+
+Deferred, deliberately, with no work planned. Revisit only if a concrete integration cannot be
+expressed as a Widget Document *and* the missing block type is too specific to justify adding to
+the core renderer - that pair is the trigger, and neither half has been observed yet. Until then
+the answer is the first option.
 
 ### `ContainsSecretInDocument` has no production caller
 
