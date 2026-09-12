@@ -26,6 +26,8 @@ priority (which milestone should absorb it, or "before X" for a hard blocker).
 | [`CacheEntries` can't represent an explicit zero](#manifestloadlimitscacheentries-cant-represent-an-explicit-zero) | Integrations | When declarative caching lands |
 | [Approve flow can't grant a limit above its default](#the-documented-approve-flow-has-no-way-to-grant-a-limit-above-its-documented-default) | Docs | Low |
 | [Go plugin SDK needs a WASI-free toolchain](#go-plugin-sdk-requires-a-maintained-wasi-free-toolchain) | Plugins | Low |
+| [No way to produce an Argon2id password hash](#there-is-no-supported-way-to-produce-an-argon2id-password-hash) | Deployment | Before the 0.1.0 tag |
+| [No committed compose.yaml](#no-committed-composeyaml-despite-a4-planning-one) | Deployment | Before the 0.1.0 tag |
 
 ---
 
@@ -201,3 +203,35 @@ revisit when an official or maintained Go PDK can emit `wasm32-unknown-unknown`
 with no forbidden imports and passes the G1 conformance suite plus S1a ARM
 budgets. The Go backend is a separate decision and remains in place; see
 `docs/decisions/0001-backend-language.md`.
+
+### There is no supported way to produce an Argon2id password hash
+
+Found while smoke-testing the container image before a first real deployment, 2026-09-12.
+`auth.mode: password` requires `auth.admin.passwordHash` to be an Argon2id PHC string, and a
+container binding `0.0.0.0` refuses to start without authentication - so producing that string is
+on the critical path of every non-loopback install. Nothing in the project produces one. The CLI
+has no `hash` subcommand (`serve|version|health|manifest|integration|plugin|import`), and neither
+`docs/getting-started.md` nor `docs/docker.md` says how to make the value they both tell the
+operator to set. Only the test helpers in `internal/auth/service_test.go` and
+`internal/api/auth_test.go` construct one, and they are not shipped.
+
+The parser (`internal/auth/password.go`) accepts the standard PHC encoding at `v=19` with
+`m`/`t`/`p`, `m` between 8192 and 262144, `t` 1-10, `p` 1-16, and a 16-64 byte salt and hash - so
+the reference `argon2` CLI's `-e` output is compatible, which is the only workaround today, and it
+is an undocumented extra dependency on a distroless-first deployment story.
+
+Priority: before the 0.1.0 tag. A `veduta auth hash` subcommand reading the password from a
+prompt or stdin is a few dozen lines over the `golang.org/x/crypto/argon2` dependency the verifier
+already pulls in, and removes the last step of a first install that the project cannot do for you.
+
+### No committed compose.yaml, despite A4 planning one
+
+Found in the same pass. A4 ("Container image and release build") lists `compose.yaml` with the
+docker-socket-proxy default among its deliverables, and `docs/docker.md` carries two compose
+fragments in prose - the Veduta service in one section and the socket proxy in another, never
+composed into one runnable file. A first deployment therefore starts by transcribing and merging
+two snippets, and neither is exercised by anything.
+
+Priority: before the 0.1.0 tag, and cheap. A single `compose.yaml` at the repository root that the
+docs point at instead of duplicating would also give the image a smoke test that is not
+hand-assembled each time.

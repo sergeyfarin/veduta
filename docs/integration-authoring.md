@@ -31,7 +31,7 @@ Validate trust state while authoring:
 ```sh
 ./veduta manifest digest plugins/my-integration/manifest.yaml
 ./veduta integration list --config veduta.yaml
-./veduta integration diff my-integration --config veduta.yaml
+./veduta integration diff --config veduta.yaml my-integration
 ```
 
 ## Declarative integrations

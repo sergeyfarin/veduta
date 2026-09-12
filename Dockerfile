@@ -47,6 +47,11 @@ RUN GOARCH="$TARGETARCH" GOARM="${TARGETVARIANT#v}" go build -trimpath \
 # The same staging script the release archives use, so the image and the tarball can never ship
 # different sets. It also re-checks each module against the digest its manifest pins.
 RUN hack/stage-plugins.sh /out/plugins
+# An empty directory to copy into the final stage: distroless has no shell, so the only way to
+# give /data the right ownership is to carry a directory that already has it. Without this the
+# runtime image has no /data at all, and Docker seeds a named volume mounted there as root:root -
+# which uid 65532 cannot write, and SQLite reports as "unable to open database file".
+RUN mkdir -p /out/data
 
 # ---- Stage 3: what ships ----------------------------------------------------------------------
 # distroless/static has no shell and no package manager: the binary is the only executable in the
@@ -61,7 +66,9 @@ COPY --from=build /out/veduta /usr/local/bin/veduta
 COPY --from=build /out/plugins /usr/share/veduta/plugins
 
 # /config holds veduta.yaml, conf.d/ and veduta.lock.yaml; /data holds the SQLite database and the
-# asset and icon caches. Both are mounted by the operator.
+# asset and icon caches. Both are mounted by the operator. /data exists in the image, owned by the
+# runtime uid, so that a named volume mounted over it inherits that ownership instead of root's.
+COPY --from=build --chown=65532:65532 /out/data /data
 VOLUME ["/data"]
 EXPOSE 8099
 # 65532:65532, from the :nonroot tag. Veduta needs no privileges, and /data must be writable by

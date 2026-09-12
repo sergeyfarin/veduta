@@ -29,8 +29,8 @@ Imported HTTP connections and external integrations are disabled. Review their b
 
 ```sh
 ./veduta integration list --config veduta.yaml
-./veduta integration diff immich --config veduta.yaml
-./veduta integration approve immich --config veduta.yaml
+./veduta integration diff --config veduta.yaml immich
+./veduta integration approve --config veduta.yaml immich
 ```
 
 Read every warning. “Without widgets” means the service was retained as a link card. “Need manual configuration” means no safe automatic mapping exists. Compare the resulting dashboard with Homepage before removing the old deployment. To roll back the configuration, stop Veduta and restore `veduta.yaml.before-homepage`; keep any `conf.d` files consistent with that version.

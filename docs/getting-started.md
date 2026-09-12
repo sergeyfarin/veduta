@@ -100,9 +100,13 @@ Start from [`examples/veduta.yaml`](../examples/veduta.yaml) to connect real ser
 
 ```sh
 ./veduta integration list --config veduta.yaml
-./veduta integration diff my-integration --config veduta.yaml
-./veduta integration approve my-integration --config veduta.yaml
+./veduta integration diff --config veduta.yaml my-integration
+./veduta integration approve --config veduta.yaml my-integration
 ```
+
+Flags come before the integration id: argument parsing stops at the first non-flag word, so a
+`--config` written after the id is read as a second positional argument and the command prints its
+usage instead of running.
 
 Card, list-item, and action icons accept literal glyphs, absolute HTTP(S) URLs, or `mdi:name`,
 `si:name`, and `sh:name` identifiers. Veduta serves all remote icons through its own bounded disk
