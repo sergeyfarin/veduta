@@ -15,22 +15,47 @@ docker pull ghcr.io/sergeyfarin/veduta:0.1.0
 The image is [distroless](https://github.com/GoogleContainerTools/distroless): no shell, no
 package manager, and the binary is the only executable in it. It runs as uid `65532` (`nonroot`).
 
-```yaml
-services:
-  veduta:
-    image: ghcr.io/sergeyfarin/veduta:0.1.0
-    restart: unless-stopped
-    ports:
-      - "8099:8099"
-    volumes:
-      - ./config:/config:ro     # veduta.yaml, conf.d/, veduta.lock.yaml
-      - veduta-data:/data       # SQLite database, asset and icon caches
-    environment:
-      VEDUTA_ADMIN_HASH: ${VEDUTA_ADMIN_HASH:?set this}
+[`compose.yaml`](../compose.yaml) in the repository root is a complete deployment rather than a
+fragment to adapt. It is the file this page describes, and the one the project tests, so the
+sections below explain its choices instead of restating them.
 
-volumes:
-  veduta-data:
+```sh
+mkdir -p config secrets
+docker run --rm -i ghcr.io/sergeyfarin/veduta:0.1.0 auth hash > secrets/admin-hash
+#   ...type the password, then press Ctrl-D
+$EDITOR config/veduta.yaml      # the two settings below are both mandatory
+docker compose up -d
 ```
+
+Add `--profile docker` to that last command to bring up the socket proxy as well; see
+[Docker connection](#docker-connection).
+
+### Producing the password hash
+
+`auth.admin.passwordHash` is an Argon2id PHC string, never a password. `veduta auth hash` reads the
+password from stdin — never from an argument, which would put it in shell history and in every
+other user's `ps` — and writes the verifier to stdout:
+
+```sh
+docker run --rm -i ghcr.io/sergeyfarin/veduta:0.1.0 auth hash > secrets/admin-hash
+```
+
+Terminal input is echoed. To keep the password off the screen, or to script it:
+
+```sh
+read -rs -p 'Password: ' pw && printf %s "$pw" | \
+  docker run --rm -i ghcr.io/sergeyfarin/veduta:0.1.0 auth hash > secrets/admin-hash
+```
+
+The cost defaults to RFC 9106's second recommended configuration — 64 MiB, three passes, four
+lanes — and `--memory`, `--iterations` and `--parallelism` adjust it within the range the login
+path is willing to verify. Verification reads the cost from the hash itself, so raising it later
+re-costs new passwords without invalidating the one you have.
+
+`compose.yaml` passes that file as a Docker secret, which Compose mounts at
+`/run/secrets/VEDUTA_ADMIN_HASH`; Veduta resolves `${secret:NAME}` from `/run/secrets` before it
+looks at the environment. Prefer this to an environment variable: `docker inspect` reveals a
+container's environment to anyone who can reach the daemon.
 
 ### Two settings the container will not start without
 
@@ -61,14 +86,49 @@ auth:
 authentication, prefer `auth.mode: forward` over the override — see the
 [security model](security.md).
 
-### Permissions on /data
+### The two mounts
 
-`/data` must be writable by uid `65532`. A named volume (as above) is created with the right
-ownership automatically. A bind mount is not:
+**`/data` must be writable by uid 65532.** The image ships a `/data` directory already owned by
+that uid, so Docker seeds a named volume mounted there with the same ownership and nothing is
+required of you. A bind mount takes the host directory's ownership instead, and must be prepared:
 
 ```sh
 mkdir -p ./data && sudo chown -R 65532:65532 ./data
 ```
+
+(Without the directory in the image, a named volume would be created `root:root` and SQLite would
+report the resulting failure as `unable to open database file (out of memory)` — which says nothing
+about permissions. That is why it is in the image.)
+
+**`/config` must be writable too, by uid 65532.** Approving an integration writes
+`veduta.lock.yaml` into that directory — from `veduta integration approve` and from the
+dashboard's approve button alike — and the write is atomic, so it also creates a temporary file
+beside the target. Dropping `:ro` is not enough: a bind mount keeps the host directory's
+ownership, which is yours, not the container's. Grant the group instead of transferring the
+directory, so that you keep editing `veduta.yaml` without `sudo`:
+
+```sh
+sudo chown -R :65532 ./config && sudo chmod -R g+w ./config
+```
+
+Without it the server starts and serves normally, and only approval fails, with
+`creating temp file: permission denied` — a poor place to discover a mount option. Mount `/config`
+`:ro` only if you approve integrations elsewhere and copy the resulting lock file in.
+
+`veduta.lock.yaml` itself is written mode `0600` owned by uid 65532, so reading it back on the
+host — to commit it beside `veduta.yaml`, as you should — takes `sudo`.
+
+### What compose.yaml hardens, and what it leaves to you
+
+The container runs with a read-only root filesystem, all capabilities dropped and
+`no-new-privileges`, on top of the uid and distroless base the image already provides. Nothing
+outside the two mounts is ever written, so none of that costs anything.
+
+What it cannot decide for you is exposure. The published port is `127.0.0.1:8099`, the host's
+loopback only: Veduta speaks plain HTTP, and its session cookie carries no `Secure` attribute, so
+a LAN-visible port means session tokens crossing the network in the clear. Put a TLS-terminating
+reverse proxy in front for anything beyond this host. Changing it to `8099:8099` for a throwaway
+test on a trusted network is a deliberate downgrade, not a default.
 
 ### Health checks
 
@@ -121,20 +181,16 @@ Veduta reads container state through the Docker Engine HTTP API. Prefer a read-o
 over mounting `/var/run/docker.sock` into Veduta; direct access to that socket is effectively root
 access to the host.
 
-```yaml
-services:
-  docker-socket-proxy:
-    image: tecnativa/docker-socket-proxy:latest
-    environment:
-      CONTAINERS: 1
-      INFO: 1
-      POST: 0
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+[`compose.yaml`](../compose.yaml) carries such a proxy behind a profile, so it starts only when you
+ask for it:
 
-  veduta:
-    depends_on: [docker-socket-proxy]
+```sh
+docker compose --profile docker up -d
 ```
+
+It is pinned, granted `CONTAINERS` and `INFO` and refused `POST`, and its port is not published to
+the host — only the compose network reaches it. Veduta deliberately does not `depends_on` it: a
+missing proxy degrades one card to a warning rather than holding up the dashboard.
 
 Point the Veduta connection at the proxy and leave actions disabled:
 

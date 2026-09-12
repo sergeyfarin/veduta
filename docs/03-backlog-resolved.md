@@ -506,3 +506,128 @@ every 32-deep buffer so `publish` drops them all, and subscribes again successfu
 against the old code with the exact symptom the entry described. `TestSSEDoneAfterDropDoesNotDouble
 Release` pins the ordering a real handler produces: `publish` drops the stream, the handler's
 deferred `done` runs anyway, and the surviving stream keeps its slot.
+
+## Resolved while preparing the first real deployment
+
+Three defects and two gaps, all found by actually running the image and the release archive on a
+host rather than by reading them, 2026-09-12. The tag had not been cut, so none of this shipped.
+
+### A fresh named volume at /data was created root-owned, and nothing could start
+
+The first `docker compose up` against the documented example failed outright. The runtime image
+had no `/data` directory, so Docker seeded the named volume mounted there from nothing and it came
+out `root:root`, which uid 65532 cannot write. SQLite surfaces that as `unable to open database
+file (out of memory)` - a message that names neither permissions nor the path. `docs/docker.md`
+had claimed a named volume "is created with the right ownership automatically", which is true only
+of an image that ships the directory.
+
+Resolved in the `Dockerfile` by carrying an empty directory out of the build stage with
+`COPY --from=build --chown=65532:65532`: distroless has no shell to `chown` with, so owning the
+directory at copy time is the only mechanism available. Verified by creating a fresh named volume
+and starting the stack.
+
+### The documented `integration diff|approve` invocation could not work
+
+`docs/getting-started.md`, `docs/migration.md` and `docs/integration-authoring.md` all wrote
+`veduta integration approve <id> --config <path>`. Go's `flag` package stops parsing at the first
+non-flag word, so the id was accepted and `--config` and its value became two further positional
+arguments, failing the `NArg() != 1` check and printing usage. Every doc that described the
+approval flow described a command that prints its usage and exits 1 - and it is the flow a
+first-time operator runs immediately after starting the server. Resolved by putting the flags
+first in all three documents.
+
+### Mounting /config read-only breaks approval from the dashboard
+
+`docs/docker.md`'s compose fragment mounted `./config:/config:ro`. Both approval paths write
+`veduta.lock.yaml` into that directory - `cmd/veduta/integration.go` and the
+`POST /api/v1/integrations/{id}/approve` handler in `internal/api/integrations.go` - and
+`integrations.WriteLock` writes atomically, so it needs to create a temporary file in the
+directory too. The server starts and serves normally; only the approve button fails, which is a
+poor place to discover a mount option. Resolved in `compose.yaml`, which mounts `/config`
+writable, with `docs/docker.md` explaining why and when `:ro` is nonetheless reasonable.
+
+### There was no supported way to produce an Argon2id password hash
+
+`auth.mode: password` requires an Argon2id PHC string in `auth.admin.passwordHash`, and Veduta
+refuses to bind a non-loopback address without authentication - so producing that string sat on
+the critical path of every container install, and nothing in the project produced one. The CLI had
+no such command, and neither guide said how to make the value both told the operator to set; only
+the test helpers constructed one. The sole workaround was the reference `argon2` CLI, an
+undocumented extra dependency on a deployment story whose premise is one static binary in a
+shell-less image.
+
+Resolved with `veduta auth hash` (`cmd/veduta/auth.go`, `auth.HashPassword`). The password is read
+from stdin and never from an argument, where it would land in shell history and in every other
+user's `ps`; stdout carries the PHC string alone so it redirects straight into a secret file. The
+default cost is RFC 9106's second recommended configuration (64 MiB, t=3, p=4) - the first, at
+2 GiB, is not a per-login allocation a Pi-class host can make.
+
+The property worth protecting is that generation and verification cannot drift: a `veduta auth
+hash` capable of emitting parameters `serve` then refuses would be worse than no command at all,
+because the failure would appear at start-up on the operator's server with the password already
+committed to a secret store. So the cost bounds moved into one `checkCost` that both
+`parseArgon2ID` and `HashPassword` call, and `HashPassword` parses and verifies its own output
+before returning it. `TestHashPasswordProducesAHashLoginAccepts` drives a real `Service.Login`
+rather than the parser alone, and `TestHashPasswordRefusesWhatVerificationWouldRefuse` walks each
+boundary. The CLI checks the full range before reading stdin, so an unusable cost is refused
+before the operator is asked for a password rather than after - a distinction the first version of
+that test failed to pin, passing on "no password on stdin" instead.
+
+Echo is not suppressed on a terminal: doing that portably means a terminal-handling dependency,
+and CONTRIBUTING caps the direct Go module budget at about ten, which `go.mod` currently sits
+exactly at. The command says plainly that the input is visible, and the docs give the `read -rs`
+form for when it matters. Worth revisiting if `golang.org/x/term` ever earns its place for another
+reason.
+
+### A declarative card with no `params:` block panicked the server
+
+Found by the `compose.yaml` smoke test above, and the reason that file earns its place: nothing
+else had ever run an approved declarative integration from a card that omitted `params:`.
+
+`internal/app/runtime.go` marshals `card.Params` with `json.Marshal`, and a nil map marshals to
+the JSON literal `null` - four bytes, so `declarative.(*instance).Invoke`'s `len(req.Params) > 0`
+guard passed, `Decode` wrote a nil map over the empty one it had been given, and
+`applyParamDefaults` panicked writing the manifest's default into it. The scheduler goroutine has
+no recovery, so the process died; under `restart: unless-stopped` it became a crash loop that
+re-panicked on the same card every few seconds.
+
+Every existing test passed `{}`. None passed `null`, which is the only value an ordinary
+configuration actually produces - `examples/veduta.yaml` gives each declarative card a `params:`
+block, so the example that would have caught this was the one configuration that could not.
+
+Resolved by restoring the empty map after decoding, so "no parameters" and "an empty object" mean
+the same thing and defaults still apply (skipping `applyParamDefaults` on nil would have been the
+smaller change and the wrong one - it would silently drop the manifest's defaults for exactly the
+cards that rely on them). `applyParamDefaults` also returns early on a nil map, because a nil map
+type-asserts to `map[string]any` and the recursion can reach one through a nested `"key": null`.
+`TestInvokeWithNullParamsAppliesDefaultsInsteadOfPanicking` covers `null`, `{}` and no bytes at
+all, and fails against the old code with the original panic.
+
+That the panic was *fatal* is tracked separately and is still open - see
+[03-backlog.md](03-backlog.md).
+
+### No committed compose.yaml, despite A4 planning one
+
+A4 listed `compose.yaml` among its deliverables and it was never written; `docs/docker.md` carried
+two fragments in prose - the Veduta service in one section, the socket proxy in another - that a
+first deployment had to transcribe and merge. Neither was exercised by anything, which is how the
+`:ro` mount and the missing `/data` owner survived.
+
+Resolved with a `compose.yaml` at the repository root that is a deployment rather than a fragment,
+with `docs/docker.md` now explaining its choices instead of restating them. It differs from what
+the docs described in five ways, each verified by running it:
+
+- The password hash is a Compose **secret**, not an environment variable. Compose mounts it at
+  `/run/secrets/VEDUTA_ADMIN_HASH`, which is exactly where `secrets.DefaultResolver` looks first -
+  and `docker inspect` shows a container's environment to anyone who can reach the daemon.
+- `read_only: true`, `cap_drop: [ALL]` and `no-new-privileges`. Nothing outside the two mounts is
+  written, confirmed by running the stack this way through login, a card refresh and the
+  HEALTHCHECK.
+- The port publishes to `127.0.0.1` only. Veduta speaks plain HTTP and its session cookie carries
+  no `Secure` attribute, so a LAN-visible port means session tokens in the clear; a reverse proxy
+  is the intended front door and `8099:8099` is documented as the deliberate downgrade it is.
+- The socket proxy sits behind a `docker` profile and is pinned to a version rather than
+  `:latest`, and its port is not published to the host.
+- No `depends_on` between the two: a missing proxy degrades one card to a warning, which is
+  better than a dashboard that will not start. Observed directly - the first refresh after
+  `up -d` failed DNS resolution and the card recovered on its own at the next one.

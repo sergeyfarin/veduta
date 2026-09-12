@@ -13,7 +13,10 @@ node_modules/
 web/build/*
 !web/build/.gitkeep
 
-# Local state
+# Local state. /config and /secrets are where compose.yaml puts a real deployment's configuration
+# and its password-hash file if you run it from a source checkout; neither belongs in git.
+/config
+/secrets
 /data
 *.db
 *.db-wal

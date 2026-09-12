@@ -23,6 +23,12 @@ data
 # The committed dev binary; the image builds its own.
 /veduta
 
+# A live deployment's own files, if compose.yaml is run from the checkout. Never build inputs, and
+# /secrets in particular must not reach a build context.
+/config
+/secrets
+/compose.yaml
+
 # Documentation and test corpora are not build inputs.
 /docs
 /testdata

@@ -88,10 +88,20 @@ actions, and notifies when something needs attention.
   creates connections and integrations disabled for review, and applies a comment-preserving edit.
 - `veduta health` probes a running instance and exits non-zero if it is not serving — the
   container image is distroless, so the binary is the only thing available to run a health check.
+- `veduta auth hash` produces the Argon2id verifier password mode requires, reading the password
+  from stdin rather than from an argument and writing the PHC string alone to stdout. Generation
+  and verification share one definition of an acceptable cost, so the command cannot emit
+  parameters the server would then refuse at start-up.
 
 **Release**
 - Multi-architecture container images on GHCR for `linux/amd64`, `linux/arm64` and `linux/arm/v7`,
   built on a distroless base with no shell and running as a non-root user.
+- `compose.yaml`: a complete deployment rather than a fragment to adapt. The password hash arrives
+  as a Docker secret at `/run/secrets`, which is where secret resolution looks first and which
+  `docker inspect` does not reveal; the container runs with a read-only root filesystem, no
+  capabilities and `no-new-privileges`; the port publishes to loopback, since Veduta speaks plain
+  HTTP and belongs behind a TLS-terminating proxy; and the read-only Docker socket proxy sits
+  behind a profile, pinned and unpublished.
 - Signed-off, checksummed release archives for `linux/amd64`, `linux/arm64`, `linux/arm/v7` and
   `darwin/arm64`, each carrying the licences and the generated attribution alongside the binary.
 - `THIRD-PARTY-NOTICES.md`, generated from what is actually shipped — Rollup's module graph for
@@ -99,6 +109,13 @@ actions, and notifies when something needs attention.
   the running instance at `/api/v1/notices` and linked from the dashboard footer.
 - An AGPL section 13 source link in the footer and in `GET /api/v1/version`, pointing at the exact
   commit the binary was built from.
+
+### Fixed
+
+- A card that declared no `params:` block crashed the server: its nil parameter map marshalled to
+  the JSON literal `null`, which the declarative runtime decoded over the map it was about to
+  write the manifest's defaults into. Defaults now apply identically whether a card omits
+  `params:` or gives an empty one.
 
 ### Known limitations
 

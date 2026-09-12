@@ -196,12 +196,26 @@ request-id middleware, `GET /api/v1/health`, `GET /api/v1/version` (build info +
 Tests: shutdown drains in-flight requests; panic returns 500 and logs once; health returns 200.
 AC: `SIGTERM` exits cleanly within 5 s; no request logs contain secrets.
 
-**A4 · Container image and release build** · 0.5 d · deps: A2 · ⇉
+**A4 · Container image and release build** · 0.5 d · deps: A2 · ⇉ · **DONE**
 Creates: multi-stage `Dockerfile` (node build → go build → distroless/static, non-root uid),
 `compose.yaml` with the **docker-socket-proxy** default from C5, `.dockerignore`, goreleaser
 config (checksums, multi-arch manifest).
 AC: image < 40 MB; runs as non-root; `docker compose up` serves the dashboard; image builds for
 amd64 and arm64.
+
+AC met, the image and the release workflow in L4 and `compose.yaml` on 2026-09-12: 37.6 MB,
+uid 65532, all three Linux platforms. goreleaser was not used - `release.yml` cross-compiles and
+packages directly, because the archives must also carry the staged first-party plugins from
+`hack/stage-plugins.sh` and be verified against that same distribution list, which is a step
+goreleaser would have to shell out to anyway.
+
+`compose.yaml` was the last piece and arrived late, after the rest of A4 had been treated as
+complete. Writing it is what exposed three defects that a fragment in prose had hidden for two
+days: `/data` had no owner in the image so a fresh named volume was unwritable, `/config` was
+documented `:ro` though both approval paths write the lock file into it, and the documented
+`integration approve <id> --config <path>` could not parse. See
+[03-backlog-resolved.md](03-backlog-resolved.md). The lesson is narrow and worth keeping: a
+deployment artefact that only exists as documentation is not an artefact, because nothing runs it.
 
 ### Phase B — Renderer and design system (4 d) — the product's face
 

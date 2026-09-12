@@ -193,6 +193,14 @@ func (i *instance) Invoke(ctx context.Context, req integrations.InvokeRequest) (
 		if e := d.Decode(&params); e != nil {
 			return integrations.InvokeResponse{}, fmt.Errorf("params: %w", e)
 		}
+		// A card with no `params:` block marshals to the JSON literal `null`, which passes the
+		// length guard above and then decodes *over* the map with nil. Restoring it here rather
+		// than skipping the defaults below: "no parameters given" and "an empty object given"
+		// must mean the same thing, or an operator would have to write `params: {}` to get the
+		// manifest's own defaults.
+		if params == nil {
+			params = map[string]any{}
+		}
 	}
 	applyParamDefaults(op.Params, params)
 	if s := i.params[op.ID]; s != nil {
@@ -332,6 +340,13 @@ func (i *instance) Invoke(ctx context.Context, req integrations.InvokeRequest) (
 }
 
 func applyParamDefaults(schema any, value map[string]any) {
+	// A nil map type-asserts to map[string]any perfectly well, so the recursion below can reach
+	// here with one from a nested `"key": null` in a card's params. Writing a default into it
+	// would panic. Callers that want defaults pass a non-nil map; this returns rather than
+	// allocating one, because a fresh map here would be thrown away by the caller.
+	if value == nil {
+		return
+	}
 	s, ok := schema.(map[string]any)
 	if !ok {
 		return

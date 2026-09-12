@@ -215,3 +215,28 @@ func TestPipelineAcceptsEverySuccessStatus(t *testing.T) {
 		})
 	}
 }
+
+// A card that declares no `params:` block at all. internal/app marshals its nil map to the JSON
+// literal `null`, which is four bytes - so the len(req.Params) > 0 guard passes, Decode writes a
+// nil map over the empty one, and applying the manifest's defaults wrote into it. Every existing
+// test passed `{}` and none passed `null`, which is why a panic on the plainest possible
+// configuration survived: it crashed the scheduler goroutine and took the process down with it.
+func TestInvokeWithNullParamsAppliesDefaultsInsteadOfPanicking(t *testing.T) {
+	m, err := manifestload.Load(filepath.Join("..", "..", "..", "plugins", "immich", "manifest.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	inst, err := New(fixtureBroker{}).Load(context.Background(), integrations.Installed{Manifest: m, Lock: &integrations.LockEntry{ManifestSHA256: m.Digest}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, params := range [][]byte{[]byte(`null`), []byte(`{}`), nil} {
+		resp, err := inst.Invoke(context.Background(), integrations.InvokeRequest{Operation: "recent-assets", Params: params})
+		if err != nil {
+			t.Fatalf("params %s: %v", params, err)
+		}
+		if resp.Document.Title != "Immich" || len(resp.Document.Blocks) != 2 {
+			t.Fatalf("params %s: unexpected document: %#v", params, resp.Document)
+		}
+	}
+}

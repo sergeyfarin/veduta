@@ -129,6 +129,7 @@ This repository currently contains:
 | [hack/capture-upstream-fixtures.sh](hack/capture-upstream-fixtures.sh) | Captures real Immich/Jellyfin responses as reviewed fixtures |
 | [hack/gen-third-party-notices.go](hack/gen-third-party-notices.go) | Generates THIRD-PARTY-NOTICES.md from the shipped bundle and the resolved crate graph |
 | [Dockerfile](Dockerfile) | Distroless multi-arch image; cross-compiles rather than emulating the target |
+| [compose.yaml](compose.yaml) | A complete deployment: Docker secret for the password hash, read-only root filesystem, socket proxy behind a profile |
 | [.github/workflows/release.yml](.github/workflows/release.yml) | Tag-triggered release: archives, checksums, GHCR image, GitHub release (with a dry-run mode) |
 | [CHANGELOG.md](CHANGELOG.md) | Release history, and the pre-1.0 plugin-ABI carve-out |
 | [TRADEMARK.md](TRADEMARK.md) | Use of the name; permissive, and short |

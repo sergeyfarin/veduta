@@ -94,6 +94,20 @@ auth:
     passwordHash: ${secret:VEDUTA_PASSWORD_HASH}
 ```
 
+Produce the hash with the binary. It reads the password from stdin — never from an argument, which would leave it in shell history and in every other user's `ps` — and writes the PHC string to stdout and nothing else, so it can be redirected straight into a secret file:
+
+```sh
+./veduta auth hash > /run/secrets/VEDUTA_PASSWORD_HASH
+```
+
+Terminal input is echoed; to keep the password off the screen, pipe it in instead:
+
+```sh
+read -rs -p 'Password: ' pw && printf %s "$pw" | ./veduta auth hash
+```
+
+The cost defaults to RFC 9106's second recommended configuration (64 MiB, three passes, four lanes); `--memory`, `--iterations` and `--parallelism` adjust it within the range the login path will verify. Because verification reads the cost from the hash itself, raising it later re-costs new passwords without invalidating existing ones.
+
 Set `VEDUTA_PASSWORD_HASH` in the process environment or mount it at `/run/secrets/VEDUTA_PASSWORD_HASH`. A mounted secret file takes precedence. See the [security model](security.md) before exposing the service and the generated [configuration reference](configuration.md) for every field.
 
 Start from [`examples/veduta.yaml`](../examples/veduta.yaml) to connect real services. Connections own base URLs and credentials. Cards bind an integration's abstract slot to a connection ID. External integrations remain inactive until their requested manifest digest, capabilities, routes, and limits are approved:

@@ -26,8 +26,8 @@ priority (which milestone should absorb it, or "before X" for a hard blocker).
 | [`CacheEntries` can't represent an explicit zero](#manifestloadlimitscacheentries-cant-represent-an-explicit-zero) | Integrations | When declarative caching lands |
 | [Approve flow can't grant a limit above its default](#the-documented-approve-flow-has-no-way-to-grant-a-limit-above-its-documented-default) | Docs | Low |
 | [Go plugin SDK needs a WASI-free toolchain](#go-plugin-sdk-requires-a-maintained-wasi-free-toolchain) | Plugins | Low |
-| [No way to produce an Argon2id password hash](#there-is-no-supported-way-to-produce-an-argon2id-password-hash) | Deployment | Before the 0.1.0 tag |
-| [No committed compose.yaml](#no-committed-composeyaml-despite-a4-planning-one) | Deployment | Before the 0.1.0 tag |
+| [The lock file is written 0600, but is meant to be committed](#veduta-lock-yaml-is-written-0600-by-a-uid-the-operator-is-not) | Deployment | Low |
+| [A panicking integration takes the whole process down](#a-panic-inside-a-card-refresh-kills-the-process-and-leaks-its-single-flight-entry) | Scheduler | Medium |
 
 ---
 
@@ -204,34 +204,47 @@ with no forbidden imports and passes the G1 conformance suite plus S1a ARM
 budgets. The Go backend is a separate decision and remains in place; see
 `docs/decisions/0001-backend-language.md`.
 
-### There is no supported way to produce an Argon2id password hash
+### `veduta.lock.yaml` is written 0600 by a uid the operator is not
 
-Found while smoke-testing the container image before a first real deployment, 2026-09-12.
-`auth.mode: password` requires `auth.admin.passwordHash` to be an Argon2id PHC string, and a
-container binding `0.0.0.0` refuses to start without authentication - so producing that string is
-on the critical path of every non-loopback install. Nothing in the project produces one. The CLI
-has no `hash` subcommand (`serve|version|health|manifest|integration|plugin|import`), and neither
-`docs/getting-started.md` nor `docs/docker.md` says how to make the value they both tell the
-operator to set. Only the test helpers in `internal/auth/service_test.go` and
-`internal/api/auth_test.go` construct one, and they are not shipped.
+Found while testing `compose.yaml` against a real approval, 2026-09-12. `integrations.WriteLock`
+creates the file mode `0600`, owned by whoever ran the approval - uid 65532 in a container. The
+file's own header tells the reader to "commit it alongside veduta.yaml", and its content is
+digests, capabilities, routes and limits with no secret in it, so the operator being unable to
+read their own record of granted authority without `sudo` is friction with no security return.
 
-The parser (`internal/auth/password.go`) accepts the standard PHC encoding at `v=19` with
-`m`/`t`/`p`, `m` between 8192 and 262144, `t` 1-10, `p` 1-16, and a 16-64 byte salt and hash - so
-the reference `argon2` CLI's `-e` output is compatible, which is the only workaround today, and it
-is an undocumented extra dependency on a distroless-first deployment story.
+The counter-argument is real and is why this is not simply a bug: the lock file *is* the grant
+record, so anyone who can write it can widen an integration's authority, and `0600` owned by the
+runtime user is a defensible answer to that. But `0600` restricts reading as well as writing, and
+`0644` would keep the write restriction while letting the operator diff and commit it.
 
-Priority: before the 0.1.0 tag. A `veduta auth hash` subcommand reading the password from a
-prompt or stdin is a few dozen lines over the `golang.org/x/crypto/argon2` dependency the verifier
-already pulls in, and removes the last step of a first install that the project cannot do for you.
+Priority: low, and a decision rather than a fix - settle it the next time the approval flow is
+touched. Documented as a consequence in `docs/docker.md` in the meantime.
 
-### No committed compose.yaml, despite A4 planning one
+### A panic inside a card refresh kills the process, and leaks its single-flight entry
 
-Found in the same pass. A4 ("Container image and release build") lists `compose.yaml` with the
-docker-socket-proxy default among its deliverables, and `docs/docker.md` carries two compose
-fragments in prose - the Veduta service in one section and the socket proxy in another, never
-composed into one runnable file. A first deployment therefore starts by transcribing and merging
-two snippets, and neither is exercised by anything.
+Found when a genuine panic in the declarative runtime crashed a running container, 2026-09-12 -
+the nil-params bug now fixed in `internal/integrations/declarative/runtime.go` (see
+[03-backlog-resolved.md](03-backlog-resolved.md)). The panic itself is closed; that it was fatal
+to the process is not.
 
-Priority: before the 0.1.0 tag, and cheap. A single `compose.yaml` at the repository root that the
-docs point at instead of duplicating would also give the image a smoke test that is not
-hand-assembled each time.
+`Manager.runShared` calls `d.Run(runCtx)` with no recovery, on a goroutine started by
+`Manager.Apply`, so a panic anywhere under a card refresh unwinds past `loop` and terminates the
+program. Under `restart: unless-stopped` that is a crash loop: every restart re-runs the same card
+and panics again. Only `internal/api/server.go` has a `recover()`; a card refresh does not come
+through it, so nothing catches this.
+
+The dashboard's whole stance elsewhere is that one failing card degrades to an error tile while
+the rest keeps serving - an unreachable upstream, a denied route and a restricted Docker proxy all
+behave that way. A panic is the one failure mode that does not, and it is the one the operator can
+least diagnose, because the process is gone and the card that caused it is not named.
+
+Not fixed on the spot because it is slightly more than wrapping `d.Run` in a `recover()`. The
+panic also skips `close(f.done)` and the `delete(m.flights, key)` beside it, so every other
+caller waiting on that single-flight entry blocks forever and the key is never reusable. A correct
+fix converts the panic into an ordinary `error` for that card - so it becomes an error tile with
+the stack in the log - and makes the flight cleanup happen on the way out whatever the reason,
+which means restructuring that block around a `defer`. The declarative runtime is in-process; only
+the WASM one is sandboxed, so this is the guest-code path that can actually do it.
+
+Priority: medium, and worth doing before the 0.1.0 tag if there is time - a self-hosted dashboard
+that exits on a bad card is a poor first impression, and the crash loop hides the cause.

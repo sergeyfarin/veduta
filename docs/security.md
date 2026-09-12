@@ -4,7 +4,7 @@ Veduta treats configuration, credentials, integrations, upstream services, and b
 
 ## Access to Veduta
 
-Every production configuration states `auth.mode` explicitly. Password mode stores an Argon2id verifier, creates server-side sessions, rotates CSRF tokens, rate-limits login attempts, and requires a fresh five-minute sudo window for privileged HTTP operations. Forward mode accepts identity headers only from configured proxy addresses; direct clients cannot assert them. Its default `privilegedOperations: cli-only` keeps integration approval at the local CLI unless an administrator deliberately grants configured groups that authority.
+Every production configuration states `auth.mode` explicitly. Password mode stores an Argon2id verifier — produced by `veduta auth hash`, which takes the password on stdin and never as an argument — creates server-side sessions, rotates CSRF tokens, rate-limits login attempts, and requires a fresh five-minute sudo window for privileged HTTP operations. Forward mode accepts identity headers only from configured proxy addresses; direct clients cannot assert them. Its default `privilegedOperations: cli-only` keeps integration approval at the local CLI unless an administrator deliberately grants configured groups that authority.
 
 Unauthenticated mode binds only to loopback. The `--i-know-what-im-doing` override is required for a non-loopback bind and for configurations containing actions or secrets. Prefer real authentication over the override.
 
