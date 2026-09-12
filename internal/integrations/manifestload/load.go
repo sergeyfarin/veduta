@@ -253,6 +253,9 @@ func countTemplate(t *Template, d int, s *templateStats) {
 	if t.Each != nil {
 		countTemplate(t.Each.Item, d+1, s)
 	}
+	if t.Cond != nil {
+		countTemplate(t.Cond.Then, d+1, s)
+	}
 	if t.Asset != nil {
 		countTemplate(t.Asset.Path, d+1, s)
 		for _, v := range t.Asset.Query {
@@ -378,6 +381,18 @@ func compileTemplate(n *yaml.Node, total *int, max int) (*Template, error) {
 				return nil, er
 			}
 			t.Asset = &AssetDef{raw.Slot, p, q, raw.Transform}
+		} else if c, ok := keys["if"]; ok && keys["then"] != nil && len(keys) == 2 {
+			t.Kind = "cond"
+			x, er := compileExprNode(c, max)
+			if er != nil {
+				return nil, er
+			}
+			*total += x.Nodes
+			then, er := compileTemplate(keys["then"], total, max)
+			if er != nil {
+				return nil, er
+			}
+			t.Cond = &CondDef{x, then}
 		} else if _, ok := keys["each"]; ok && keys["as"] != nil && keys["item"] != nil && len(keys) == 3 {
 			t.Kind = "each"
 			x, er := compileExprNode(keys["each"], max)
@@ -569,6 +584,11 @@ func validateOutput(m *Manifest, op *OperationDef, t *Template) error {
 	}
 	if t.Each != nil {
 		if e := validateOutput(m, op, t.Each.Item); e != nil {
+			return e
+		}
+	}
+	if t.Cond != nil {
+		if e := validateOutput(m, op, t.Cond.Then); e != nil {
 			return e
 		}
 	}

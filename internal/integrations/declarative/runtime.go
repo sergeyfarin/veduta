@@ -143,6 +143,12 @@ func (i *instance) compileTemplate(t *manifestload.Template) error {
 		}
 		return i.compileTemplate(t.Each.Item)
 	}
+	if t.Cond != nil {
+		if e := i.compileExpression(t.Cond.If); e != nil {
+			return e
+		}
+		return i.compileTemplate(t.Cond.Then)
+	}
 	for _, x := range t.Object {
 		if e := i.compileTemplate(x); e != nil {
 			return e
@@ -346,6 +352,13 @@ func applyParamDefaults(schema any, value map[string]any) {
 		}
 	}
 }
+
+// omitted is what a false `if` node evaluates to: the enclosing object key or array element is
+// dropped rather than set to null. It is a private sentinel, so no expression, upstream response
+// or literal can produce a value equal to it, and anywhere other than an object or array it
+// survives to the document and is rejected there rather than silently meaning something.
+var omitted = &struct{ name string }{"omitted"}
+
 func (i *instance) eval(ctx context.Context, t *manifestload.Template, env map[string]any, b *budget) (any, error) {
 	if t == nil {
 		return nil, nil
@@ -365,6 +378,9 @@ func (i *instance) eval(ctx context.Context, t *manifestload.Template, env map[s
 			if e != nil {
 				return nil, e
 			}
+			if v == omitted {
+				continue
+			}
 			out = append(out, v)
 		}
 		return out, nil
@@ -375,9 +391,27 @@ func (i *instance) eval(ctx context.Context, t *manifestload.Template, env map[s
 			if e != nil {
 				return nil, e
 			}
+			if v == omitted {
+				continue
+			}
 			out[k] = v
 		}
 		return out, nil
+	case "cond":
+		v, e := run(ctx, i.programs[t.Cond.If], env, b)
+		if e != nil {
+			return nil, e
+		}
+		keep, ok := v.(bool)
+		if !ok {
+			// Deliberately not truthiness: `if: {expr: item.name}` silently keeping every
+			// non-empty name is the kind of near-miss a closed grammar should refuse outright.
+			return nil, fmt.Errorf("if condition evaluated to %T, want a boolean", v)
+		}
+		if !keep {
+			return omitted, nil
+		}
+		return i.eval(ctx, t.Cond.Then, env, b)
 	case "each":
 		v, e := run(ctx, i.programs[t.Each.Expr], env, b)
 		if e != nil {
@@ -399,6 +433,9 @@ func (i *instance) eval(ctx context.Context, t *manifestload.Template, env map[s
 			}
 			if e != nil {
 				return nil, e
+			}
+			if x == omitted {
+				continue
 			}
 			out = append(out, x)
 		}
@@ -445,6 +482,9 @@ func (i *instance) evalString(ctx context.Context, t *manifestload.Template, env
 	v, e := i.eval(ctx, t, env, b)
 	if e != nil {
 		return "", e
+	}
+	if v == omitted {
+		return "", errors.New("an if node cannot omit a request path, query value, header or asset path - use expr's ?: for a fallback value")
 	}
 	s, ok := v.(string)
 	if !ok {

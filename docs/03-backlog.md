@@ -28,7 +28,6 @@ priority (which milestone should absorb it, or "before X" for a hard blocker).
 | [Approve flow can't grant a limit above its default](#the-documented-approve-flow-has-no-way-to-grant-a-limit-above-its-documented-default) | Docs | Low |
 | [Go plugin SDK needs a WASI-free toolchain](#go-plugin-sdk-requires-a-maintained-wasi-free-toolchain) | Plugins | Low |
 | [The declarative runtime never checks a response's status code](#the-declarative-runtime-never-checks-a-responses-status-code) | Integrations | Medium-high |
-| [An absent optional field renders as the string `<nil>`](#an-absent-optional-field-renders-as-the-string-nil) | Integrations | High |
 
 ---
 
@@ -44,18 +43,21 @@ run over the plugin's own fixtures, so the rest of this entry is evidence rather
 Two of the three limitations named above are not real: the four-call fan-out works as four ordinary
 pipeline steps (`plugins/glances` already fans out to six), and per-item poster handling works via
 `filter(recent.items, .imageTags != nil && "Primary" in .imageTags)`. What actually blocks a
-rewrite is three general DSL gaps, none of them specific to Jellyfin and all three worth fixing on
-their own merits: images could not carry alt text (**closed** - see
-[03-backlog-resolved.md](03-backlog-resolved.md)),
-[optional fields render as `<nil>`](#an-absent-optional-field-renders-as-the-string-nil), and
-[non-2xx responses are not detected](#the-declarative-runtime-never-checks-a-responses-status-code).
-The missing-image notice also needs conditional output, which is the smallest of the four.
+rewrite was three general DSL gaps, none of them specific to Jellyfin and all three worth fixing on
+their own merits.
 
-So the question is no longer "is Jellyfin special enough for wasm" - it is "are those four DSL gaps
-worth closing". Until they are, Jellyfin stays wasm, and the honest reason is that the declarative
-runtime cannot yet produce an accessible image or a safe optional field, not that the integration
-is unusually demanding. `internal/integrations/wasm/jellyfin_scenarios_test.go` pins the behaviour
-any replacement has to reproduce (missing poster, missing year, PascalCase upstream, failing
+**Two are now closed** (both in [03-backlog-resolved.md](03-backlog-resolved.md)): an asset node is
+a value, so an image can carry `alt` and `aspect`; and `{ if: …, then: … }` omits a key or element,
+which covers both the missing production year and the missing-image notice. **One remains**:
+[non-2xx responses are not detected](#the-declarative-runtime-never-checks-a-responses-status-code).
+Jellyfin's plugin rejects a non-2xx sub-request explicitly, so a declarative rewrite would silently
+fold an upstream 500 into the card until that is settled.
+
+What is left is therefore one gap and one deliberate reduction: pinning the CamelCase profile drops
+the plugin's PascalCase tolerance. Spike S2 verified a real Jellyfin 12 honours the explicit
+profile, so that is a defensible trade rather than a regression - but it is a decision to take
+knowingly. `internal/integrations/wasm/jellyfin_scenarios_test.go` pins the behaviour any
+replacement has to reproduce (missing poster, missing year, PascalCase upstream, failing
 sub-request). Not blocking anything.
 
 ### `ContainsSecretInDocument` has no production caller
@@ -223,24 +225,6 @@ revisit when an official or maintained Go PDK can emit `wasm32-unknown-unknown`
 with no forbidden imports and passes the G1 conformance suite plus S1a ARM
 budgets. The Go backend is a separate decision and remains in place; see
 `docs/decisions/0001-backend-language.md`.
-
-### An absent optional field renders as the string `<nil>`
-
-Found in the same spike. An upstream field that is sometimes missing has no safe declarative
-spelling. `{expr: item.productionYear}` yields JSON `null`, which fails validation for any typed
-field (`subtitle` is `shortText`, a string with no null member) and takes down the **whole
-document**, not just that item. Wrapping it as `{expr: string(item.productionYear)}` is worse: it
-produces the literal four-character string `<nil>`, which validates happily and renders on the
-card. Verified against a fixture with no `productionYear`: the poster's subtitle came out as
-`"<nil>"`.
-
-So today an author's choice is between a card that dies on one missing field and a card that
-displays `<nil>` to the user, with nothing in CI to catch either - the shipped manifests avoid it
-only because their fixtures happen to be complete. The wasm side has no such problem: Rust's
-`Option` omits the key. Priority: high - this needs an omission primitive (a conditional
-value wrapper, or a documented "omit" sentinel), and it is a prerequisite for any further
-declarative integration that reads an optional upstream field, independent of what happens to
-Jellyfin.
 
 ### The declarative runtime never checks a response's status code
 

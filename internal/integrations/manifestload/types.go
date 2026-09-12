@@ -110,15 +110,25 @@ type EachDef struct {
 	Item *Template
 }
 
+// CondDef renders Then only when If is true, and otherwise omits what contains it: the object key
+// or the array element disappears rather than becoming null. There is no else branch on purpose -
+// a fallback *value* is what expr's `?:` is for, while this node exists for the case a value
+// cannot express, which is the key not being there at all.
+type CondDef struct {
+	If   *Expression
+	Then *Template
+}
+
 // Template is one node in the closed declarative output grammar.
 type Template struct {
-	Kind    string // literal, object, array, expr, asset, each
+	Kind    string // literal, object, array, expr, asset, each, cond
 	Literal any
 	Object  map[string]*Template
 	Array   []*Template
 	Expr    *Expression
 	Asset   *AssetDef
 	Each    *EachDef
+	Cond    *CondDef
 	Node    *yaml.Node
 }
 

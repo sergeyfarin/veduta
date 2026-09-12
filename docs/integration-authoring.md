@@ -30,6 +30,16 @@ Validate trust state while authoring:
 
 A declarative operation supplies a bounded `pipeline` and `output`. Each pipeline request names a declared slot and a route already present in the manifest. Expressions select and transform response data. Output templates produce a Widget Document, and declared signals expose typed values for history and rules.
 
+An upstream field that is sometimes missing needs `{ if: …, then: … }`, which omits the key or list element entirely rather than emitting `null`:
+
+```yaml
+subtitle:
+  if:   { expr: "item.productionYear != nil" }
+  then: { expr: "string(item.productionYear)" }
+```
+
+Reaching for `{ expr: "string(item.productionYear)" }` alone is the trap: it renders the literal text `<nil>` when the field is absent, and it validates, so nothing catches it before a user sees it. A bare `{ expr: item.productionYear }` is at least loud — `null` fails document validation — but it fails the whole card, not just that field. The condition must be a boolean; a truthy value is refused rather than coerced.
+
 [`plugins/immich/manifest.yaml`](../plugins/immich/manifest.yaml) demonstrates asset routes and image output. [`plugins/glances/manifest.yaml`](../plugins/glances/manifest.yaml) demonstrates metrics and signals. [`plugins/beszel/manifest.yaml`](../plugins/beszel/manifest.yaml) demonstrates an authorised record selected from a collection.
 
 Run the focused loader and runtime tests while editing a manifest:

@@ -396,3 +396,26 @@ pre-0.1, the only asset node in existence was Immich's, and a manifest edit is d
 any third-party manifest would need re-approval regardless. Nothing about the authority model
 changed - `validateOutput` walks templates generically, so an asset node nested at `image.ref` is
 still checked against the operation's `use: asset` routes exactly as before.
+
+### An absent optional field rendered as the string `<nil>`
+
+Found in the same spike as the asset-node gap. An upstream field that is sometimes missing had no
+safe declarative spelling. `{expr: item.productionYear}` yields JSON `null`, which fails validation
+for any typed field (`subtitle` is `shortText`, a string with no null member) and takes down the
+**whole document**, not just that item. The obvious workaround was worse:
+`{expr: string(item.productionYear)}` produces the literal four-character string `<nil>`, which
+validates happily and renders on the card. Verified against a fixture with no `productionYear` -
+the poster's subtitle came out as `"<nil>"`. So the author's choice was between a card that dies on
+one missing field and a card that shows `<nil>` to the user, with nothing in CI to catch either:
+the shipped manifests avoided it only because their fixtures happen to be complete.
+
+Resolved with a fifth node kind, `{ if: {expr}, then: … }`, which omits the object key or array
+element that contains it rather than emitting null - the one thing a value cannot express. Three
+deliberate restrictions: the condition must be a **boolean**, since truthiness would make
+`if: {expr: item.name}` quietly mean "when the name is non-empty"; there is **no else**, because a
+fallback value is what expr's `?:` already does; and an omitted value is **refused** in a request
+path, query value, header or asset path, where "no value" is not a meaningful request. The
+condition counts against `exprNodes` and the node against the template budget like any other.
+
+This also closes the conditional-output half of the Jellyfin question: a missing-image notice is
+now expressible declaratively.

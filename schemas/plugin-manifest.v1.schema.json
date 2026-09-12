@@ -640,6 +640,21 @@
         }
       }
     },
+    "condNode": {
+      "type": "object",
+      "required": [
+        "if",
+        "then"
+      ],
+      "additionalProperties": false,
+      "description": "Renders `then` only when `if` is true, and otherwise omits the object key or array element that contains it - the one thing a value cannot express. An absent optional upstream field has no safe spelling without it: a bare {expr} yields null and fails validation for any typed field, while wrapping it in string() yields the literal text \"<nil>\". There is no else branch: a fallback value is what expr's ?: is for. `if` must evaluate to a boolean, not a truthy value.",
+      "properties": {
+        "if": {
+          "$ref": "#/$defs/exprNode"
+        },
+        "then": {}
+      }
+    },
     "valueNode": {
       "oneOf": [
         {
@@ -655,6 +670,9 @@
         },
         {
           "$ref": "#/$defs/assetNode"
+        },
+        {
+          "$ref": "#/$defs/condNode"
         }
       ]
     },

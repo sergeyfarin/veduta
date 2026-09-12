@@ -367,7 +367,7 @@ request not covered by any declared route.
 ### Declarative integrations (v0.1 primary mechanism)
 
 Same manifest with `runtime: declarative`, plus a `pipeline` and an `output` template. The template
-grammar has exactly four node kinds and **no name-based inference** — a string is always a literal
+grammar has exactly five node kinds and **no name-based inference** — a string is always a literal
 string, and an expression is always an `{expr}` node:
 
 | Node | Meaning |
@@ -376,6 +376,7 @@ string, and an expression is always an `{expr}` node:
 | `{ expr: "stats.photos" }` | evaluate an `expr` expression |
 | `{ asset: { slot, path, query } }` | mint a signed image ref (checked against `use: asset` routes). A **value**, like a literal or an `{expr}`: it evaluates to the ref string, so it is written as `ref: { asset: … }` and the surrounding `image` is free to carry `alt`, `aspect` and `blurhash` |
 | `{ each: {expr}, as: name, item: {…} }` | repeat a template over a list |
+| `{ if: {expr}, then: {…} }` | render `then` only when `if` is **true**, and otherwise omit the containing object key or array element. The one thing a value cannot express: an optional upstream field has no safe spelling otherwise, since a bare `{expr}` yields `null` and fails validation for any typed field, while `string()` around it yields the literal text `<nil>`. A truthy condition is refused, not coerced; a fallback *value* is what expr's `?:` is for, so there is no `else` |
 
 ```yaml
       pipeline:
