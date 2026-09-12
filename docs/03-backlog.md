@@ -27,6 +27,10 @@ priority (which milestone should absorb it, or "before X" for a hard blocker).
 | [`CacheEntries` can't represent an explicit zero](#manifestloadlimitscacheentries-cant-represent-an-explicit-zero) | Integrations | When declarative caching lands |
 | [Approve flow can't grant a limit above its default](#the-documented-approve-flow-has-no-way-to-grant-a-limit-above-its-documented-default) | Docs | Low |
 | [Go plugin SDK needs a WASI-free toolchain](#go-plugin-sdk-requires-a-maintained-wasi-free-toolchain) | Plugins | Low |
+| [Release archives ship no first-party plugins](#release-archives-ship-no-first-party-plugins) | Release | Medium |
+| [The declarative runtime never checks a response's status code](#the-declarative-runtime-never-checks-a-responses-status-code) | Integrations | Medium-high |
+| [A declarative asset node cannot carry `alt` or `aspect`](#a-declarative-asset-node-cannot-carry-alt-or-aspect) | Integrations | High |
+| [An absent optional field renders as the string `<nil>`](#an-absent-optional-field-renders-as-the-string-nil) | Integrations | High |
 
 ---
 
@@ -35,12 +39,25 @@ priority (which milestone should absorb it, or "before X" for a hard blocker).
 After the Approach-A rewrite (recorded in [03-backlog-resolved.md](03-backlog-resolved.md)), the
 Jellyfin plugin no longer does "send auth header →
 resolve the current user → list": it does one sorted `GET /Items`, two typed `GET /Items` counts
-and `GET /Sessions`, then folds them into one document. That is still cross-endpoint aggregation a
-linear declarative pipeline cannot express today (fan-out to four calls, per-item poster handling,
-a missing-image notice), but it is closer to the declarative line than the original design was.
-Worth deciding deliberately, when G-phase is revisited, whether G4 stays the WASM vertical slice or
-the proof case moves to an integration that genuinely needs per-request branching / retry logic.
-Not blocking anything.
+and `GET /Sessions`, then folds them into one document.
+
+**Measured, 2026-09-12.** A throwaway declarative manifest was built against the current DSL and
+run over the plugin's own fixtures, so the rest of this entry is evidence rather than estimate.
+Two of the three limitations named above are not real: the four-call fan-out works as four ordinary
+pipeline steps (`plugins/glances` already fans out to six), and per-item poster handling works via
+`filter(recent.items, .imageTags != nil && "Primary" in .imageTags)`. What actually blocks a
+rewrite is three general DSL gaps, none of them specific to Jellyfin and all three worth fixing on
+their own merits: [images cannot carry alt text](#a-declarative-asset-node-cannot-carry-alt-or-aspect),
+[optional fields render as `<nil>`](#an-absent-optional-field-renders-as-the-string-nil), and
+[non-2xx responses are not detected](#the-declarative-runtime-never-checks-a-responses-status-code).
+The missing-image notice also needs conditional output, which is the smallest of the four.
+
+So the question is no longer "is Jellyfin special enough for wasm" - it is "are those four DSL gaps
+worth closing". Until they are, Jellyfin stays wasm, and the honest reason is that the declarative
+runtime cannot yet produce an accessible image or a safe optional field, not that the integration
+is unusually demanding. `internal/integrations/wasm/jellyfin_scenarios_test.go` pins the behaviour
+any replacement has to reproduce (missing poster, missing year, PascalCase upstream, failing
+sub-request). Not blocking anything.
 
 ### `ContainsSecretInDocument` has no production caller
 
@@ -207,3 +224,88 @@ revisit when an official or maintained Go PDK can emit `wasm32-unknown-unknown`
 with no forbidden imports and passes the G1 conformance suite plus S1a ARM
 budgets. The Go backend is a separate decision and remains in place; see
 `docs/decisions/0001-backend-language.md`.
+
+### A declarative asset node cannot carry `alt` or `aspect`
+
+Found by building a throwaway declarative Jellyfin manifest against the current DSL. An asset node
+is only recognised when `asset` is the *sole* key of its object (`load.go`'s
+`keys["asset"]; ok && len(keys) == 1`), and it evaluates to exactly `map[string]any{"ref": ref}`.
+But `widget-document.v1`'s `image` is `{ref, alt, aspect, blurhash}` with `additionalProperties:
+false`, so there is no way to write a broker-minted image *and* its alt text: adding `alt` beside
+`asset` stops it being an asset node, and nesting it under `ref` produces `{"ref": {"ref": …}}`.
+Confirmed by running it - the document is rejected with 80 schema problems.
+
+This is not a Jellyfin problem. **It means no declarative integration can give an image alt text**,
+and `plugins/immich/manifest.yaml` ships exactly that: an `image-grid` whose photos have no `alt`,
+because the DSL makes it impossible, not because it was forgotten. Every wasm plugin can do this
+(`plugins/jellyfin/src/lib.rs` sets both `alt` and `aspect`), so declarative integrations are
+second-class on an accessibility property rather than on a power-user one. Priority: high - decide
+the node shape (an `image` block that accepts `ref: {asset: …}` as a value, or an asset node with
+optional sibling keys) and fix Immich's photos in the same change.
+
+### An absent optional field renders as the string `<nil>`
+
+Found in the same spike. An upstream field that is sometimes missing has no safe declarative
+spelling. `{expr: item.productionYear}` yields JSON `null`, which fails validation for any typed
+field (`subtitle` is `shortText`, a string with no null member) and takes down the **whole
+document**, not just that item. Wrapping it as `{expr: string(item.productionYear)}` is worse: it
+produces the literal four-character string `<nil>`, which validates happily and renders on the
+card. Verified against a fixture with no `productionYear`: the poster's subtitle came out as
+`"<nil>"`.
+
+So today an author's choice is between a card that dies on one missing field and a card that
+displays `<nil>` to the user, with nothing in CI to catch either - the shipped manifests avoid it
+only because their fixtures happen to be complete. The wasm side has no such problem: Rust's
+`Option` omits the key. Priority: high - this needs an omission primitive (a conditional
+value wrapper, or a documented "omit" sentinel), and it is a prerequisite for any further
+declarative integration that reads an optional upstream field, independent of what happens to
+Jellyfin.
+
+### The declarative runtime never checks a response's status code
+
+Found while scoping a declarative rewrite of Jellyfin, but it is not specific to that: it affects
+every shipped declarative integration today. `instance.Invoke` calls
+`decodeJSON(resp.Body, ...)` on whatever the broker returns and never reads `resp.StatusCode` -
+`grep -n StatusCode internal/integrations/declarative/runtime.go` finds nothing. So an upstream
+401, 403 or 500 whose body happens to be JSON is folded into the document as if it were data, and
+one whose body is HTML surfaces as a JSON decode error naming the pipeline step rather than the
+status. Immich's own manifest comments that `/server/statistics` returns 403 for a non-admin key,
+which is exactly this path. The wasm side does not share the defect: `plugins/jellyfin/src/lib.rs`
+rejects non-2xx explicitly, which is a fidelity gap any declarative rewrite would have to close
+first. Priority: medium-high - decide whether non-2xx is a hard pipeline error by default, and
+whether a step needs an `allowStatus`-style escape for integrations that read 404 as "absent".
+Whatever is chosen becomes a golden-document contract, so settle it before more declarative
+integrations are written against the current silent behaviour.
+
+### The declarative runtime never checks a response's status code
+
+Found while scoping a declarative rewrite of Jellyfin, but it is not specific to that: it affects
+every shipped declarative integration today. `instance.Invoke` calls
+`decodeJSON(resp.Body, ...)` on whatever the broker returns and never reads `resp.StatusCode` -
+`grep -n StatusCode internal/integrations/declarative/runtime.go` finds nothing. So an upstream
+401, 403 or 500 whose body happens to be JSON is folded into the document as if it were data, and
+one whose body is HTML surfaces as a JSON decode error naming the pipeline step rather than the
+status. Immich's own manifest comments that `/server/statistics` returns 403 for a non-admin key,
+which is exactly this path. The wasm side does not share the defect: `plugins/jellyfin/src/lib.rs`
+rejects non-2xx explicitly, which is a fidelity gap any declarative rewrite would have to close
+first. Priority: medium-high - decide whether non-2xx is a hard pipeline error by default, and
+whether a step needs an `allowStatus`-style escape for integrations that read 404 as "absent".
+Whatever is chosen becomes a golden-document contract, so settle it before more declarative
+integrations are written against the current silent behaviour.
+
+### Release archives ship no first-party plugins
+
+Noticed while reviewing whether plugins must live inside the single binary. They already do not:
+`integrations.LoadManifest(src.Dir)` reads a manifest (and its `module:` wasm) from an arbitrary
+directory at runtime, so side-loading is the only loading path there has ever been, and a
+third-party integration uses exactly the same one a first-party integration does. The gap is on the
+distribution side: `.github/workflows/release.yml` stages only `veduta` plus the licence and notice
+files into each tarball, so a user who downloads a release gets none of `plugins/glances`,
+`plugins/immich` or `plugins/jellyfin`, and no documented directory to put them in. Today they must
+clone the repository to use integrations the project presents as shipped (`jellyfin.wasm` is
+committed, so cloning is enough - no Rust toolchain is involved). Priority: medium, and a prerequisite for the deferred "plugin marketplace,
+signing and OCI distribution" line in `docs/01-architecture.md` section 15: settle the on-disk
+location and the manifest/module verification a side-loaded directory gets before there is an
+ecosystem distributing into it. Decide alongside it whether `plugins/jellyfin/jellyfin.wasm` is a
+release artefact at all or stays a build-from-source conformance example - see
+[the open question above](#open-question-does-jellyfin-still-earn-being-the-wasm-proof-case).

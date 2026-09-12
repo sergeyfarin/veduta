@@ -1,0 +1,8 @@
+{
+  "items": [
+    {"id": "b1", "name": "Solaris", "productionYear": 1972, "imageTags": {"Primary": "tag-b1"}},
+    {"id": "b2", "name": "Stalker", "productionYear": 1979},
+    {"id": "b3", "name": "Mirror", "productionYear": 1975, "imageTags": {"Backdrop": "tag-b3"}}
+  ],
+  "totalRecordCount": 3
+}

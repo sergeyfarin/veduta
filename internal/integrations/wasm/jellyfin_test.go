@@ -23,7 +23,17 @@ import (
 type jellyfinBroker struct {
 	t       *testing.T
 	dataDir string
-	calls   int
+	// scenarioDir, when set, is consulted for each fixture before dataDir, so a scenario file
+	// need only contain the responses whose shape it is actually varying.
+	scenarioDir string
+	// failPath and failStatus make one endpoint answer non-2xx, to pin down whether a single
+	// failed sub-request degrades the document or fails the whole invocation.
+	failPath   string
+	failStatus int
+	// wantLimit is the limit the list request is expected to carry; "" means the default 5.
+	wantLimit  string
+	calls      int
+	assetPaths []string
 }
 
 func (b *jellyfinBroker) HTTP(_ context.Context, _ capabilities.Grant, request capabilities.HTTPRequest) (capabilities.HTTPResponse, error) {
@@ -31,6 +41,12 @@ func (b *jellyfinBroker) HTTP(_ context.Context, _ capabilities.Grant, request c
 	b.calls++
 	if request.Header["Accept"] != `application/json; profile="CamelCase"` {
 		b.t.Errorf("Accept = %q", request.Header["Accept"])
+	}
+	if b.wantLimit == "" {
+		b.wantLimit = "5"
+	}
+	if b.failPath != "" && request.Path == b.failPath {
+		return capabilities.HTTPResponse{StatusCode: b.failStatus, Body: []byte(`{"error":"upstream said no"}`)}, nil
 	}
 	fixture := ""
 	switch request.Path {
@@ -41,34 +57,50 @@ func (b *jellyfinBroker) HTTP(_ context.Context, _ capabilities.Grant, request c
 		switch request.Query["includeItemTypes"] {
 		case "Movie,Series":
 			fixture = "recent.json"
-			wantQuery(b.t, request.Query, "recursive", "true", "sortBy", "DateCreated", "sortOrder", "Descending", "limit", "5", "fields", "ProductionYear", "imageTypeLimit", "1", "enableImageTypes", "Primary")
-			if _, ok := request.Query["userId"]; ok {
-				b.t.Errorf("list request carried a userId: %q", request.Query["userId"])
-			}
+			// Asserted as the whole map, not a subset: an extra query key is a different
+			// upstream request and a different route grant, so a declarative rewrite has to
+			// reproduce the set exactly, not merely the keys someone remembered to check.
+			wantQuery(b.t, "list", request.Query, map[string]string{
+				"recursive": "true", "includeItemTypes": "Movie,Series", "sortBy": "DateCreated",
+				"sortOrder": "Descending", "limit": b.wantLimit, "fields": "ProductionYear",
+				"imageTypeLimit": "1", "enableImageTypes": "Primary", "enableImages": "true",
+			})
 		case "Movie":
 			fixture = "movies.json"
-			wantQuery(b.t, request.Query, "recursive", "true", "limit", "1")
+			wantQuery(b.t, "movie count", request.Query, map[string]string{"recursive": "true", "includeItemTypes": "Movie", "limit": "1"})
 		case "Series":
 			fixture = "shows.json"
-			wantQuery(b.t, request.Query, "recursive", "true", "limit", "1")
+			wantQuery(b.t, "series count", request.Query, map[string]string{"recursive": "true", "includeItemTypes": "Series", "limit": "1"})
 		default:
 			b.t.Fatalf("unexpected item type %q", request.Query["includeItemTypes"])
 		}
 	case "/Sessions":
 		fixture = "sessions.json"
+		wantQuery(b.t, "sessions", request.Query, map[string]string{})
 	default:
 		b.t.Fatalf("unexpected Jellyfin request %s", request.Path)
 	}
-	body, err := os.ReadFile(filepath.Join(b.dataDir, fixture))
+	body, err := os.ReadFile(b.fixture(fixture))
 	return capabilities.HTTPResponse{StatusCode: 200, Body: body}, err
 }
 
-func wantQuery(t *testing.T, got map[string]string, pairs ...string) {
-	t.Helper()
-	for i := 0; i < len(pairs); i += 2 {
-		if got[pairs[i]] != pairs[i+1] {
-			t.Errorf("query[%s] = %q, want %q", pairs[i], got[pairs[i]], pairs[i+1])
+func (b *jellyfinBroker) fixture(name string) string {
+	if b.scenarioDir != "" {
+		scoped := filepath.Join(b.scenarioDir, name)
+		if _, err := os.Stat(scoped); err == nil {
+			return scoped
 		}
+	}
+	return filepath.Join(b.dataDir, name)
+}
+
+func wantQuery(t *testing.T, label string, got, want map[string]string) {
+	t.Helper()
+	if got == nil {
+		got = map[string]string{}
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("%s query = %v, want %v", label, got, want)
 	}
 }
 
@@ -83,7 +115,13 @@ func (b *jellyfinBroker) AssetRef(_ context.Context, _ capabilities.Grant, _ str
 	if transform.Width != 320 || transform.Format != "" {
 		b.t.Errorf("transform = %+v", transform)
 	}
+	b.assetPaths = append(b.assetPaths, path)
 	id := strings.Split(path, "/")[2]
+	if path != "/Items/"+id+"/Images/Primary" {
+		return "", errors.New("unexpected asset path " + path)
+	}
+	// The golden document pins these five refs; scenario fixtures use other item ids and only
+	// need a ref that is stable and traceable back to the item that asked for it.
 	refs := map[string]string{
 		"a1": "v1.eyJjIjoiamVsbHlmaW4ifQ.9f2c1a7b",
 		"a2": "v1.YTI.c2lnMg",
@@ -91,11 +129,10 @@ func (b *jellyfinBroker) AssetRef(_ context.Context, _ capabilities.Grant, _ str
 		"a4": "v1.YTQ.c2lnNA",
 		"a5": "v1.YTU.c2lnNQ",
 	}
-	ref, ok := refs[id]
-	if !ok || path != "/Items/"+id+"/Images/Primary" {
-		return "", errors.New("unexpected asset path " + path)
+	if ref, ok := refs[id]; ok {
+		return ref, nil
 	}
-	return ref, nil
+	return "v1.test." + id, nil
 }
 func (*jellyfinBroker) Log(capabilities.Grant, string, string, map[string]any) error {
 	return errors.New("unexpected log call")
@@ -104,27 +141,35 @@ func (*jellyfinBroker) Emit(context.Context, capabilities.Grant, capabilities.Ev
 	return errors.New("unexpected event call")
 }
 
-func TestJellyfinPluginMatchesGoldenDocument(t *testing.T) {
-	pluginDir := filepath.Join("..", "..", "..", "plugins", "jellyfin")
-	manifest, err := manifestload.Load(filepath.Join(pluginDir, "manifest.yaml"))
+const jellyfinPluginDir = "../../../plugins/jellyfin"
+
+// invokeJellyfin runs the real plugin against broker and returns whatever the invocation produced,
+// error included: the scenario tests exist precisely to pin down which upstream shapes fail.
+func invokeJellyfin(t *testing.T, broker *jellyfinBroker, params string) (integrations.InvokeResponse, error) {
+	t.Helper()
+	manifest, err := manifestload.Load(filepath.Join(jellyfinPluginDir, "manifest.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	limits := integrations.EffectiveLimits{MemoryMB: 64, TimeoutMs: 3000, OutputKB: 64, HTTPRequests: 4, ResponseMB: 4, CacheEntries: 64, InputMB: 4, JSONDepth: 32, JSONNodes: 200000, ExprNodes: 512, Iterations: 20000, RequestBodyKB: 64, HostCalls: 10, CacheBytesKB: 256}
 	routes := manifestRoutes(manifest)
 	lock := &integrations.LockEntry{ManifestSHA256: manifest.Digest, ModuleSHA256: manifest.ModuleSHA256, Version: manifest.Version, Runtime: "wasm", Capabilities: []string{"http", "assets"}, Routes: lockRoutes(routes), EffectiveLimits: limits}
-	broker := &jellyfinBroker{t: t, dataDir: filepath.Join(pluginDir, "testdata")}
 	runtime, err := wasmrt.NewWithBroker(context.Background(), filepath.Join(t.TempDir(), "cache"), broker)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func() { _ = runtime.Close(context.Background()) }()
+	t.Cleanup(func() { _ = runtime.Close(context.Background()) })
 	instance, err := runtime.Load(context.Background(), integrations.Installed{Manifest: manifest, Lock: lock})
 	if err != nil {
 		t.Fatal(err)
 	}
 	grant := capabilities.NewGrant("jellyfin", "1.0.0", "jellyfin-recent", map[string]string{"server": "jellyfin"}, capabilities.NewCapSet("http", "assets"), routes, routes, nil, capabilities.Limits{HTTPRequests: 4, ResponseMB: 4, HostCalls: 10}, capabilities.ExecutionIdentity{})
-	response, err := instance.Invoke(context.Background(), integrations.InvokeRequest{Operation: "recently-added", Params: json.RawMessage(`{"limit":5}`), Grant: grant})
+	return instance.Invoke(context.Background(), integrations.InvokeRequest{Operation: "recently-added", Params: json.RawMessage(params), Grant: grant})
+}
+
+func TestJellyfinPluginMatchesGoldenDocument(t *testing.T) {
+	broker := &jellyfinBroker{t: t, dataDir: filepath.Join(jellyfinPluginDir, "testdata")}
+	response, err := invokeJellyfin(t, broker, `{"limit":5}`)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,0 +1,7 @@
+{
+  "items": [
+    {"id": "c1", "name": "Metropolis", "productionYear": 1927, "imageTags": {"Primary": "tag-c1"}},
+    {"id": "c2", "name": "Untitled Archive Reel", "imageTags": {"Primary": "tag-c2"}}
+  ],
+  "totalRecordCount": 2
+}
