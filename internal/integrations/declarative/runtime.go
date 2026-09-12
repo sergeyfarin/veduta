@@ -273,6 +273,14 @@ func (i *instance) Invoke(ctx context.Context, req integrations.InvokeRequest) (
 		if e != nil {
 			return integrations.InvokeResponse{}, e
 		}
+		// An upstream error is an error, not data. Without this the body was decoded regardless of
+		// status, so a 401, 403 or 500 whose body happens to be JSON was folded into the document
+		// as though it were the answer, and one whose body is HTML surfaced as a JSON decode
+		// failure naming the step rather than the status. The wasm side has always rejected
+		// non-2xx explicitly; this makes the two runtimes agree.
+		if resp.StatusCode < 200 || resp.StatusCode > 299 {
+			return integrations.InvokeResponse{}, fmt.Errorf("pipeline %s: %s %s returned HTTP %d", step.As, step.Request.Method, path, resp.StatusCode)
+		}
 		decoded, e := decodeJSON(resp.Body, b, i.manifest.Limits.JSONDepth)
 		if e != nil {
 			return integrations.InvokeResponse{}, fmt.Errorf("pipeline %s: %w", step.As, e)

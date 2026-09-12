@@ -27,7 +27,6 @@ priority (which milestone should absorb it, or "before X" for a hard blocker).
 | [`CacheEntries` can't represent an explicit zero](#manifestloadlimitscacheentries-cant-represent-an-explicit-zero) | Integrations | When declarative caching lands |
 | [Approve flow can't grant a limit above its default](#the-documented-approve-flow-has-no-way-to-grant-a-limit-above-its-documented-default) | Docs | Low |
 | [Go plugin SDK needs a WASI-free toolchain](#go-plugin-sdk-requires-a-maintained-wasi-free-toolchain) | Plugins | Low |
-| [The declarative runtime never checks a response's status code](#the-declarative-runtime-never-checks-a-responses-status-code) | Integrations | Medium-high |
 
 ---
 
@@ -48,12 +47,10 @@ their own merits.
 
 **Two are now closed** (both in [03-backlog-resolved.md](03-backlog-resolved.md)): an asset node is
 a value, so an image can carry `alt` and `aspect`; and `{ if: …, then: … }` omits a key or element,
-which covers both the missing production year and the missing-image notice. **One remains**:
-[non-2xx responses are not detected](#the-declarative-runtime-never-checks-a-responses-status-code).
-Jellyfin's plugin rejects a non-2xx sub-request explicitly, so a declarative rewrite would silently
-fold an upstream 500 into the card until that is settled.
+which covers both the missing production year and the missing-image notice. **The third is closed too**: a non-2xx pipeline
+response now fails the invocation, matching what the wasm plugin has always done.
 
-What is left is therefore one gap and one deliberate reduction: pinning the CamelCase profile drops
+What is left is therefore no DSL gap at all, only one deliberate reduction: pinning the CamelCase profile drops
 the plugin's PascalCase tolerance. Spike S2 verified a real Jellyfin 12 honours the explicit
 profile, so that is a defensible trade rather than a regression - but it is a decision to take
 knowingly. `internal/integrations/wasm/jellyfin_scenarios_test.go` pins the behaviour any
@@ -225,36 +222,3 @@ revisit when an official or maintained Go PDK can emit `wasm32-unknown-unknown`
 with no forbidden imports and passes the G1 conformance suite plus S1a ARM
 budgets. The Go backend is a separate decision and remains in place; see
 `docs/decisions/0001-backend-language.md`.
-
-### The declarative runtime never checks a response's status code
-
-Found while scoping a declarative rewrite of Jellyfin, but it is not specific to that: it affects
-every shipped declarative integration today. `instance.Invoke` calls
-`decodeJSON(resp.Body, ...)` on whatever the broker returns and never reads `resp.StatusCode` -
-`grep -n StatusCode internal/integrations/declarative/runtime.go` finds nothing. So an upstream
-401, 403 or 500 whose body happens to be JSON is folded into the document as if it were data, and
-one whose body is HTML surfaces as a JSON decode error naming the pipeline step rather than the
-status. Immich's own manifest comments that `/server/statistics` returns 403 for a non-admin key,
-which is exactly this path. The wasm side does not share the defect: `plugins/jellyfin/src/lib.rs`
-rejects non-2xx explicitly, which is a fidelity gap any declarative rewrite would have to close
-first. Priority: medium-high - decide whether non-2xx is a hard pipeline error by default, and
-whether a step needs an `allowStatus`-style escape for integrations that read 404 as "absent".
-Whatever is chosen becomes a golden-document contract, so settle it before more declarative
-integrations are written against the current silent behaviour.
-
-### The declarative runtime never checks a response's status code
-
-Found while scoping a declarative rewrite of Jellyfin, but it is not specific to that: it affects
-every shipped declarative integration today. `instance.Invoke` calls
-`decodeJSON(resp.Body, ...)` on whatever the broker returns and never reads `resp.StatusCode` -
-`grep -n StatusCode internal/integrations/declarative/runtime.go` finds nothing. So an upstream
-401, 403 or 500 whose body happens to be JSON is folded into the document as if it were data, and
-one whose body is HTML surfaces as a JSON decode error naming the pipeline step rather than the
-status. Immich's own manifest comments that `/server/statistics` returns 403 for a non-admin key,
-which is exactly this path. The wasm side does not share the defect: `plugins/jellyfin/src/lib.rs`
-rejects non-2xx explicitly, which is a fidelity gap any declarative rewrite would have to close
-first. Priority: medium-high - decide whether non-2xx is a hard pipeline error by default, and
-whether a step needs an `allowStatus`-style escape for integrations that read 404 as "absent".
-Whatever is chosen becomes a golden-document contract, so settle it before more declarative
-integrations are written against the current silent behaviour.
-

@@ -366,9 +366,16 @@ request not covered by any declared route.
 
 ### Declarative integrations (v0.1 primary mechanism)
 
-Same manifest with `runtime: declarative`, plus a `pipeline` and an `output` template. The template
-grammar has exactly five node kinds and **no name-based inference** — a string is always a literal
-string, and an expression is always an `{expr}` node:
+Same manifest with `runtime: declarative`, plus a `pipeline` and an `output` template.
+
+A pipeline step whose response is not 2xx **fails the invocation**, and the card shows the error
+with its status rather than a document. An upstream error is an error, not data: a 401, 403 or 500
+whose body happens to be JSON must not be folded into a card as though it were the answer. There is
+no per-step opt-out today — if an integration ever genuinely needs to read 404 as "absent", that is
+the point to add one, deliberately and per step.
+
+The template grammar has exactly five node kinds and **no name-based inference** — a string is
+always a literal string, and an expression is always an `{expr}` node:
 
 | Node | Meaning |
 | --- | --- |

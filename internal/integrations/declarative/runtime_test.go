@@ -5,8 +5,11 @@ package declarative
 import (
 	"context"
 	"encoding/json"
+	"net/http"
 	"net/url"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -29,7 +32,7 @@ func (fixtureBroker) HTTP(_ context.Context, _ capabilities.Grant, r capabilitie
 		"/api/assets/statistics":           `{"images":1,"videos":2,"total":3}`,
 		"/api/search/metadata":             `{"assets":{"items":[{"id":"x","originalFileName":"x.jpg","fileCreatedAt":"2026-01-01T00:00:00Z"}]}}`,
 	}[r.Path]
-	return capabilities.HTTPResponse{Body: []byte(body)}, nil
+	return capabilities.HTTPResponse{StatusCode: 200, Body: []byte(body)}, nil
 }
 func (fixtureBroker) CacheGet(context.Context, capabilities.Grant, string) ([]byte, bool, error) {
 	return nil, false, nil
@@ -155,5 +158,60 @@ func TestLoadCompilesAllShippedDeclarativeManifests(t *testing.T) {
 		if _, err = New(fixtureBroker{}).Load(context.Background(), integrations.Installed{Manifest: m, Lock: &integrations.LockEntry{ManifestSHA256: m.Digest}}); err != nil {
 			t.Fatalf("%s: %v", name, err)
 		}
+	}
+}
+
+// statusBroker answers every request with one chosen status and a JSON body, so the test can tell
+// "the body was ignored because of the status" apart from "the body could not be decoded".
+type statusBroker struct {
+	fixtureBroker
+	status int
+}
+
+func (b statusBroker) HTTP(ctx context.Context, g capabilities.Grant, r capabilities.HTTPRequest) (capabilities.HTTPResponse, error) {
+	resp, err := b.fixtureBroker.HTTP(ctx, g, r)
+	resp.StatusCode = b.status
+	return resp, err
+}
+
+// An upstream error is an error, not data. The body here is perfectly good JSON, so before this was
+// enforced a 500 produced a cheerful, entirely fictional card.
+func TestPipelineRejectsNonSuccessStatus(t *testing.T) {
+	for _, status := range []int{301, 401, 403, 404, 500, 503} {
+		t.Run(http.StatusText(status), func(t *testing.T) {
+			m, err := manifestload.Load(filepath.Join("..", "..", "..", "plugins", "glances", "manifest.yaml"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			inst, err := New(statusBroker{status: status}).Load(context.Background(), integrations.Installed{Manifest: m, Lock: &integrations.LockEntry{ManifestSHA256: m.Digest}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = inst.Invoke(context.Background(), integrations.InvokeRequest{Operation: "overview", Params: []byte(`{}`)})
+			if err == nil {
+				t.Fatalf("HTTP %d produced a document instead of an error", status)
+			}
+			if !strings.Contains(err.Error(), strconv.Itoa(status)) {
+				t.Errorf("error should name the status, got %v", err)
+			}
+		})
+	}
+}
+
+func TestPipelineAcceptsEverySuccessStatus(t *testing.T) {
+	for _, status := range []int{200, 201, 204, 299} {
+		t.Run(strconv.Itoa(status), func(t *testing.T) {
+			m, err := manifestload.Load(filepath.Join("..", "..", "..", "plugins", "glances", "manifest.yaml"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			inst, err := New(statusBroker{status: status}).Load(context.Background(), integrations.Installed{Manifest: m, Lock: &integrations.LockEntry{ManifestSHA256: m.Digest}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err = inst.Invoke(context.Background(), integrations.InvokeRequest{Operation: "overview", Params: []byte(`{}`)}); err != nil {
+				t.Fatalf("HTTP %d should be accepted: %v", status, err)
+			}
+		})
 	}
 }

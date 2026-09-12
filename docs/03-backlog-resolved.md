@@ -419,3 +419,29 @@ condition counts against `exprNodes` and the node against the template budget li
 
 This also closes the conditional-output half of the Jellyfin question: a missing-image notice is
 now expressible declaratively.
+
+### The declarative runtime never checked a response's status code
+
+Found while scoping a declarative rewrite of Jellyfin, but never specific to it: it affected every
+shipped declarative integration. `instance.Invoke` called `decodeJSON(resp.Body, …)` on whatever
+the broker returned and never read `resp.StatusCode`. An upstream 401, 403 or 500 whose body
+happened to be JSON was folded into the document as though it were data - a cheerful, entirely
+fictional card - and one whose body was HTML surfaced as a JSON decode error naming the pipeline
+step rather than the status. Immich's own manifest comments that `/api/server/statistics` returns
+403 for a non-admin key, which is exactly this path. The wasm side never shared the defect:
+`plugins/jellyfin/src/lib.rs` rejects non-2xx explicitly.
+
+Resolved by making a non-2xx pipeline response fail the invocation, with an error naming the step,
+method, path and status. The card then shows an error, which is what an upstream error is. The two
+runtimes now agree, which was also the last DSL-side blocker on rewriting Jellyfin declaratively.
+
+Decided deliberately and left narrow: there is **no per-step opt-out**. An integration that wants
+to read 404 as "absent" is a real use case, but none exists today, and the escape hatch is easier
+to add against a concrete need than to remove once manifests depend on it. `TestPipelineRejects
+NonSuccessStatus` covers 301/401/403/404/500/503 with a valid JSON body, so it fails if the status
+ever stops being what rejects them, and `TestPipelineAcceptsEverySuccessStatus` pins the 2xx range
+including 204 and 299.
+
+One test fake had to change with it: `fixtureBroker` returned a zero `StatusCode`, which is not
+something the real broker can produce - `capabilities.Broker.HTTP` always copies the response's
+status.
