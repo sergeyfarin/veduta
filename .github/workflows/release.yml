@@ -59,6 +59,11 @@ jobs:
       # Each archive carries the licences and the generated attribution alongside the binary:
       # the notices are embedded and served by the binary too, but a licence obligation is not
       # satisfied by requiring the recipient to run the program to read it.
+      #
+      # It also carries the first-party integrations, staged by hack/stage-plugins.sh. They are
+      # files beside the binary rather than bytes inside it, so that a shipped integration is
+      # approved in veduta.lock.yaml on the same terms as a third-party one - and so that a
+      # download is usable without cloning the repository.
       - name: Cross-compile and package
         env:
           VERSION: ${{ steps.version.outputs.version }}
@@ -83,6 +88,7 @@ jobs:
             CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" GOARM="$goarm" \
               go build -trimpath -ldflags "$ldflags" -o "$staging/veduta" ./cmd/veduta
             cp LICENSE LICENSING.md LICENSE-PLUGIN-EXCEPTION.txt THIRD-PARTY-NOTICES.md README.md "$staging/"
+            hack/stage-plugins.sh "$staging/plugins"
             tar -czf "${staging}.tar.gz" -C dist "$(basename "$staging")"
             rm -rf "$staging"
           done
@@ -95,9 +101,24 @@ jobs:
         run: |
           set -euo pipefail
           tar -xzf "dist/veduta-${VERSION}-linux-amd64.tar.gz" -C /tmp
-          got="$(/tmp/veduta-${VERSION}-linux-amd64/veduta version --json | grep -o '"version": "[^"]*"' | cut -d'"' -f4)"
+          root="/tmp/veduta-${VERSION}-linux-amd64"
+          got="$("$root/veduta" version --json | grep -o '"version": "[^"]*"' | cut -d'"' -f4)"
           [ "$got" = "$VERSION" ] || { echo "binary reports $got, expected $VERSION"; exit 1; }
-          test -s "/tmp/veduta-${VERSION}-linux-amd64/THIRD-PARTY-NOTICES.md"
+          test -s "$root/THIRD-PARTY-NOTICES.md"
+          # Exactly the distributed set: no Rust sources, no Cargo locks, no hello example, and
+          # nothing silently dropped either. diff fails on a difference in either direction.
+          diff <(hack/stage-plugins.sh --list | sort) \
+               <(cd "$root/plugins" && find . -type f | sed 's|^\./||' | sort)
+          # Every shipped manifest must load and digest - an archive whose manifest cannot be read
+          # is one nobody can approve.
+          for manifest in "$root"/plugins/*/manifest.yaml; do
+            "$root/veduta" manifest digest "$manifest"
+          done
+          # And every shipped module must pass the same validation the loader applies.
+          for module in "$root"/plugins/*/*.wasm; do
+            [ -e "$module" ] || continue
+            "$root/veduta" plugin validate "$module"
+          done
           echo "artefact reports $got and carries its notices"
 
       - uses: actions/upload-artifact@v7

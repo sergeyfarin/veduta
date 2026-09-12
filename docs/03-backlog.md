@@ -27,7 +27,6 @@ priority (which milestone should absorb it, or "before X" for a hard blocker).
 | [`CacheEntries` can't represent an explicit zero](#manifestloadlimitscacheentries-cant-represent-an-explicit-zero) | Integrations | When declarative caching lands |
 | [Approve flow can't grant a limit above its default](#the-documented-approve-flow-has-no-way-to-grant-a-limit-above-its-documented-default) | Docs | Low |
 | [Go plugin SDK needs a WASI-free toolchain](#go-plugin-sdk-requires-a-maintained-wasi-free-toolchain) | Plugins | Low |
-| [Release archives ship no first-party plugins](#release-archives-ship-no-first-party-plugins) | Release | Medium |
 | [The declarative runtime never checks a response's status code](#the-declarative-runtime-never-checks-a-responses-status-code) | Integrations | Medium-high |
 | [A declarative asset node cannot carry `alt` or `aspect`](#a-declarative-asset-node-cannot-carry-alt-or-aspect) | Integrations | High |
 | [An absent optional field renders as the string `<nil>`](#an-absent-optional-field-renders-as-the-string-nil) | Integrations | High |
@@ -293,19 +292,3 @@ whether a step needs an `allowStatus`-style escape for integrations that read 40
 Whatever is chosen becomes a golden-document contract, so settle it before more declarative
 integrations are written against the current silent behaviour.
 
-### Release archives ship no first-party plugins
-
-Noticed while reviewing whether plugins must live inside the single binary. They already do not:
-`integrations.LoadManifest(src.Dir)` reads a manifest (and its `module:` wasm) from an arbitrary
-directory at runtime, so side-loading is the only loading path there has ever been, and a
-third-party integration uses exactly the same one a first-party integration does. The gap is on the
-distribution side: `.github/workflows/release.yml` stages only `veduta` plus the licence and notice
-files into each tarball, so a user who downloads a release gets none of `plugins/glances`,
-`plugins/immich` or `plugins/jellyfin`, and no documented directory to put them in. Today they must
-clone the repository to use integrations the project presents as shipped (`jellyfin.wasm` is
-committed, so cloning is enough - no Rust toolchain is involved). Priority: medium, and a prerequisite for the deferred "plugin marketplace,
-signing and OCI distribution" line in `docs/01-architecture.md` section 15: settle the on-disk
-location and the manifest/module verification a side-loaded directory gets before there is an
-ecosystem distributing into it. Decide alongside it whether `plugins/jellyfin/jellyfin.wasm` is a
-release artefact at all or stays a build-from-source conformance example - see
-[the open question above](#open-question-does-jellyfin-still-earn-being-the-wasm-proof-case).

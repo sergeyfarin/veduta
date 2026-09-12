@@ -62,7 +62,7 @@ Unknown fields are rejected. A required field can still be conditional on a sele
 | `integrations[].description` | string | no | — | maxLength=256 | — |
 | `integrations[].enabled` | boolean | no | true | — | — |
 | `integrations[].id` | string | yes | — | pattern="^[a-z0-9][a-z0-9-]{1,38}$" | — |
-| `integrations[].source` | string | yes | — | pattern="^(builtin\|path:.+)$" | — |
+| `integrations[].source` | string | yes | — | pattern="^(builtin\|path:.+)$" | Where the integration's manifest lives. 'builtin' names one of the two integrations compiled into the binary (docker, http-json), which have no separate trust boundary and are exempt from veduta.lock.yaml. 'path:<dir>' names a directory holding manifest.yaml and any module it pins; a relative path resolves from this configuration file's directory, not the working directory. First-party integrations are side-loaded this way too - they ship beside the binary rather than inside it, so that a shipped integration is approved on exactly the same terms as a third-party one. A release archive puts them in ./plugins next to the binary; the container image and the recommended system layout use /usr/share/veduta/plugins. |
 | `notifications` | object | no | — | — | — |
 | `notifications.channels` | object | no | — | — | — |
 | `notifications.channels.<name>` | object | no | — | — | — |

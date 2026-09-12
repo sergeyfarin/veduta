@@ -44,6 +44,10 @@ RUN GOARCH="$TARGETARCH" GOARM="${TARGETVARIANT#v}" go build -trimpath \
         -X veduta.dev/veduta/internal/version.Commit=${COMMIT}" \
       -o /out/veduta ./cmd/veduta
 
+# The same staging script the release archives use, so the image and the tarball can never ship
+# different sets. It also re-checks each module against the digest its manifest pins.
+RUN hack/stage-plugins.sh /out/plugins
+
 # ---- Stage 3: what ships ----------------------------------------------------------------------
 # distroless/static has no shell and no package manager: the binary is the only executable in the
 # image. It supplies the CA bundle Veduta needs to reach HTTPS services and the zoneinfo database
@@ -54,11 +58,7 @@ COPY --from=build /out/veduta /usr/local/bin/veduta
 # The first-party integrations, so a configuration can reference them without mounting anything.
 # Read-only by construction; third-party plugins are mounted by the operator and approved in
 # veduta.lock.yaml exactly as they are outside a container.
-COPY --from=build /src/plugins/immich/manifest.yaml /usr/share/veduta/plugins/immich/manifest.yaml
-COPY --from=build /src/plugins/glances/manifest.yaml /usr/share/veduta/plugins/glances/manifest.yaml
-COPY --from=build /src/plugins/beszel/manifest.yaml /usr/share/veduta/plugins/beszel/manifest.yaml
-COPY --from=build /src/plugins/jellyfin/manifest.yaml /usr/share/veduta/plugins/jellyfin/manifest.yaml
-COPY --from=build /src/plugins/jellyfin/jellyfin.wasm /usr/share/veduta/plugins/jellyfin/jellyfin.wasm
+COPY --from=build /out/plugins /usr/share/veduta/plugins
 
 # /config holds veduta.yaml, conf.d/ and veduta.lock.yaml; /data holds the SQLite database and the
 # asset and icon caches. Both are mounted by the operator.

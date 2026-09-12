@@ -334,3 +334,40 @@ path - that part still needs one test per limit, the way `TestBroker_HTTP_Respon
 `TestInvoke_ApprovedOutputKBIsActuallyEnforced` do. Priority: none currently open - this is a
 completed, permanent mitigation, recorded here (per this file's own stated purpose) so the
 trade-off and its reasoning survive even though nothing further is scheduled.
+
+## Resolved after Phase L
+
+### Release archives shipped no first-party plugins
+
+Noticed while reviewing whether plugins must live inside the single binary. They already did not:
+`integrations.LoadManifest(src.Dir)` reads a manifest (and its `module:` wasm) from an arbitrary
+directory at runtime, so side-loading is the only loading path there has ever been, and a
+third-party integration uses exactly the same one a first-party integration does. The gap was on
+the distribution side: `.github/workflows/release.yml` staged only `veduta` plus the licence and
+notice files into each tarball, so a user who downloaded a release got none of `plugins/glances`,
+`plugins/immich`, `plugins/beszel` or `plugins/jellyfin`, and no documented directory to put them
+in. Meanwhile the Dockerfile did ship them, via five hand-maintained `COPY` lines, so the image and
+the archive already disagreed about what a release contains.
+
+Resolved by making the distributed set explicit and single-sourced. `hack/stage-plugins.sh` holds
+the list, stages it into a destination directory, and verifies every `.wasm` against the `sha256`
+its own manifest pins; both the release workflow and the Dockerfile call it, so the image and the
+archives cannot diverge. The archive verification step now diffs the extracted `plugins/` against
+`stage-plugins.sh --list` (failing in either direction, so neither an omission nor a stray Rust
+source passes), digests every shipped manifest, and runs `plugin validate` over every shipped
+module.
+
+The layout question it raised is settled and documented rather than left implicit: archives are
+relocatable with `plugins/` beside the binary (`source: path:./plugins/immich`), the recommended
+system layout matches the container image at `/usr/share/veduta/plugins`, that directory belongs to
+the release and is replaced wholesale, and operator-supplied integrations belong outside it. See
+`docs/getting-started.md`, `docs/migration.md` for the upgrade sequence, and
+`docs/01-architecture.md` section 5 for why first-party integrations are deliberately *not*
+`source: builtin`: builtin is lock-exempt, and exempting the integrations most likely to hold real
+credentials from the control that governs them would invert the trust model. The schema description
+for `integrations[].source` now carries the same distinction, so the generated configuration
+reference explains it too.
+
+Left open deliberately: this settles on-disk location and verification, which the deferred "plugin
+marketplace, signing and OCI distribution" line in `docs/01-architecture.md` section 15 needs
+before an ecosystem can distribute into it, but it adds no signing and no registry.

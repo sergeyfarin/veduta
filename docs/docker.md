@@ -85,8 +85,9 @@ command works from outside for an external probe.
 
 ### First-party integrations
 
-The shipped manifests are baked in at `/usr/share/veduta/plugins`, so a configuration can
-reference them without mounting anything:
+The shipped manifests are staged into the image at `/usr/share/veduta/plugins` — the same set, from
+the same distribution list, that a release archive carries — so a configuration can reference them
+without mounting anything:
 
 ```yaml
 integrations:
@@ -95,7 +96,9 @@ integrations:
 ```
 
 Third-party plugins are mounted by you and approved in `veduta.lock.yaml` exactly as they are
-outside a container. **The plugin ABI is experimental and changes between releases** — a plugin
+outside a container — mount them somewhere other than `/usr/share/veduta/plugins`, which the image
+replaces on every upgrade. The first-party manifests are approved the same way: shipping in the
+image grants them nothing. **The plugin ABI is experimental and changes between releases** — a plugin
 built against an older ABI is refused at load rather than run, so expect to rebuild and re-approve
 on upgrade.
 

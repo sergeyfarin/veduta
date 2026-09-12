@@ -725,6 +725,17 @@ authority — pinning only `module.sha256` is circular, since a swapped manifest
 module hash too. `source: builtin` integrations are exempt: they ship inside the signed binary and have no separate
 trust boundary.
 
+That exemption is also the reason the first-party integrations under `plugins/` are **not**
+builtin. They are distributed beside the binary — `./plugins` in a release archive,
+`/usr/share/veduta/plugins` in the container image and the recommended system layout — and loaded
+by the same `path:` mechanism a third-party integration uses, so they cross the same approval
+boundary and appear in the same `integration diff`. Compiling them in would make them lock-exempt
+by construction, which would put the integrations most likely to hold real credentials on the far
+side of the control that exists to govern them. One distribution list
+([`hack/stage-plugins.sh`](../hack/stage-plugins.sh)) feeds both the archives and the image, so the
+two can never disagree about what shipped. Only `docker` and `http-json` are builtin, and they are
+builtin because they are core Go code with no manifest of their own.
+
 #### Approval is a two-step, digest-bound transaction
 
 Approving an integration hands it access to credentialed services, so it must not be a single

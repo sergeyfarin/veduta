@@ -1,14 +1,59 @@
 # Getting started
 
-Veduta runs as one Go binary with an embedded web application. Go 1.27, Node 24, and pnpm 11 are pinned in [`mise.toml`](../mise.toml). This source checkout is the current installation path while release artifacts are being prepared.
+Veduta runs as one Go binary with an embedded web application. Go 1.27, Node 24, and pnpm 11 are pinned in [`mise.toml`](../mise.toml).
 
-Install the toolchain and build the binary:
+Install the toolchain and build the binary from a source checkout:
 
 ```sh
 mise install
 pnpm install
 pnpm build
 ```
+
+## Installing from a release archive
+
+Each archive is relocatable: unpack it anywhere and run it from there.
+
+```
+veduta-<version>-<target>/
+├── veduta
+├── plugins/          the first-party integrations
+│   ├── beszel/manifest.yaml
+│   ├── glances/manifest.yaml
+│   ├── immich/manifest.yaml
+│   └── jellyfin/{manifest.yaml,jellyfin.wasm}
+└── LICENSE, LICENSING.md, THIRD-PARTY-NOTICES.md, README.md
+```
+
+The integrations are files beside the binary, not bytes inside it. That is deliberate: a shipped integration is loaded through the same path as one you write yourself, so it is listed, diffed and approved in `veduta.lock.yaml` on exactly the same terms rather than inheriting the binary's trust. Nothing is active until you approve it.
+
+With `veduta.yaml` next to the binary, reference them by relative path — paths resolve from the configuration file's directory, never the working directory:
+
+```yaml
+integrations:
+  - id: immich
+    source: path:./plugins/immich
+```
+
+For a system installation, the recommended layout matches the container image:
+
+| | |
+| --- | --- |
+| binary | `/usr/local/bin/veduta` |
+| configuration | `/etc/veduta/veduta.yaml`, `conf.d/`, `veduta.lock.yaml` |
+| first-party integrations | `/usr/share/veduta/plugins/` |
+| your own integrations | `/var/lib/veduta/plugins/` |
+| data | `/var/lib/veduta/` |
+
+With the configuration in `/etc/veduta`, name the integrations absolutely:
+
+```yaml
+integrations:
+  - id: immich
+    source: path:/usr/share/veduta/plugins/immich
+```
+
+Keep your own integrations outside `/usr/share/veduta/plugins`: that directory belongs to the release and is replaced wholesale on upgrade. Replace the binary and that directory together and restart — a manifest from one release beside a binary from another will fail approval rather than run, which is safe but confusing to diagnose. See the [migration guide](migration.md) for the full upgrade sequence.
 
 To inspect the dashboard without service credentials or configuration, start the checked-in showcase:
 
