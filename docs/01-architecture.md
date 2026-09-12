@@ -374,7 +374,7 @@ string, and an expression is always an `{expr}` node:
 | --- | --- |
 | `"Photos"`, `42`, `true` | literal |
 | `{ expr: "stats.photos" }` | evaluate an `expr` expression |
-| `{ asset: { slot, path, query } }` | mint a signed image ref (checked against `use: asset` routes) |
+| `{ asset: { slot, path, query } }` | mint a signed image ref (checked against `use: asset` routes). A **value**, like a literal or an `{expr}`: it evaluates to the ref string, so it is written as `ref: { asset: … }` and the surrounding `image` is free to carry `alt`, `aspect` and `blurhash` |
 | `{ each: {expr}, as: name, item: {…} }` | repeat a template over a list |
 
 ```yaml
@@ -404,10 +404,12 @@ string, and an expression is always an `{expr}` node:
               item:
                 title: { expr: photo.originalFileName }
                 image:
-                  asset:
-                    slot: server
-                    path: { expr: '"/api/assets/" + photo.id + "/thumbnail"' }
-                    query: { size: preview }
+                  ref:
+                    asset:
+                      slot: server
+                      path: { expr: '"/api/assets/" + photo.id + "/thumbnail"' }
+                      query: { size: preview }
+                  alt: { expr: photo.originalFileName }
 ```
 
 #### The declarative runtime needs its own resource budget

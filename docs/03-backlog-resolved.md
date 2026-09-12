@@ -371,3 +371,28 @@ reference explains it too.
 Left open deliberately: this settles on-disk location and verification, which the deferred "plugin
 marketplace, signing and OCI distribution" line in `docs/01-architecture.md` section 15 needs
 before an ecosystem can distribute into it, but it adds no signing and no registry.
+
+### A declarative asset node could not carry `alt` or `aspect`
+
+Found by building a throwaway declarative Jellyfin manifest against the DSL as it stood. An asset
+node was only recognised when `asset` was the *sole* key of its object, and it evaluated to
+`map[string]any{"ref": ref}` - a whole `image`, not a value. Since `widget-document.v1`'s `image`
+is `{ref, alt, aspect, blurhash}` with `additionalProperties: false`, there was no way to write a
+broker-minted image *and* its alt text: adding `alt` beside `asset` stopped it being an asset node,
+and nesting it under `ref` produced `{"ref": {"ref": …}}`. The effect was not Jellyfin-specific -
+**no declarative integration could give an image alt text**, and `plugins/immich` shipped exactly
+that, an `image-grid` whose photos had no `alt` because the DSL made it impossible.
+
+Resolved by making the node evaluate to the ref string, which is what `plugin-manifest.v1` already
+said it was: `valueNode` lists `assetNode` alongside literals and `exprNode`, so the runtime
+returning an object had been contradicting the schema's own typing. Manifests now write
+`ref: { asset: … }` and the surrounding `image` carries whatever else it needs. Immich's photos got
+their `alt` in the same change, which moved its manifest digest - `examples/veduta.lock.yaml` and
+`testdata/canonical/expected-digests.json` are regenerated, and
+`TestAssetNodeIsAValueSoImagesCanCarryAltText` fails if the shape regresses.
+
+This is a breaking manifest-DSL change, taken deliberately and while it is still cheap: the DSL is
+pre-0.1, the only asset node in existence was Immich's, and a manifest edit is digest-visible, so
+any third-party manifest would need re-approval regardless. Nothing about the authority model
+changed - `validateOutput` walks templates generically, so an asset node nested at `image.ref` is
+still checked against the operation's `use: asset` routes exactly as before.

@@ -589,7 +589,7 @@
         "asset"
       ],
       "additionalProperties": false,
-      "description": "Mints a signed image ref. Checked against the operation's use=asset routes at evaluation time.",
+      "description": "Mints a signed image ref. Checked against the operation's use=asset routes at evaluation time. Evaluates to the ref string itself, not to an object, so it is a valueNode like a literal or an expr: write it as image.ref, leaving image free to carry alt, aspect and blurhash.",
       "properties": {
         "asset": {
           "type": "object",

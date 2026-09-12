@@ -4,6 +4,7 @@ package declarative
 
 import (
 	"context"
+	"encoding/json"
 	"net/url"
 	"path/filepath"
 	"testing"
@@ -57,8 +58,56 @@ func TestImmichPipelineAppliesParamDefault(t *testing.T) {
 		t.Fatalf("unexpected document: %#v", resp.Document)
 	}
 }
+
 func (fixtureBroker) Log(capabilities.Grant, string, string, map[string]any) error       { return nil }
 func (fixtureBroker) Emit(context.Context, capabilities.Grant, capabilities.Event) error { return nil }
+
+// An asset node mints the ref and nothing else, so an image can carry alt text. It could not while
+// the node evaluated to a whole {"ref": …} object: any sibling key stopped it being an asset node,
+// which left every declarative integration unable to describe its own images. See
+// docs/03-backlog-resolved.md.
+func TestAssetNodeIsAValueSoImagesCanCarryAltText(t *testing.T) {
+	m, err := manifestload.Load(filepath.Join("..", "..", "..", "plugins", "immich", "manifest.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	inst, err := New(fixtureBroker{}).Load(context.Background(), integrations.Installed{Manifest: m, Lock: &integrations.LockEntry{ManifestSHA256: m.Digest}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := inst.Invoke(context.Background(), integrations.InvokeRequest{Operation: "recent-assets", Params: []byte(`{}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := json.Marshal(resp.Document)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc struct {
+		Blocks []struct {
+			Type  string `json:"type"`
+			Items []struct {
+				Image struct {
+					Ref string `json:"ref"`
+					Alt string `json:"alt"`
+				} `json:"image"`
+			} `json:"items"`
+		} `json:"blocks"`
+	}
+	if err := json.Unmarshal(body, &doc); err != nil {
+		t.Fatal(err)
+	}
+	if doc.Blocks[0].Type != "image-grid" || len(doc.Blocks[0].Items) == 0 {
+		t.Fatalf("expected a populated image-grid, got %s", body)
+	}
+	image := doc.Blocks[0].Items[0].Image
+	if image.Ref != "v1.a.b" {
+		t.Errorf("image.ref = %q, want the broker's minted ref", image.Ref)
+	}
+	if image.Alt != "x.jpg" {
+		t.Errorf("image.alt = %q, want the photo's original filename", image.Alt)
+	}
+}
 
 func TestGlancesGoldenPipeline(t *testing.T) {
 	m, err := manifestload.Load(filepath.Join("..", "..", "..", "plugins", "glances", "manifest.yaml"))

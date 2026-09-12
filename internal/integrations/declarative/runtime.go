@@ -429,7 +429,11 @@ func (i *instance) eval(ctx context.Context, t *manifestload.Template, env map[s
 		if e != nil {
 			return nil, e
 		}
-		return map[string]any{"ref": ref}, nil
+		// A value, not a fragment of one. plugin-manifest.v1 already types an asset node as a
+		// valueNode alongside literals and {expr}, and returning {"ref": …} contradicted that:
+		// it forced the node to be an entire `image`, which made alt text and aspect ratio
+		// unreachable for every declarative integration. Write `ref: { asset: … }` instead.
+		return ref, nil
 	}
 	return nil, fmt.Errorf("unknown template kind %q", t.Kind)
 }

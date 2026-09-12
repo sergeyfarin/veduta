@@ -87,10 +87,14 @@ spec:
                 title:     { expr: photo.originalFileName }
                 timestamp: { expr: photo.fileCreatedAt }
                 image:
-                  asset:
-                    slot: server
-                    path: { expr: '"/api/assets/" + photo.id + "/thumbnail"' }
-                    query: { size: preview }   # AssetMediaSize: original|fullsize|preview|thumbnail
+                  # The asset node is a value: it mints the signed ref and nothing else, so the
+                  # image can also carry the alt text a screen reader needs.
+                  ref:
+                    asset:
+                      slot: server
+                      path: { expr: '"/api/assets/" + photo.id + "/thumbnail"' }
+                      query: { size: preview }   # AssetMediaSize: original|fullsize|preview|thumbnail
+                  alt: { expr: photo.originalFileName }
           - type: metrics
             items:
               - { label: Photos, value: { expr: stats.images }, format: number }

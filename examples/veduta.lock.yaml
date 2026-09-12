@@ -4,7 +4,7 @@
 version: 1
 integrations:
   immich:
-    manifestSha256: dc88753711be8d4c462cf9062607313435e4577869a125be1190b9b67561156b
+    manifestSha256: 16d8ae5a59b49c2b3e3a2ed05e0bc83cf34ff490a4f6ff8a12cf4086463f2559
     version: 0.2.0
     runtime: declarative
     approvedAt: "2026-09-04T21:40:00Z"

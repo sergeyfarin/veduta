@@ -28,7 +28,6 @@ priority (which milestone should absorb it, or "before X" for a hard blocker).
 | [Approve flow can't grant a limit above its default](#the-documented-approve-flow-has-no-way-to-grant-a-limit-above-its-documented-default) | Docs | Low |
 | [Go plugin SDK needs a WASI-free toolchain](#go-plugin-sdk-requires-a-maintained-wasi-free-toolchain) | Plugins | Low |
 | [The declarative runtime never checks a response's status code](#the-declarative-runtime-never-checks-a-responses-status-code) | Integrations | Medium-high |
-| [A declarative asset node cannot carry `alt` or `aspect`](#a-declarative-asset-node-cannot-carry-alt-or-aspect) | Integrations | High |
 | [An absent optional field renders as the string `<nil>`](#an-absent-optional-field-renders-as-the-string-nil) | Integrations | High |
 
 ---
@@ -46,7 +45,8 @@ Two of the three limitations named above are not real: the four-call fan-out wor
 pipeline steps (`plugins/glances` already fans out to six), and per-item poster handling works via
 `filter(recent.items, .imageTags != nil && "Primary" in .imageTags)`. What actually blocks a
 rewrite is three general DSL gaps, none of them specific to Jellyfin and all three worth fixing on
-their own merits: [images cannot carry alt text](#a-declarative-asset-node-cannot-carry-alt-or-aspect),
+their own merits: images could not carry alt text (**closed** - see
+[03-backlog-resolved.md](03-backlog-resolved.md)),
 [optional fields render as `<nil>`](#an-absent-optional-field-renders-as-the-string-nil), and
 [non-2xx responses are not detected](#the-declarative-runtime-never-checks-a-responses-status-code).
 The missing-image notice also needs conditional output, which is the smallest of the four.
@@ -223,24 +223,6 @@ revisit when an official or maintained Go PDK can emit `wasm32-unknown-unknown`
 with no forbidden imports and passes the G1 conformance suite plus S1a ARM
 budgets. The Go backend is a separate decision and remains in place; see
 `docs/decisions/0001-backend-language.md`.
-
-### A declarative asset node cannot carry `alt` or `aspect`
-
-Found by building a throwaway declarative Jellyfin manifest against the current DSL. An asset node
-is only recognised when `asset` is the *sole* key of its object (`load.go`'s
-`keys["asset"]; ok && len(keys) == 1`), and it evaluates to exactly `map[string]any{"ref": ref}`.
-But `widget-document.v1`'s `image` is `{ref, alt, aspect, blurhash}` with `additionalProperties:
-false`, so there is no way to write a broker-minted image *and* its alt text: adding `alt` beside
-`asset` stops it being an asset node, and nesting it under `ref` produces `{"ref": {"ref": …}}`.
-Confirmed by running it - the document is rejected with 80 schema problems.
-
-This is not a Jellyfin problem. **It means no declarative integration can give an image alt text**,
-and `plugins/immich/manifest.yaml` ships exactly that: an `image-grid` whose photos have no `alt`,
-because the DSL makes it impossible, not because it was forgotten. Every wasm plugin can do this
-(`plugins/jellyfin/src/lib.rs` sets both `alt` and `aspect`), so declarative integrations are
-second-class on an accessibility property rather than on a power-user one. Priority: high - decide
-the node shape (an `image` block that accepts `ref: {asset: …}` as a value, or an asset node with
-optional sibling keys) and fix Immich's photos in the same change.
 
 ### An absent optional field renders as the string `<nil>`
 
