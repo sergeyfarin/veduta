@@ -50,8 +50,9 @@ Document - that caller is Phase F's scheduler, which does not exist. This is the
 for that caller, not the end-to-end wiring.
 
 **Update (2026-09-10):** the design half is what is resolved here. Phase F has since
-shipped and still does not call this primitive, so the wiring half is tracked as an open
-entry in [03-backlog.md](03-backlog.md).
+shipped and still does not call this primitive, so the wiring half is tracked separately.
+**Closed (2026-09-12):** the scheduler now calls it on both the produced and the restored path -
+see "`ContainsSecretInDocument` had no production caller" below.
 
 ### S3 (expr vs cel bake-off) is decided: `expr-lang/expr`, used as parser/evaluator only
 
@@ -223,9 +224,11 @@ session; an orderly disconnect removes both counters atomically.
 
 **Correction (2026-09-10):** "removes both counters atomically" was asserted for disconnect in
 general and is only true of an orderly one. F4's drop-slow-consumers path releases the
-process-wide counter but not the per-session one, permanently exhausting a session's budget - see
-the open entry in [03-backlog.md](03-backlog.md). The per-session cap itself is implemented as
-described; its release path is not complete.
+process-wide counter but not the per-session one, permanently exhausting a session's budget. The
+per-session cap itself is implemented as described; its release path is not complete.
+**Closed (2026-09-12):** both removal sites share one `removeClient` helper that owns every
+counter, so the original claim now holds for a dropped consumer too - see "SSE per-session cap
+leaked a slot when a slow consumer was dropped" below.
 
 ## Resolved before K2 and L3
 
@@ -445,3 +448,61 @@ including 204 and 299.
 One test fake had to change with it: `fixtureBroker` returned a zero `StatusCode`, which is not
 something the real broker can produce - `capabilities.Broker.HTTP` always copies the response's
 status.
+
+### `ContainsSecretInDocument` had no production caller
+
+Carried as an open entry since 2026-09-10, split out of this file's "where does *a secret value in
+a Widget Document is rejected* live?" - that entry settled the design and built the primitive, and
+was honest that nothing called it, naming the intended caller as "Phase F's scheduler, which does
+not exist." Phase F shipped and still did not call it: `grep -rn ContainsSecretInDocument` found
+only the definition and its own tests, so no produced Document was checked in production and a
+plugin that echoed a credential into a card title would have been rendered.
+
+Resolved in `internal/scheduler`. A `Manager` now holds a `*secrets.Registry` - `New` takes the
+process-wide one every resolved `secrets.Value` registers itself with, so the check is on by
+construction rather than by remembering to wire it at a call site, and `NewWithSecrets` gives a
+test its own instance. `refresh` checks the document the run returned and, on a match, drops it and
+fails the run with `ErrSecretInDocument`, whose message is fixed and value-free because it becomes
+the card's visible error text; `classify` maps it to `state.ErrorInvalid`, so the card shows an
+error and the breaker eventually opens rather than the document silently vanishing. `Apply` re-runs
+the check over a document restored from storage, which may predate the secret that now matches it -
+that is the other path a document can take into `m.states` and so into `GET /api/v1/cards`.
+
+Two things were fixed along the way. The walker only covered the nine block types, so the envelope
+fields that are *served* without being drawn - `link`, `notices[].message`, string-valued `signals`
+- and two fields added after it was written (`image.alt`, a table column's `label`) went
+unchecked; reaching the client is the exposure, not being rendered, so they are checked now
+(`TestContainsSecretInDocument_EnvelopeFields`). And the comments in `document.go` and `scrub.go`
+that described the missing caller as pending now describe the caller that exists.
+
+Tests: `TestProducedDocumentCarryingASecretIsRejected` and
+`TestRestoredDocumentCarryingASecretIsNotServed` cover both paths at the scheduler, and
+`TestLeakingDocumentNeverReachesTheCardsAPI` drives the real `GET /api/v1/cards` route - the
+end-to-end form of C2's acceptance test. Each was confirmed to fail against the unwired code.
+The log scrubber and L3's CI secret-response scan remain the layers around this one.
+
+### SSE per-session cap leaked a slot when a slow consumer was dropped
+
+Carried as an open entry since 2026-09-10, found reviewing "Resolved in H1: SSE per-session cap"
+above, whose claim that "disconnect removes both counters atomically" held only for an orderly
+disconnect. F4's drop-slow-consumers path and H1's per-session cap were built a milestone apart
+and their interaction was never re-checked: `publish` dropped a consumer with `close(ch)` +
+`delete(h.clients, ch)` and never touched `h.sessions`, while the `done` closure that owns the
+decrement was guarded by `if _, ok := h.clients[ch]; ok` - already false for a client `publish` had
+removed. A session whose streams were dropped four times therefore kept a permanent count of 4 and
+was refused every later subscription for the life of the process, with `len(h.clients) == 0`.
+Reconnecting did not clear it (the counter is keyed by the hashed session ID, which survives
+reconnection), so recovery needed a restart or a fresh login, and a backgrounded browser tab on a
+busy dashboard was enough to trigger it.
+
+Resolved as the entry proposed: both removal sites now go through one `removeClient(ch)` that owns
+every counter the client holds, so a dropped stream releases its per-session slot exactly like an
+orderly disconnect, and a second removal of the same channel is a no-op rather than a double
+decrement or a double close. `h.clients` maps a channel to its session ID to make that possible -
+the removal site inside `publish` has no other way to know which session to credit.
+
+Tests: `TestSSEDroppedSlowConsumerReleasesSessionSlot` fills a session's four streams, overflows
+every 32-deep buffer so `publish` drops them all, and subscribes again successfully - it fails
+against the old code with the exact symptom the entry described. `TestSSEDoneAfterDropDoesNotDouble
+Release` pins the ordering a real handler produces: `publish` drops the stream, the handler's
+deferred `done` runs anyway, and the surviving stream keeps its slot.

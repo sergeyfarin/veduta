@@ -592,10 +592,11 @@ C1 was called done (see docs/03-backlog-resolved.md for the full detail):
   `Registry.ContainsSecretInDocument` walks all nine block types explicitly by type-switch,
   matching this project's existing preference for that over reflection. Mutation-tested: deleting
   one block type's case from the switch was confirmed to fail
-  `TestContainsSecretInDocument_EveryBlockType` before this was considered done. Honestly still
-  pending: nothing calls this against a *real* produced Document yet, because nothing produces
-  one until Phase F's scheduler exists - this is the primitive ready for that caller, not the
-  end-to-end wiring, and is written down as such rather than implied to be more finished than it is.
+  `TestContainsSecretInDocument_EveryBlockType` before this was considered done. The caller stayed
+  pending past Phase F and was tracked as an open backlog entry until it landed:
+  `internal/scheduler` now checks every produced document, and every document restored from
+  storage, before it can reach `GET /api/v1/cards`. The walker also grew the served-but-not-rendered envelope fields (`link`,
+  `notices`, string `signals`) and `image.alt` at the same time.
 
 A third, unplanned gap turned up while smoke-testing the whole pipeline end to end for the first
 time (`config.LoadPath` → `secrets.ResolveAll` against the real `examples/veduta.yaml`, not just
@@ -1298,7 +1299,8 @@ every state the store can emit satisfies the state-combination invariants** in t
 AC: after a restart the dashboard renders last-known-good data immediately, visibly marked stale.
 
 **F4 · SSE hub and live frontend** · 1.5 d · deps: F3, B3 · **DONE, including the H1
-per-session cap**
+per-session cap and the shared `removeClient` that releases its slot when a slow consumer is
+dropped**
 Creates: `internal/api/sse.go` (hub, per-session and global caps, 20 s heartbeat, 256-entry replay
 ring, `Last-Event-ID`, `X-Accel-Buffering: no`), `web/src/lib/stream.ts` (store, backoff reconnect,
 connection indicator).

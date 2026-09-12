@@ -49,7 +49,9 @@ actions, and notifies when something needs attention.
 - `veduta.yaml` plus `conf.d/*.yaml`, schema-validated and semantically checked, with every
   diagnostic carrying `file:line:col`. `veduta --check-config` exits non-zero on error.
 - Secrets as `env:` and `file:` references with a redacting value type and a log scrubber active
-  from the first log line, so a credential cannot reach a log by omission.
+  from the first log line, so a credential cannot reach a log by omission. A card whose document
+  repeats a configured secret verbatim is rejected rather than served: the scheduler checks every
+  document a run produces, and every one restored from storage, against the same set of values.
 - Atomic live reload: a changed configuration is validated and its complete runtime generation
   built before publication, and a failed reload leaves the previous generation serving.
 
@@ -105,7 +107,12 @@ actions, and notifies when something needs attention.
   cold-validation targets, so weakening the sandbox to accommodate it was refused. Rust is the
   supported plugin language.
 - Open gaps found during implementation are tracked honestly in
-  [docs/03-backlog.md](docs/03-backlog.md) rather than left implicit.
+  [docs/03-backlog.md](docs/03-backlog.md) rather than left implicit, and each one is named there
+  with its priority; closed ones move to
+  [docs/03-backlog-resolved.md](docs/03-backlog-resolved.md) with an account of where the fix
+  landed. Nothing in that open list is a known defect in a shipped path: the two that were - a
+  Widget Document check that existed but was never called, and a live-update slot that leaked when
+  a slow stream was dropped - are fixed in this release.
 
 [Unreleased]: https://github.com/sergeyfarin/veduta/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/sergeyfarin/veduta/releases/tag/v0.1.0

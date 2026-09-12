@@ -57,8 +57,8 @@ func (r *Registry) Scrub(s string) string {
 // here, not in internal/widgets: widgets must never import secrets (integrations, and the
 // widgets they emit into, never see credentials at all - docs/01-architecture.md's frozen
 // import-boundary rule), so the caller that checks a produced Document against this has to be
-// something that already sees both - the scheduler, which does not exist until Phase F. This is
-// the ready primitive for that caller, not the wiring itself.
+// something that already sees both. That caller is internal/scheduler, through
+// ContainsSecretInDocument.
 func (r *Registry) ContainsSecret(s string) bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

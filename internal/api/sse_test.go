@@ -155,3 +155,66 @@ func TestSSEPerSessionCapRefusesExcessStream(t *testing.T) {
 		t.Fatal("stream above per-session cap accepted")
 	}
 }
+
+// TestSSEDroppedSlowConsumerReleasesSessionSlot pins the interaction between the per-session cap
+// and the drop-slow-consumers path: a stream removed by publish must release its session slot,
+// not just its client entry. Before removeClient owned both, a session whose streams were all
+// dropped this way kept a permanent count and was refused every later subscription for the life
+// of the process - a live-update outage for one user that survived reconnecting.
+func TestSSEDroppedSlowConsumerReleasesSessionSlot(t *testing.T) {
+	m := scheduler.New(nil)
+	defer m.Close()
+	h := newSSEHub(m)
+	for range maxSSEClientsPerSession {
+		if _, _, _, accepted, _ := h.subscribe("", "slow-session"); !accepted {
+			t.Fatal("stream below per-session cap refused")
+		}
+	}
+	// 33 events overflow every 32-deep buffer, so publish drops all four streams.
+	for range 33 {
+		h.publish(scheduler.Event{})
+	}
+	h.mu.Lock()
+	clients, sessions := len(h.clients), h.sessions["slow-session"]
+	h.mu.Unlock()
+	if clients != 0 {
+		t.Fatalf("slow consumers not dropped: clients=%d", clients)
+	}
+	if sessions != 0 {
+		t.Fatalf("dropped streams leaked %d per-session slots", sessions)
+	}
+	_, _, _, accepted, done := h.subscribe("", "slow-session")
+	if !accepted {
+		t.Fatal("session refused a new stream after all its streams were dropped")
+	}
+	done()
+}
+
+// TestSSEDoneAfterDropDoesNotDoubleRelease covers the ordering a real handler produces: publish
+// drops the stream, then the handler's deferred done runs anyway. The second removal must be a
+// no-op rather than decrementing a slot it no longer holds (or closing a closed channel).
+func TestSSEDoneAfterDropDoesNotDoubleRelease(t *testing.T) {
+	m := scheduler.New(nil)
+	defer m.Close()
+	h := newSSEHub(m)
+	_, first, _, accepted, dropped := h.subscribe("", "shared-session")
+	if !accepted {
+		t.Fatal("first stream refused")
+	}
+	_, _, _, accepted, kept := h.subscribe("", "shared-session")
+	if !accepted {
+		t.Fatal("second stream refused")
+	}
+	defer kept()
+	// Drop exactly the first of the two, as publish would for a single slow consumer.
+	h.mu.Lock()
+	h.removeClient(first)
+	h.mu.Unlock()
+	dropped()
+	h.mu.Lock()
+	sessions := h.sessions["shared-session"]
+	h.mu.Unlock()
+	if sessions != 1 {
+		t.Fatalf("session count=%d, want 1 remaining stream", sessions)
+	}
+}

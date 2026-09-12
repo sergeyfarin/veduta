@@ -25,18 +25,20 @@ type sseEvent struct {
 	data []byte
 }
 type sseHub struct {
-	mu       sync.Mutex
-	nonce    string
-	next     uint64
-	ring     []sseEvent
-	clients  map[chan sseEvent]struct{}
+	mu    sync.Mutex
+	nonce string
+	next  uint64
+	ring  []sseEvent
+	// clients maps a live stream's channel to the session that owns it, so every removal site
+	// can release the per-session slot as well as the client itself - see removeClient.
+	clients  map[chan sseEvent]string
 	sessions map[string]int
 }
 
 func newSSEHub(m *scheduler.Manager) *sseHub {
 	b := make([]byte, 8)
 	_, _ = rand.Read(b)
-	h := &sseHub{nonce: hex.EncodeToString(b), clients: map[chan sseEvent]struct{}{}, sessions: map[string]int{}}
+	h := &sseHub{nonce: hex.EncodeToString(b), clients: map[chan sseEvent]string{}, sessions: map[string]int{}}
 	ch, _ := m.Subscribe(32)
 	go func() {
 		for ev := range ch {
@@ -59,10 +61,28 @@ func (h *sseHub) publish(ev scheduler.Event) {
 		select {
 		case ch <- e:
 		default:
-			close(ch)
-			delete(h.clients, ch)
+			h.removeClient(ch)
 		}
 	}
+}
+
+// removeClient closes ch and releases every slot it holds. Both removal sites - the
+// drop-slow-consumer path above and the done closure subscribe returns - go through here, so a
+// dropped consumer cannot leak its per-session slot the way it did when publish touched only
+// h.clients and left h.sessions counting a stream that no longer exists. Caller holds h.mu.
+func (h *sseHub) removeClient(ch chan sseEvent) {
+	sessionID, ok := h.clients[ch]
+	if !ok {
+		return
+	}
+	delete(h.clients, ch)
+	if sessionID != "" {
+		h.sessions[sessionID]--
+		if h.sessions[sessionID] <= 0 {
+			delete(h.sessions, sessionID)
+		}
+	}
+	close(ch)
 }
 func (h *sseHub) subscribe(last, sessionID string) ([]sseEvent, chan sseEvent, bool, bool, func()) {
 	h.mu.Lock()
@@ -89,22 +109,13 @@ func (h *sseHub) subscribe(last, sessionID string) ([]sseEvent, chan sseEvent, b
 	}
 	replay := append([]sseEvent(nil), h.ring[start:]...)
 	ch := make(chan sseEvent, 32)
-	h.clients[ch] = struct{}{}
+	h.clients[ch] = sessionID
 	if sessionID != "" {
 		h.sessions[sessionID]++
 	}
 	return replay, ch, reset, true, func() {
 		h.mu.Lock()
-		if _, ok := h.clients[ch]; ok {
-			delete(h.clients, ch)
-			if sessionID != "" {
-				h.sessions[sessionID]--
-				if h.sessions[sessionID] == 0 {
-					delete(h.sessions, sessionID)
-				}
-			}
-			close(ch)
-		}
+		h.removeClient(ch)
 		h.mu.Unlock()
 	}
 }

@@ -13,18 +13,31 @@ import "veduta.dev/veduta/internal/widgets"
 // through as data - a misbehaving or compromised upstream echoing back a header, say - and the
 // document must be rejected rather than stored or served.
 //
-// This is a real check today, not only a primitive waiting on a future caller: it walks every
-// text-bearing field of all nine v1 block types explicitly (matching this project's preference
-// for an auditable type-switch over reflection - see internal/widgets/blocks.go's own dispatch).
-// What IS still pending is the caller: nothing runs a produced Document through this yet, because
-// nothing produces one for real until Phase F's scheduler exists. Wire it there, after
-// widgets.Validate succeeds and before a CardState is built from the result.
+// It walks every text-bearing field of the document envelope and of all nine v1 block types
+// explicitly (matching this project's preference for an auditable type-switch over reflection -
+// see internal/widgets/blocks.go's own dispatch). "Text-bearing" means served, not rendered: the
+// envelope's link, notices and string-valued signals reach the client in GET /api/v1/cards even
+// where no component draws them today, so they are checked like anything else.
+//
+// Its caller is internal/scheduler: every produced document is checked after the run returns and
+// before a CardState is built from it, and a persisted document is re-checked when Apply restores
+// it. A match fails the run with scheduler.ErrSecretInDocument.
 func (r *Registry) ContainsSecretInDocument(doc widgets.Document) bool {
-	if r.ContainsSecret(doc.Title) || r.ContainsSecret(doc.Subtitle) {
+	if r.containsAny(doc.Title, doc.Subtitle, doc.Link) {
 		return true
 	}
 	if doc.Status != nil && r.ContainsSecret(doc.Status.Text) {
 		return true
+	}
+	for _, n := range doc.Notices {
+		if r.ContainsSecret(n.Message) {
+			return true
+		}
+	}
+	for _, sig := range doc.Signals {
+		if r.scalarLeaks(sig.Value) {
+			return true
+		}
 	}
 	for _, b := range doc.Blocks {
 		if r.blockLeaks(b) {
@@ -65,7 +78,7 @@ func (r *Registry) blockLeaks(b widgets.Block) bool {
 			return true
 		}
 		for _, it := range v.Items {
-			if r.containsAny(it.Title, it.Subtitle, it.Link) || r.scalarLeaks(it.Value) {
+			if r.containsAny(it.Title, it.Subtitle, it.Link) || r.scalarLeaks(it.Value) || r.imageLeaks(it.Image) {
 				return true
 			}
 		}
@@ -75,7 +88,7 @@ func (r *Registry) blockLeaks(b widgets.Block) bool {
 			return true
 		}
 		for _, it := range v.Items {
-			if r.containsAny(it.Title, it.Subtitle, it.Badge, it.Link) {
+			if r.containsAny(it.Title, it.Subtitle, it.Badge, it.Link) || r.imageLeaks(&it.Image) {
 				return true
 			}
 		}
@@ -85,6 +98,11 @@ func (r *Registry) blockLeaks(b widgets.Block) bool {
 	case widgets.BlockTable:
 		if r.containsAny(v.Title) {
 			return true
+		}
+		for _, c := range v.Columns {
+			if r.containsAny(c.Label) {
+				return true
+			}
 		}
 		for _, row := range v.Rows {
 			for _, cell := range row {
@@ -125,6 +143,12 @@ func (r *Registry) containsAny(fields ...string) bool {
 		}
 	}
 	return false
+}
+
+// imageLeaks checks an asset node's free text. Ref is broker-minted rather than integration-
+// written, but Alt is the integration's own prose and is served (and rendered) verbatim.
+func (r *Registry) imageLeaks(img *widgets.Image) bool {
+	return img != nil && r.ContainsSecret(img.Alt)
 }
 
 func (r *Registry) scalarLeaks(v widgets.Scalar) bool {

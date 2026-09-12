@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"veduta.dev/veduta/internal/secrets"
 	"veduta.dev/veduta/internal/state"
 	"veduta.dev/veduta/internal/storage"
 	"veduta.dev/veduta/internal/widgets"
@@ -56,6 +57,7 @@ type Manager struct {
 	manualAt   map[string]time.Time
 	flights    map[string]*flight
 	subs       map[chan Event]struct{}
+	secrets    *secrets.Registry
 	workers    chan struct{}
 	nextID     uint64
 	generation uint64
@@ -69,11 +71,24 @@ var (
 	ErrRateLimited = errors.New("scheduler: refresh rate limited")
 	// ErrSuperseded indicates that a newer configuration replaced an in-flight definition.
 	ErrSuperseded = errors.New("scheduler: invocation superseded by a newer configuration")
+	// ErrSecretInDocument indicates that a produced document repeated a configured secret value
+	// verbatim. Its message is deliberately fixed and value-free: it becomes a card's visible
+	// error text, so it must describe the leak without repeating it.
+	ErrSecretInDocument = errors.New("scheduler: document contains a configured secret value")
 )
 
-// New creates a scheduler backed by store. A nil store disables persistence.
+// New creates a scheduler backed by store. A nil store disables persistence. Produced documents
+// are checked against the process-wide secret registry - the one every resolved secrets.Value
+// registers itself with - so the check is on by construction rather than by wiring at each call
+// site; NewWithSecrets overrides that for tests.
 func New(store *storage.Store) *Manager {
-	return &Manager{store: store, defs: map[string]Definition{}, states: map[string]state.CardState{}, failures: map[string]int{}, openUntil: map[string]time.Time{}, manualAt: map[string]time.Time{}, flights: map[string]*flight{}, subs: map[chan Event]struct{}{}, workers: make(chan struct{}, 8)}
+	return NewWithSecrets(store, secrets.DefaultRegistry())
+}
+
+// NewWithSecrets is New against a caller-supplied secret registry, so a test can use its own
+// instance rather than the process-global one. A nil registry disables the check.
+func NewWithSecrets(store *storage.Store, reg *secrets.Registry) *Manager {
+	return &Manager{secrets: reg, store: store, defs: map[string]Definition{}, states: map[string]state.CardState{}, failures: map[string]int{}, openUntil: map[string]time.Time{}, manualAt: map[string]time.Time{}, flights: map[string]*flight{}, subs: map[chan Event]struct{}{}, workers: make(chan struct{}, 8)}
 }
 
 // Apply atomically replaces all definitions and starts their refresh loops.
@@ -102,7 +117,7 @@ func (m *Manager) Apply(parent context.Context, defs []Definition) error {
 		if m.store != nil {
 			if old, ok, err := m.store.GetCardFor(parent, d.ID, storage.CardRecord{CardHash: d.Hash, ManifestDigest: d.ManifestDigest, ApprovalRevision: d.ApprovalRevision, SlotRevisions: d.SlotRevisions}); err != nil {
 				return err
-			} else if ok {
+			} else if ok && !m.documentLeaksSecret(old.Document) {
 				preparedStates[d.ID] = restored(old, d.Source)
 				preparedFailures[d.ID] = old.Execution.ConsecutiveFailures
 				preparedOpen[d.ID] = parseTime(old.Execution.CircuitOpenUntil)
@@ -230,6 +245,17 @@ func (m *Manager) refresh(ctx context.Context, d Definition) error {
 		return m.commit(ctx, d, state.Disabled(id, nil, state.ReasonConfigError))
 	}
 	doc, dur, runErr := m.runShared(ctx, d)
+	if runErr == nil && m.documentLeaksSecret(&doc) {
+		// An integration never receives a credential, so a verbatim match means a resolved
+		// secret came back through the data path - a compromised or merely careless upstream
+		// echoing a header, say. Drop the document rather than storing or serving it, and fail
+		// the run so the card shows an error (and the breaker eventually opens) instead of
+		// silently rendering nothing. This is the production caller docs/03-backlog-resolved.md's
+		// "ContainsSecretInDocument had no production caller" entry asked for; the log scrubber
+		// and CI's secret-response scan stay as the layers around it.
+		doc = widgets.Document{}
+		runErr = ErrSecretInDocument
+	}
 	var history map[string]float64
 	if runErr == nil {
 		var historyErr error
@@ -276,6 +302,14 @@ func (m *Manager) refresh(ctx context.Context, d Definition) error {
 	cs.Execution.ConsecutiveFailures = failures
 	cs.Execution.NextRunAt = retry.UTC().Format(time.RFC3339Nano)
 	return m.commit(ctx, d, cs)
+}
+
+// documentLeaksSecret reports whether doc repeats a configured secret value verbatim. It guards
+// both paths a document can take into m.states: a fresh run, and a persisted document restored
+// by Apply - which may predate the secret that now matches it, so the stored card is dropped and
+// the card starts pending rather than serving it again.
+func (m *Manager) documentLeaksSecret(doc *widgets.Document) bool {
+	return m.secrets != nil && doc != nil && m.secrets.ContainsSecretInDocument(*doc)
 }
 
 func historicalValues(d Definition, doc widgets.Document) (map[string]float64, error) {
@@ -438,6 +472,9 @@ func restored(cs state.CardState, source state.Source) state.CardState {
 func classify(err error) state.ErrorCode {
 	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
 		return state.ErrorTimeout
+	}
+	if errors.Is(err, ErrSecretInDocument) {
+		return state.ErrorInvalid
 	}
 	return state.ErrorUpstream
 }

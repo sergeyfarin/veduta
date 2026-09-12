@@ -75,6 +75,28 @@ func TestContainsSecretInDocument_EveryBlockType(t *testing.T) {
 	}
 }
 
+// TestContainsSecretInDocument_EnvelopeFields covers the parts of the document that are served
+// in GET /api/v1/cards without necessarily being drawn by a component. A value that reaches the
+// client is exposed whether or not the SPA renders it, so the walker checks these too.
+func TestContainsSecretInDocument_EnvelopeFields(t *testing.T) {
+	cases := map[string]widgets.Document{
+		"link":          {Link: "https://host/?token=" + leaked},
+		"notice":        {Notices: []widgets.Notice{{Level: "warn", Message: "upstream rejected " + leaked}}},
+		"signal value":  {Signals: map[string]widgets.Signal{"version": {Value: leaked}}},
+		"media alt":     {Blocks: []widgets.Block{widgets.BlockMedia{Items: []widgets.MediaItem{{Image: widgets.Image{Ref: "r", Alt: leaked}}}}}},
+		"list item alt": {Blocks: []widgets.Block{widgets.BlockList{Items: []widgets.ListItem{{Title: "x", Image: &widgets.Image{Ref: "r", Alt: leaked}}}}}},
+		"table column":  {Blocks: []widgets.Block{widgets.BlockTable{Columns: []widgets.TableColumn{{Key: "k", Label: leaked}}}}},
+	}
+	reg := registryWithLeaked()
+	for name, doc := range cases {
+		t.Run(name, func(t *testing.T) {
+			if !reg.ContainsSecretInDocument(doc) {
+				t.Errorf("%s: leak not detected", name)
+			}
+		})
+	}
+}
+
 func TestContainsSecretInDocument_NoRegistryMatchesNothing(t *testing.T) {
 	reg := secrets.NewRegistry()
 	doc := widgets.Document{Title: leaked}
