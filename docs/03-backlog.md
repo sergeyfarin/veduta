@@ -27,6 +27,7 @@ priority (which milestone should absorb it, or "before X" for a hard blocker).
 | [Approve flow can't grant a limit above its default](#the-documented-approve-flow-has-no-way-to-grant-a-limit-above-its-documented-default) | Docs | Low |
 | [Go plugin SDK needs a WASI-free toolchain](#go-plugin-sdk-requires-a-maintained-wasi-free-toolchain) | Plugins | Low |
 | [The lock file is written 0600, but is meant to be committed](#veduta-lock-yaml-is-written-0600-by-a-uid-the-operator-is-not) | Deployment | Low |
+| [ARM runtime performance has no measured evidence](#arm-runtime-performance-has-no-measured-evidence) | Plugins | **Decide before 0.1** |
 
 ---
 
@@ -218,3 +219,31 @@ runtime user is a defensible answer to that. But `0600` restricts reading as wel
 
 Priority: low, and a decision rather than a fix - settle it the next time the approval flow is
 touched. Documented as a consequence in `docs/docker.md` in the meantime.
+
+### ARM runtime performance has no measured evidence
+
+G1 is marked **DONE (sandbox; ARM performance acceptance outstanding)** in
+[docs/02-implementation-plan.md](02-implementation-plan.md), and that half is still outstanding.
+The sandbox conformance suite is real and runs in CI - no filesystem, no env, no sockets, no
+native HTTP, deadline kill, memory trap, output cap, corrupted module rejected before compile.
+None of it measures speed or memory. The ARM scheduler test drives synthetic callbacks, so it
+exercises scheduling on ARM rather than WASM on ARM: it never compiles a real module, and it never
+runs Jellyfin's.
+
+What has no number attached, on ARM hardware: cold compilation of a real plugin, warm invocation,
+and resident memory per instance. Those are precisely the figures S1a's budgets were written
+against, and precisely the ones that decide whether a Pi-class host is a supported target or an
+aspiration.
+
+**This is a release decision, not a task to schedule.** It is recorded here so it is taken
+deliberately, in one of two ways:
+
+- **Resolve it** - run the S1a budgets against real ARM hardware (or a qemu-based CI job, noting
+  that emulation inflates compile time and would need its own threshold), record the numbers in
+  the G1 row, and mark the milestone DONE without a qualifier.
+- **Waive it** - state in the release notes that ARM images are published but their WASM runtime
+  performance is unmeasured, and that Pi-class hosts are untested rather than supported for
+  integrations. The images build for linux/arm64 and linux/arm/v7 today and would keep shipping.
+
+What should not happen is the third option, which is shipping 0.1 with the plan still saying
+"acceptance outstanding" and nobody having chosen. Priority: settle before tagging 0.1.
