@@ -35,9 +35,15 @@ func (s *Server) routeAuth(mux *http.ServeMux) {
 		session, err := s.cfg.Auth.Login(r.Context(), request.Username, request.Password, r.UserAgent(), auth.ClientIP(r))
 		if err != nil {
 			status := http.StatusUnauthorized
-			if errors.Is(err, auth.ErrRateLimited) {
+			switch {
+			case errors.Is(err, auth.ErrRateLimited):
 				status = http.StatusTooManyRequests
 				w.Header().Set("Retry-After", "900")
+			case errors.Is(err, auth.ErrBusy):
+				// Refused before hashing rather than rejected on credentials - a transient
+				// capacity signal, so it must not read as "wrong password".
+				status = http.StatusServiceUnavailable
+				w.Header().Set("Retry-After", "1")
 			}
 			s.audit(r.Context(), auditlog.Entry{Actor: request.Username, IP: auth.ClientIP(r), Action: "auth.login", Outcome: "failure"})
 			writeJSON(w, status, map[string]string{"error": err.Error()})
@@ -79,9 +85,18 @@ func (s *Server) routeAuth(mux *http.ServeMux) {
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": auth.ErrNoSession.Error()})
 			return
 		}
-		if err := s.cfg.Auth.OpenSudo(r.Context(), sessionCookie.Value, request.Password); err != nil {
+		if err := s.cfg.Auth.OpenSudo(r.Context(), sessionCookie.Value, request.Password, auth.ClientIP(r)); err != nil {
 			s.audit(r.Context(), auditlog.Entry{Actor: identity.Username, IP: auth.ClientIP(r), Action: "auth.sudo", Outcome: "failure"})
-			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": auth.ErrInvalidCredentials.Error()})
+			status, message := http.StatusUnauthorized, auth.ErrInvalidCredentials.Error()
+			switch {
+			case errors.Is(err, auth.ErrRateLimited):
+				status, message = http.StatusTooManyRequests, err.Error()
+				w.Header().Set("Retry-After", "900")
+			case errors.Is(err, auth.ErrBusy):
+				status, message = http.StatusServiceUnavailable, err.Error()
+				w.Header().Set("Retry-After", "1")
+			}
+			writeJSON(w, status, map[string]string{"error": message})
 			return
 		}
 		s.audit(r.Context(), auditlog.Entry{Actor: identity.Username, IP: auth.ClientIP(r), Action: "auth.sudo", Outcome: "success"})

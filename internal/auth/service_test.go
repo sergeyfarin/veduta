@@ -131,7 +131,7 @@ func TestSudoWindowExpiresAndLogoutRevokesIt(t *testing.T) {
 	if service.AllowsPrivileged(identity) {
 		t.Fatal("new session unexpectedly has a sudo window")
 	}
-	if err := service.OpenSudo(context.Background(), session.Token, "correct horse"); err != nil {
+	if err := service.OpenSudo(context.Background(), session.Token, "correct horse", "10.0.0.1"); err != nil {
 		t.Fatal(err)
 	}
 	if !service.AllowsPrivileged(identity) {
@@ -141,7 +141,7 @@ func TestSudoWindowExpiresAndLogoutRevokesIt(t *testing.T) {
 	if service.AllowsPrivileged(identity) {
 		t.Fatal("expired sudo window remained open")
 	}
-	if err := service.OpenSudo(context.Background(), session.Token, "correct horse"); err != nil {
+	if err := service.OpenSudo(context.Background(), session.Token, "correct horse", "10.0.0.1"); err != nil {
 		t.Fatal(err)
 	}
 	if err := service.Logout(context.Background(), session.Token); err != nil {
