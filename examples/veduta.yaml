@@ -21,7 +21,10 @@ dashboard:
                                      # exactly as they can override light/dark. Neither is stored
                                      # on the server, and the two axes are independent.
   # background: wallpaper.jpg        # veil only: a LOCAL path, absolute or relative to this file.
-                                     # Replaces the public-domain painting veil shows otherwise.
+                                     # Replaces the public-domain painting veil shows otherwise,
+                                     # and gets a heavier scrim than that painting does, because
+                                     # nothing is known about it here. Tone it down before
+                                     # configuring it if you want it to read.
                                      # Never a URL - Veduta reads and serves it, so no viewer's
                                      # browser fetches from a third-party host. A mandatory scrim
                                      # keeps text legible over any image, so only part shows through.

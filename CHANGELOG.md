@@ -37,11 +37,15 @@ actions, and notifies when something needs attention.
   Bacino di San Marco* by day, Vernet's *Entrance to the Port of Palermo by Moonlight* by night —
   each shipped desaturated and contrast-compressed so it sits behind the cards rather than
   competing with them, with a generated gradient beneath as the fallback if an image does not load.
-- `dashboard.background` replaces that painting with a local image, absolute or relative to the
-  config file. Veduta reads and serves it, so no viewer's browser fetches from a third-party host;
-  content is sniffed rather than trusted from the extension. One mandatory scrim covers the bundled
-  and configured cases alike and keeps every text token above its contrast floor against any image,
-  proven against pure black and pure white.
+  Cards sit at 55% opacity over it with a 22px backdrop blur, so the preset reads as glass.
+- The scrim that guarantees contrast over a backdrop is **two** values, not one. The bundled
+  paintings are files in this repository, so their floors are proven against the pixels they
+  actually contain and they need a scrim of only 0.18; a configured `dashboard.background` is an
+  arbitrary file, can only be defended against pure black and pure white, and gets 0.70. A test
+  holds the invariant that the unknown case never gets the cheaper defence.
+- `dashboard.background` replaces the bundled painting with a local image, absolute or relative to
+  the config file. Veduta reads and serves it, so no viewer's browser fetches from a third-party
+  host; content is sniffed rather than trusted from the extension.
 - The Widget Document and CardState envelopes, with Go and TypeScript types generated from one
   JSON Schema so the two halves cannot disagree.
 - Live updates over SSE with heartbeats, an event replay ring, `Last-Event-ID` resumption and

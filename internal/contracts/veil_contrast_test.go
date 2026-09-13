@@ -8,115 +8,306 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"strconv"
 	"strings"
 	"testing"
 )
 
-// TestVeilContrast is TestTokenContrast for the translucent preset, and it exists because the
-// opaque test structurally cannot cover Veil: TestTokenContrast reads hex pairs, but Veil's
-// --v-surface is `rgb(var(--v-veil-tint) / var(--v-veil-alpha))`, which has no luminance until it
-// is composited over whatever is behind it.
+// Veil is TestTokenContrast's problem restated, and the opaque test structurally cannot cover it:
+// TestTokenContrast reads hex pairs, but Veil's --v-surface is
+// `rgb(var(--v-veil-tint) / var(--v-veil-alpha))`, which has no luminance until it is composited
+// over whatever is behind it.
 //
-// This covers the bottom layer of Veil's backdrop: the GENERATED gradient, which is what the page
-// falls back to when the shipped painting above it has not loaded or 404s. The two stops
-// interpolate each sRGB channel monotonically, and relative luminance is monotonic in each
-// channel, so composited luminance along the whole gradient is bounded by its value at the two
-// stops - evaluating both is therefore exhaustive, not a sample. Blur does not widen that range: a
-// gradient is already low-frequency.
+// Two things make that computable, and they are different for the two backdrops Veil can have:
 //
-// So the preset stays legible even with no image at all, which is the case no image-based test can
-// reach. A painting - shipped or configured - has no such bound, which is why it sits under a
-// mandatory scrim evaluated worst-case by TestVeilImageContrast instead. See
-// docs/decisions/0002-theming-and-visual-customisation.md.
+//   - The BUNDLED paintings are files in this repository, so their pixels are known here and the
+//     floors are proven against what they actually contain (TestVeilContrast).
+//   - A CONFIGURED dashboard.background is an arbitrary file, so the floors can only be proven
+//     against the worst an image can be (TestVeilImageContrast).
+//
+// That difference is why the two cases carry different scrim strengths, and it is the whole reason
+// the preset can be transparent enough to see through at all. See tokens.css.
+//
+// Both tests share two pieces of care:
+//
+//   - Contrast is V-SHAPED in backdrop luminance: it is worst where the surface luminance is
+//     closest to the text's, which is not necessarily an extreme. Checking only the extremes is
+//     sound only while every token sits outside the reachable range, and nothing was enforcing
+//     that assumption. worstContrast clamps instead, which is exact either way.
+//   - The bound is taken per CHANNEL, not per pixel, because backdrop-filter blurs the backdrop
+//     behind each card. A blurred sample is a convex combination of neighbouring pixels in each
+//     channel independently, so it can pair one pixel's red with another's blue; the
+//     all-minimums and all-maximums corners bound every blur radius exactly, and cheaply.
+
+// veilFloors is the contrast matrix, identical to the one TestTokenContrast enforces on the
+// opaque palette. A preset does not get an accessibility discount for being pretty.
+var veilFloors = []struct {
+	tok string
+	min float64
+	why string
+}{
+	{"--v-text", 4.5, "body text on a translucent card"},
+	{"--v-muted", 4.5, "secondary text on a translucent card"},
+	{"--v-faint", 4.5, "tertiary text on a translucent card"},
+	{"--v-ok", 3.0, "status dot and label"},
+	{"--v-warn", 3.0, "status dot and label"},
+	{"--v-error", 3.0, "status dot and label"},
+	{"--v-accent", 3.0, "progress fill and focus ring"},
+	{"--v-border", 1.2, "a visible edge between card and backdrop"},
+}
+
+// TestVeilContrast proves the floors against the paintings Veil actually ships, pixel by pixel.
+//
+// This is what lets the bundled backdrop run at a scrim of 0.18 rather than the 0.70 an unknown
+// image needs: the file is in the repository, so "what can this backdrop do to the text" is a
+// question with an answer here rather than a worst case to defend against. Re-tone either painting
+// harshly and this fails, which is the point - the toning is load-bearing, not decoration.
 func TestVeilContrast(t *testing.T) {
-	light, dark := palettes(t)
 	css := tokensCSS(t)
-
-	for _, scheme := range []struct {
-		name     string
-		base     palette
-		selector string
-	}{
-		{"light", light, `:root[data-appearance="veil"] {`},
-		{"dark", dark, `:root[data-appearance="veil"]:not([data-theme="light"]) {`},
-	} {
+	for _, scheme := range veilSchemes(t) {
 		t.Run(scheme.name, func(t *testing.T) {
-			// Veil overrides only what it must; everything else inherits from the opaque palette,
-			// exactly how the cascade resolves it.
-			p := palette{}
-			for k, v := range scheme.base {
-				p[k] = v
-			}
-			veilLight := blockBody(t, css, `:root[data-appearance="veil"] {`)
-			body := blockBody(t, css, scheme.selector)
-			for k, v := range hexTokensIn(veilLight) {
-				p[k] = v
-			}
-			if scheme.name == "dark" {
-				for k, v := range hexTokensIn(body) {
-					p[k] = v
-				}
-			}
+			file := backdropFile(t, scheme.block)
+			lo, hi := backdropChannelBox(t, file)
+			s := scheme.surfaces(t, css, lo, hi)
 
-			// The tint and alpha are Veil's own; the dark block overrides the tint.
-			alpha := scalarIn(t, veilLight, "--v-veil-alpha")
-			tint := tripleIn(t, firstWith(veilLight, body, "--v-veil-tint"), "--v-veil-tint")
-			from, ok := p["--v-backdrop-from"]
-			if !ok {
-				t.Fatal("--v-backdrop-from missing")
-			}
-			to, ok := p["--v-backdrop-to"]
-			if !ok {
-				t.Fatal("--v-backdrop-to missing")
-			}
-
-			// The scrim sits between the gradient and the card, in the no-image case exactly as
-			// in the image case: it is one declaration in the base Veil block, not something the
-			// backdrop layer chooses. Compositing it here is therefore not extra rigour, it is
-			// what the browser does.
-			scrimAlpha := scalarIn(t, veilLight, "--v-scrim-alpha")
-			scrim := tripleIn(t, firstWith(veilLight, body, "--v-scrim"), "--v-scrim")
-			surfaces := []rgb{
-				composite(tint, alpha, composite(scrim, scrimAlpha, from)),
-				composite(tint, alpha, composite(scrim, scrimAlpha, to)),
-			}
-
-			// The same floors TestTokenContrast enforces on the opaque palette. Body text at
-			// 4.5:1, status and accent at 3:1 - a preset does not get an accessibility discount
-			// for being pretty.
-			for _, pr := range []struct {
-				tok string
-				min float64
-				why string
-			}{
-				{"--v-text", 4.5, "body text on a translucent card"},
-				{"--v-muted", 4.5, "secondary text on a translucent card"},
-				{"--v-faint", 4.5, "tertiary text on a translucent card"},
-				{"--v-ok", 3.0, "status dot and label"},
-				{"--v-warn", 3.0, "status dot and label"},
-				{"--v-error", 3.0, "status dot and label"},
-				{"--v-accent", 3.0, "progress fill and focus ring"},
-				{"--v-border", 1.2, "a visible edge between card and backdrop"},
-			} {
-				fg, ok := p[pr.tok]
+			for _, f := range veilFloors {
+				fg, ok := scheme.palette[f.tok]
 				if !ok {
-					t.Fatalf("token missing: %s", pr.tok)
+					t.Fatalf("token missing: %s", f.tok)
 				}
-				for i, surface := range surfaces {
-					stop := "backdrop-from"
-					if i == 1 {
-						stop = "backdrop-to"
-					}
-					if got := contrast(fg, surface); got < pr.min {
-						t.Errorf("%s over %s composited at alpha %.2f = %.2f:1, want >= %.1f:1 (%s)",
-							pr.tok, stop, alpha, got, pr.min, pr.why)
+				if got := worstContrast(fg, s.minL, s.maxL); got < f.min {
+					t.Errorf("%s over %s = %.2f:1 at worst, want >= %.1f:1 (%s)",
+						f.tok, file, got, f.min, f.why)
+				}
+			}
+
+			// Nested panels (--v-surface-2) are more opaque than the card, so text on them is
+			// strictly safer. Asserted rather than argued: the day someone makes surface-2 the
+			// more transparent of the two, this is what says so.
+			if got := worstContrast(scheme.palette["--v-text"], s.nestedMinL, s.nestedMaxL); got < 4.5 {
+				t.Errorf("--v-text on --v-surface-2 over %s = %.2f:1 at worst, want >= 4.5:1", file, got)
+			}
+		})
+	}
+}
+
+// TestVeilImageContrast is the guarantee for the case arithmetic cannot bound on its own: a
+// dashboard.background an operator configures, whose pixels are unknown here.
+//
+// It evaluates the extremes an image can actually present - pure black and pure white - rather
+// than a representative photograph, which would say nothing about the next one. Both extremes
+// matter and for opposite reasons: in dark the scrim caps composited luminance from above, because
+// light text needs the backdrop to stay dark, and a white image is the adversary; in light it
+// imposes a floor, and a black image is.
+func TestVeilImageContrast(t *testing.T) {
+	css := tokensCSS(t)
+	configured := blockBody(t, css, `:root[data-appearance="veil"][data-backdrop="image"] {`)
+	scrimAlpha := scalarIn(t, configured, "--v-scrim-alpha")
+
+	for _, scheme := range veilSchemes(t) {
+		t.Run(scheme.name, func(t *testing.T) {
+			black, white := rgb{r: 0, g: 0, b: 0}, rgb{r: 255, g: 255, b: 255}
+			s := scheme.surfacesAt(t, css, scrimAlpha, black, white)
+
+			for _, f := range veilFloors {
+				fg, ok := scheme.palette[f.tok]
+				if !ok {
+					t.Fatalf("token missing: %s", f.tok)
+				}
+				if got := worstContrast(fg, s.minL, s.maxL); got < f.min {
+					t.Errorf("%s over a configured background image (scrim %.2f) = %.2f:1 at worst, "+
+						"want >= %.1f:1 (%s)", f.tok, scrimAlpha, got, f.min, f.why)
+				}
+			}
+			if got := worstContrast(scheme.palette["--v-text"], s.nestedMinL, s.nestedMaxL); got < 4.5 {
+				t.Errorf("--v-text on --v-surface-2 over a configured background = %.2f:1 at worst, want >= 4.5:1", got)
+			}
+		})
+	}
+}
+
+// TestVeilFallbackGradientIsInsideTheBackdrop is how the gradient under the painting gets a proof
+// without needing its own.
+//
+// The gradient renders when the painting has not loaded or 404s - the one case no image-based test
+// reaches. Rather than run the whole matrix a third time against its two stops, the stops are
+// required to lie inside the painting's own channel box: compositing and relative luminance are
+// monotone in each channel, so anything inside that box produces a surface inside the range
+// TestVeilContrast already cleared. Move a stop outside the box and this fails, which is the
+// reminder that the fallback then needs proving on its own terms.
+func TestVeilFallbackGradientIsInsideTheBackdrop(t *testing.T) {
+	for _, scheme := range veilSchemes(t) {
+		t.Run(scheme.name, func(t *testing.T) {
+			file := backdropFile(t, scheme.block)
+			lo, hi := backdropChannelBox(t, file)
+			for _, stop := range []string{"--v-backdrop-from", "--v-backdrop-to"} {
+				c, ok := scheme.palette[stop]
+				if !ok {
+					t.Fatalf("token missing: %s", stop)
+				}
+				for _, ch := range []struct {
+					name         string
+					v, low, high float64
+				}{
+					{"red", c.r, lo.r, hi.r},
+					{"green", c.g, lo.g, hi.g},
+					{"blue", c.b, lo.b, hi.b},
+				} {
+					if ch.v < ch.low || ch.v > ch.high {
+						t.Errorf("%s %s channel %.0f is outside %s's range [%.0f, %.0f]; the fallback "+
+							"gradient no longer inherits the painting's contrast proof",
+							stop, ch.name, ch.v, file, ch.low, ch.high)
 					}
 				}
 			}
 		})
 	}
+}
+
+// TestVeilConfiguredBackgroundRaisesTheScrim is the structural half of the two-scrim design.
+//
+// Configuring a background must change the image and the scrim over it, and nothing else. An
+// earlier tokens.css restated the whole background shorthand here, which meant the scrim existed
+// twice and could be weakened in one copy while every contrast test kept reading the other and
+// passing. The direction matters too: an unknown image can only ever need MORE scrim than the
+// bundled one, never less.
+func TestVeilConfiguredBackgroundRaisesTheScrim(t *testing.T) {
+	css := tokensCSS(t)
+	bundled := blockBody(t, css, `:root[data-appearance="veil"] {`)
+	configured := blockBody(t, css, `:root[data-appearance="veil"][data-backdrop="image"] {`)
+
+	if !strings.Contains(configured, "/api/v1/background") {
+		t.Error("the configured background does not resolve to the server's own route")
+	}
+	if got, want := scalarIn(t, configured, "--v-scrim-alpha"), scalarIn(t, bundled, "--v-scrim-alpha"); got <= want {
+		t.Errorf("configured scrim alpha %.2f is not above the bundled %.2f; an image whose pixels "+
+			"are unknown here cannot be defended with less scrim than one whose pixels are in the repo",
+			got, want)
+	}
+	for _, token := range []string{"--v-scrim", "--v-veil-alpha", "--v-veil-tint", "--v-surface", "--v-surface-2"} {
+		if strings.Contains(configured, token+":") {
+			t.Errorf("the configured-background block redeclares %s; the contrast contract is proven "+
+				"against the one declaration in the base Veil block, so a second copy can silently drift", token)
+		}
+	}
+}
+
+// TestBundledBackdropTone holds what the contrast tests cannot say: not that the paintings are
+// legible behind - TestVeilContrast proves that for the files as they stand - but that they are
+// legible behind BY DESIGN, because they were toned, rather than by luck of which reproduction
+// someone downloaded.
+//
+// Swap in a full-strength original and TestVeilContrast fails somewhere specific and confusing;
+// this fails first, saying the file is not toned. It measures the file's own channel range and
+// saturation, which is what the toning controls and what every other bound here derives from.
+func TestBundledBackdropTone(t *testing.T) {
+	for _, scheme := range veilSchemes(t) {
+		t.Run(scheme.name, func(t *testing.T) {
+			file := backdropFile(t, scheme.block)
+			lo, hi := backdropChannelBox(t, file)
+			saturation := backdropSaturation(t, file)
+
+			// Range of the file itself, as a fraction of the full 0-255 scale. A painting that
+			// still spans most of the scale has not been compressed, whatever its median says.
+			span := math.Max(hi.r-lo.r, math.Max(hi.g-lo.g, hi.b-lo.b)) / 255
+			t.Logf("%s: channel box #%02x%02x%02x..#%02x%02x%02x, widest channel spans %.2f of the scale, mean saturation %.3f",
+				file, int(lo.r), int(lo.g), int(lo.b), int(hi.r), int(hi.g), int(hi.b), span, saturation)
+
+			if span > 0.50 {
+				t.Errorf("%s: widest channel spans %.2f of the scale, want <= 0.50 - the file is not "+
+					"contrast-compressed, so the card surface will swing further than the palette allows", file, span)
+			}
+			// A desaturated painting cannot introduce a hue that competes with --v-accent, the
+			// dashboard's only colour with a job.
+			if saturation > 0.28 {
+				t.Errorf("%s: mean saturation %.3f, want <= 0.28 - the file is not desaturated", file, saturation)
+			}
+		})
+	}
+}
+
+// ── helpers ─────────────────────────────────────────────────────────────────────────────────
+
+type veilScheme struct {
+	name    string
+	block   string  // the scheme's own Veil block body, where its overrides live
+	palette palette // opaque base, plus Veil's light overrides, plus this scheme's
+}
+
+// veilSchemes resolves the cascade the way the browser does: the opaque palette, then Veil's base
+// block, then - for dark - Veil's dark block on top.
+func veilSchemes(t *testing.T) []veilScheme {
+	t.Helper()
+	light, dark := palettes(t)
+	css := tokensCSS(t)
+	veilLight := blockBody(t, css, `:root[data-appearance="veil"] {`)
+	veilDark := blockBody(t, css, `:root[data-appearance="veil"]:not([data-theme="light"]) {`)
+
+	build := func(base palette, extra string) palette {
+		p := palette{}
+		for k, v := range base {
+			p[k] = v
+		}
+		for k, v := range hexTokensIn(veilLight) {
+			p[k] = v
+		}
+		if extra != "" {
+			for k, v := range hexTokensIn(extra) {
+				p[k] = v
+			}
+		}
+		return p
+	}
+	return []veilScheme{
+		{"light", veilLight, build(light, "")},
+		{"dark", veilDark, build(dark, veilDark)},
+	}
+}
+
+// surfaceRange is the reachable luminance of the card surface, and of a nested panel on it.
+type surfaceRange struct{ minL, maxL, nestedMinL, nestedMaxL float64 }
+
+func (s veilScheme) surfaces(t *testing.T, css string, lo, hi rgb) surfaceRange {
+	t.Helper()
+	veilLight := blockBody(t, css, `:root[data-appearance="veil"] {`)
+	return s.surfacesAt(t, css, scalarIn(t, veilLight, "--v-scrim-alpha"), lo, hi)
+}
+
+func (s veilScheme) surfacesAt(t *testing.T, css string, scrimAlpha float64, lo, hi rgb) surfaceRange {
+	t.Helper()
+	veilLight := blockBody(t, css, `:root[data-appearance="veil"] {`)
+	cardAlpha := scalarIn(t, veilLight, "--v-veil-alpha")
+	nestedAlpha := surfaceTwoAlpha(t, veilLight)
+	tint := tripleIn(t, firstWith(veilLight, s.block, "--v-veil-tint"), "--v-veil-tint")
+	scrim := tripleIn(t, firstWith(veilLight, s.block, "--v-scrim"), "--v-scrim")
+
+	surface := func(backdrop rgb) (card, nested float64) {
+		c := composite(tint, cardAlpha, composite(scrim, scrimAlpha, backdrop))
+		return c.relativeLuminance(), composite(tint, nestedAlpha, c).relativeLuminance()
+	}
+	cardLo, nestedLo := surface(lo)
+	cardHi, nestedHi := surface(hi)
+	return surfaceRange{
+		minL: math.Min(cardLo, cardHi), maxL: math.Max(cardLo, cardHi),
+		nestedMinL: math.Min(nestedLo, nestedHi), nestedMaxL: math.Max(nestedLo, nestedHi),
+	}
+}
+
+// worstContrast is the lowest ratio a foreground can reach against any surface luminance in
+// [minL, maxL]. Contrast is V-shaped in surface luminance with its minimum where the two are
+// equal, so the worst reachable surface is the one closest to the foreground - which is an
+// endpoint only when the foreground lies outside the range.
+func worstContrast(fg rgb, minL, maxL float64) float64 {
+	l := fg.relativeLuminance()
+	worst := math.Max(minL, math.Min(maxL, l))
+	return luminanceContrast(l, worst)
+}
+
+func luminanceContrast(a, b float64) float64 {
+	if a < b {
+		a, b = b, a
+	}
+	return (a + 0.05) / (b + 0.05)
 }
 
 func tokensCSS(t *testing.T) string {
@@ -152,6 +343,7 @@ func hexTokensIn(body string) palette {
 
 var scalarToken = regexp.MustCompile(`(--v-[a-z0-9-]+):\s*([0-9.]+)\s*;`)
 var tripleToken = regexp.MustCompile(`(--v-[a-z0-9-]+):\s*(\d{1,3})\s+(\d{1,3})\s+(\d{1,3})\s*;`)
+var surfaceTwoToken = regexp.MustCompile(`--v-surface-2:\s*rgb\(var\(--v-veil-tint\)\s*/\s*([0-9.]+)\)`)
 
 func scalarIn(t *testing.T, body, name string) float64 {
 	t.Helper()
@@ -166,6 +358,19 @@ func scalarIn(t *testing.T, body, name string) float64 {
 	}
 	t.Fatalf("%s not found", name)
 	return 0
+}
+
+func surfaceTwoAlpha(t *testing.T, body string) float64 {
+	t.Helper()
+	m := surfaceTwoToken.FindStringSubmatch(body)
+	if m == nil {
+		t.Fatal("--v-surface-2 is not a tint-over-backdrop value; the nested-surface proof no longer applies")
+	}
+	v, err := strconv.ParseFloat(m[1], 64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return v
 }
 
 func tripleIn(t *testing.T, body, name string) rgb {
@@ -204,176 +409,9 @@ func composite(tint rgb, alpha float64, backdrop rgb) rgb {
 	}
 }
 
-// TestVeilImageContrast is the guarantee for the case arithmetic cannot bound on its own: a
-// painting, whose pixels the palette cannot be reasoned about from. That is true of the two
-// vedute Veil ships as well as of a background an operator configures - dashboard.background
-// replaces the image URL and changes nothing else, so one test covers both.
-//
-// The gradient fallback is bounded by its two stops. A painting is bounded by nothing, so the
-// contract is enforced instead by the mandatory scrim in tokens.css: the image contributes at
-// most (1 - --v-scrim-alpha) of the backdrop. This test therefore evaluates the extremes an image
-// can actually present - pure black and pure white - rather than the two paintings that happen to
-// ship today, which would say nothing about the next background an operator configures.
-//
-// Both extremes matter and for opposite reasons: in dark the scrim caps composited luminance from
-// above, because light text needs the backdrop to stay dark, and a white image is the adversary;
-// in light it imposes a floor, and a black image is. Testing only one would leave half the
-// contract unproven.
-func TestVeilImageContrast(t *testing.T) {
-	light, dark := palettes(t)
-	css := tokensCSS(t)
-	veilLight := blockBody(t, css, `:root[data-appearance="veil"] {`)
-	veilDark := blockBody(t, css, `:root[data-appearance="veil"]:not([data-theme="light"]) {`)
-
-	surfaceAlpha := scalarIn(t, veilLight, "--v-veil-alpha")
-	scrimAlpha := scalarIn(t, veilLight, "--v-scrim-alpha")
-
-	// The worst an image can be, in both directions. Nothing between these is worse.
-	extremes := map[string]rgb{"pure black": {r: 0, g: 0, b: 0}, "pure white": {r: 255, g: 255, b: 255}}
-
-	for _, scheme := range []struct {
-		name  string
-		base  palette
-		block string
-	}{
-		{"light", light, veilLight},
-		{"dark", dark, veilDark},
-	} {
-		t.Run(scheme.name, func(t *testing.T) {
-			p := palette{}
-			for k, v := range scheme.base {
-				p[k] = v
-			}
-			for k, v := range hexTokensIn(veilLight) {
-				p[k] = v
-			}
-			if scheme.name == "dark" {
-				for k, v := range hexTokensIn(veilDark) {
-					p[k] = v
-				}
-			}
-			tint := tripleIn(t, firstWith(veilLight, scheme.block, "--v-veil-tint"), "--v-veil-tint")
-			scrim := tripleIn(t, firstWith(veilLight, scheme.block, "--v-scrim"), "--v-scrim")
-
-			for _, pr := range []struct {
-				tok string
-				min float64
-			}{
-				{"--v-text", 4.5}, {"--v-muted", 4.5}, {"--v-faint", 4.5},
-				{"--v-ok", 3.0}, {"--v-warn", 3.0}, {"--v-error", 3.0},
-				{"--v-accent", 3.0}, {"--v-border", 1.2},
-			} {
-				fg, ok := p[pr.tok]
-				if !ok {
-					t.Fatalf("token missing: %s", pr.tok)
-				}
-				for label, image := range extremes {
-					backdrop := composite(scrim, scrimAlpha, image)
-					surface := composite(tint, surfaceAlpha, backdrop)
-					if got := contrast(fg, surface); got < pr.min {
-						t.Errorf("%s over a %s background image (scrim %.2f, surface %.2f) = %.2f:1, want >= %.1f:1",
-							pr.tok, label, scrimAlpha, surfaceAlpha, got, pr.min)
-					}
-				}
-			}
-		})
-	}
-}
-
-// TestVeilConfiguredBackgroundKeepsTheScrim is the structural half of the guarantee above.
-//
-// That proof holds for a configured background only because configuring one swaps the image URL
-// and nothing else. An earlier version of tokens.css restated the whole background shorthand -
-// scrim included - in the [data-backdrop="image"] block, which meant the scrim existed twice and
-// could be weakened in one copy while every contrast test kept reading the other and passing.
-func TestVeilConfiguredBackgroundKeepsTheScrim(t *testing.T) {
-	css := tokensCSS(t)
-	block := blockBody(t, css, `:root[data-appearance="veil"][data-backdrop="image"] {`)
-
-	if !strings.Contains(block, "--v-backdrop-image:") {
-		t.Error("the configured-background block does not override --v-backdrop-image")
-	}
-	if !strings.Contains(block, "/api/v1/background") {
-		t.Error("the configured background does not resolve to the server's own route")
-	}
-	for _, token := range []string{"--v-scrim", "--v-scrim-alpha", "--v-veil-alpha", "--v-veil-tint"} {
-		if strings.Contains(block, token+":") {
-			t.Errorf("the configured-background block redeclares %s; the contrast contract is proven "+
-				"against the one declaration in the base Veil block, so a second copy can silently drift", token)
-		}
-	}
-}
-
-// TestBundledBackdropTone holds the other half of what makes the shipped paintings usable as a
-// backdrop: not that they are legible - the scrim proves that for any image - but that they are
-// CALM. A dashboard is read, not looked at, and a full-strength history painting behind it
-// competes with the cards for the same attention.
-//
-// So the two files are shipped pre-toned: desaturated and contrast-compressed toward the scheme's
-// own scrim colour when they were encoded, rather than filtered in CSS where the cost would be a
-// composited layer on every paint and the result could not be asserted. This test is what makes
-// that a property of the repository instead of a one-time decision someone made in an image
-// editor: replace either file with a harsh original and it fails.
-//
-// It measures the COMPOSITED backdrop - scrim over image, at the shipped alpha - because that is
-// what a viewer actually sees, and it is the quantity "distracting" is a claim about. Percentiles
-// rather than min/max: a single specular highlight (Vernet's moon is exactly that) is not a
-// distraction, a bright half of the frame is.
-func TestBundledBackdropTone(t *testing.T) {
-	css := tokensCSS(t)
-	veilLight := blockBody(t, css, `:root[data-appearance="veil"] {`)
-	veilDark := blockBody(t, css, `:root[data-appearance="veil"]:not([data-theme="light"]) {`)
-	scrimAlpha := scalarIn(t, veilLight, "--v-scrim-alpha")
-
-	for _, scheme := range []struct {
-		name string
-		// The composited backdrop's p02-p98 luminance span: how much the page's background moves
-		// across the frame. The yardstick is the generated gradient each painting replaced, which
-		// composites to a span of about 0.07 in light and far less in dark - so these bounds say
-		// "no busier than the backdrop that shipped before", which is a claim about this design
-		// rather than a number chosen to fit the files.
-		maxSpan float64
-		// Which side of the range the backdrop must sit on, so it reads as this scheme's page
-		// rather than as a picture that happens to be behind one.
-		minMedian, maxMedian float64
-		// Mean sRGB saturation of the file itself. A desaturated painting cannot introduce a hue
-		// that competes with --v-accent, which is the dashboard's only colour with a job.
-		maxSaturation float64
-		block         string
-	}{
-		{"light", 0.11, 0.55, 0.85, 0.12, veilLight},
-		{"dark", 0.010, 0.0, 0.10, 0.30, veilDark},
-	} {
-		t.Run(scheme.name, func(t *testing.T) {
-			file := backdropFile(t, firstWith(veilLight, scheme.block, "--v-backdrop-image"))
-			scrim := tripleIn(t, firstWith(veilLight, scheme.block, "--v-scrim"), "--v-scrim")
-
-			lums, saturation := backdropTone(t, file, scrim, scrimAlpha)
-			p := func(q float64) float64 { return lums[int(q*float64(len(lums)-1))] }
-			span := p(0.98) - p(0.02)
-			t.Logf("%s composited over the %s scrim: luminance p02 %.4f, median %.4f, p98 %.4f (span %.4f), mean saturation %.4f",
-				file, scheme.name, p(0.02), p(0.50), p(0.98), span, saturation)
-
-			if span > scheme.maxSpan {
-				t.Errorf("%s: composited backdrop luminance spans %.4f (p02 %.4f, p98 %.4f), want <= %.4f - "+
-					"the backdrop moves too much across the frame to sit behind text",
-					file, span, p(0.02), p(0.98), scheme.maxSpan)
-			}
-			if median := p(0.50); median < scheme.minMedian || median > scheme.maxMedian {
-				t.Errorf("%s: composited backdrop median luminance %.4f, want within [%.2f, %.2f] for the %s scheme",
-					file, median, scheme.minMedian, scheme.maxMedian, scheme.name)
-			}
-			if saturation > scheme.maxSaturation {
-				t.Errorf("%s: mean saturation %.4f, want <= %.4f - the shipped file is not toned down",
-					file, saturation, scheme.maxSaturation)
-			}
-		})
-	}
-}
-
 // backdropUrl pulls the bundled file out of `--v-backdrop-image: url("./backdrops/x.jpg");`. It
 // deliberately does not accept the configured-background route: there is no file to measure there,
-// which is the whole reason the scrim exists.
+// which is the whole reason that case has its own, heavier scrim.
 var backdropUrl = regexp.MustCompile(`--v-backdrop-image:\s*url\("\./([A-Za-z0-9._/-]+)"\)\s*;`)
 
 func backdropFile(t *testing.T, body string) string {
@@ -385,9 +423,7 @@ func backdropFile(t *testing.T, body string) string {
 	return m[1]
 }
 
-// backdropTone returns the sorted per-pixel relative luminance of the backdrop as composited -
-// scrim over image - together with the mean sRGB saturation of the image itself.
-func backdropTone(t *testing.T, file string, scrim rgb, scrimAlpha float64) (lums []float64, saturation float64) {
+func decodeBackdrop(t *testing.T, file string) [][3]float64 {
 	t.Helper()
 	path := filepath.Join(repoRoot(t), "web/src/styles", file)
 	f, err := os.Open(path)
@@ -399,22 +435,38 @@ func backdropTone(t *testing.T, file string, scrim rgb, scrimAlpha float64) (lum
 	if err != nil {
 		t.Fatalf("%s: %v", path, err)
 	}
-
 	b := img.Bounds()
-	lums = make([]float64, 0, b.Dx()*b.Dy())
-	var total float64
+	px := make([][3]float64, 0, b.Dx()*b.Dy())
 	for y := b.Min.Y; y < b.Max.Y; y++ {
 		for x := b.Min.X; x < b.Max.X; x++ {
-			r16, g16, b16, _ := img.At(x, y).RGBA()
-			px := rgb{r: float64(r16 >> 8), g: float64(g16 >> 8), b: float64(b16 >> 8)}
-			lums = append(lums, composite(scrim, scrimAlpha, px).relativeLuminance())
-
-			high := math.Max(px.r, math.Max(px.g, px.b))
-			if high > 0 {
-				total += (high - math.Min(px.r, math.Min(px.g, px.b))) / high
-			}
+			r, g, bl, _ := img.At(x, y).RGBA()
+			px = append(px, [3]float64{float64(r >> 8), float64(g >> 8), float64(bl >> 8)})
 		}
 	}
-	sort.Float64s(lums)
-	return lums, total / float64(len(lums))
+	return px
+}
+
+// backdropChannelBox is the per-channel minimum and maximum over the whole file - the bound that
+// survives backdrop-filter, since a blurred sample mixes each channel independently.
+func backdropChannelBox(t *testing.T, file string) (lo, hi rgb) {
+	t.Helper()
+	lo, hi = rgb{r: 255, g: 255, b: 255}, rgb{}
+	for _, p := range decodeBackdrop(t, file) {
+		lo = rgb{math.Min(lo.r, p[0]), math.Min(lo.g, p[1]), math.Min(lo.b, p[2])}
+		hi = rgb{math.Max(hi.r, p[0]), math.Max(hi.g, p[1]), math.Max(hi.b, p[2])}
+	}
+	return lo, hi
+}
+
+func backdropSaturation(t *testing.T, file string) float64 {
+	t.Helper()
+	px := decodeBackdrop(t, file)
+	var total float64
+	for _, p := range px {
+		high := math.Max(p[0], math.Max(p[1], p[2]))
+		if high > 0 {
+			total += (high - math.Min(p[0], math.Min(p[1], p[2]))) / high
+		}
+	}
+	return total / float64(len(px))
 }

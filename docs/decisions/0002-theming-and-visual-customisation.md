@@ -170,13 +170,18 @@ the route into an arbitrary file read served to every viewer.
 `TestBackground_RefusesAFileThatIsNotAnImage` holds that line.
 
 The scrim is mandatory and lives in the CSS, not in a caller that could forget
-it: at `--v-scrim-alpha: 0.8` an image contributes at most 20% of the backdrop,
+it: an image contributes at most `1 - --v-scrim-alpha` of the backdrop,
 and `TestVeilImageContrast` proves every text token clears its floor against both
 extremes a photograph can present. Each colour scheme carries its own scrim
 colour, because the bound runs in opposite directions — reusing one for both
 fails the test. The visible cost is real and accepted: guaranteeing AA over an
 arbitrary photograph and showing that photograph at full strength are not
 compatible, and this project resolves that toward legibility.
+
+*(Amended 2026-09-13: this said 0.8, one number for every backdrop. The scrim is
+now two numbers — see "One scrim was two problems" below. What is unchanged is
+that it is mandatory, that it lives in the CSS, and that an unknown image is
+defended worst-case.)*
 
 A background under `appearance: clean` is a **configuration error**, not a
 silently ignored field — the schema requires `appearance: veil` alongside it.
@@ -253,6 +258,50 @@ cost a composited layer on every paint, and — the deciding half — could not 
 file can: `TestBundledBackdropTone` measures the *composited* backdrop's luminance span against
 the gradient it replaced, so "calm enough to sit behind text" is a property of the repository
 rather than a judgement someone once made in an image editor.
+
+### One scrim was two problems, and the preset paid the higher price for both
+
+Shipping the paintings under the existing 0.8 scrim produced a preset that was
+technically translucent and visually opaque: the backdrop was 80% flat colour, so
+the cards had nothing to be transparent *to*, and `backdrop-filter` was blurring a
+wash. The obvious fix — lower the scrim — hits a floor at 0.75, below which
+light-scheme `--v-faint` fails. That floor is real, but it is the answer to the
+wrong question.
+
+**A file in this repository is not an unknown image.** The worst-case evaluation
+exists because a configured `dashboard.background` could be anything. The bundled
+paintings could not: they are committed files, toned by a script, and their pixels
+are as available to a test as any hex token is. So their floors are proven against
+*what they actually contain* rather than against pure black and pure white, and
+that costs a scrim of **0.18** instead of **0.70**. Same mechanism, same CSS, two
+numbers — and `TestVeilConfiguredBackgroundRaisesTheScrim` holds the invariant
+that the unknown case can never be defended with *less*.
+
+This is the gradient-versus-photograph argument applied one level down, and it is
+what let the card surface drop from 0.78 to **0.55** without losing a floor.
+
+Two corrections to the proofs came out of it. Both were latent defects, not new
+requirements:
+
+- **Contrast is V-shaped in backdrop luminance**, so the worst backdrop is the
+  reachable one *closest* to the text colour, not the darkest or the lightest.
+  Checking only the extremes was sound only while every token sat outside the
+  reachable range — an assumption nothing stated and nothing enforced, and one
+  that a more transparent surface erodes. The tests now clamp, which is exact
+  either way.
+- **The bound must be per channel, not per pixel.** `backdrop-filter` blurs what is
+  behind each card, and a blurred sample is a convex combination of neighbouring
+  pixels in each channel independently — so it can pair one pixel's red with
+  another's blue, producing a colour that appears nowhere in the file. The
+  all-minimums and all-maximums corners bound every blur radius exactly.
+
+Three neutrals moved to pay for the transparency: `--v-muted`, `--v-faint` and
+`--v-border`, in both schemes. That is this decision's own rule working as
+intended — a preset owns its mechanics, and these are Veil's, not a widening of
+the shared vocabulary.
+
+The fallback gradient's stops are now chosen *inside* the painting's channel box,
+so the no-image case inherits the painting's proof instead of carrying its own.
 
 ### What did not change
 

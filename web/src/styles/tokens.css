@@ -117,78 +117,92 @@ body {
  *
  * Selected by dashboard.appearance and by the viewer's own override, applied as
  * data-appearance="veil" on <html>. A preset owns its own effect mechanics - surface alpha, blur,
- * backdrop - and they are deliberately not configurable; see
+ * scrim - and they are deliberately not configurable; see
  * docs/decisions/0002-theming-and-visual-customisation.md.
  *
  * The backdrop is a veduta: the Italian genre of wide topographical views this project is named
  * after. Each colour scheme gets the painting that belongs to its light - Canaletto's daylit Molo
  * seen from the Bacino di San Marco, and Vernet's moonlit entrance to the port of Palermo. Both
- * are public domain and both are shipped pre-toned: desaturated and contrast-compressed toward
- * the scheme's own scrim colour at build time, not with a CSS filter. A filter on the root would
- * cost a composited layer on every paint and could not be checked by a test; a baked file can,
- * and TestBundledBackdropTone holds that line.
+ * are public domain and both ship pre-toned: desaturated and contrast-compressed toward the
+ * scheme's own scrim colour at encode time, not with a CSS filter. A filter on the root would cost
+ * a composited layer on every paint and could not be checked by a test; a baked file can.
  *
- * Three layers, painted top to bottom:
+ * ## Why the scrim differs between the bundled and the configured backdrop
  *
- *   1. the scrim, which is what makes the contrast contract provable at all;
- *   2. the painting;
- *   3. the generated gradient, which is the floor if the painting has not loaded or 404s.
+ * The scrim is what bounds how much of the backdrop reaches the text, and it is not one number
+ * because the two cases are not one problem:
  *
- * The gradient is not decoration and is not dead code. Its two stops interpolate each sRGB
- * channel monotonically, and relative luminance is monotonic in each channel, so composited
- * luminance along it is bounded by its value at the two stops - which is what lets TestVeilContrast
- * prove the no-image case exhaustively rather than by sampling. A shipped or configured photograph
- * has no such bound, which is why layer 1 sits above it and is mandatory.
+ *   - The BUNDLED paintings are in this repository. Their pixels are known at build time, so the
+ *     contrast floors can be proven against what they actually contain - and because they were
+ *     toned to a narrow band before they shipped, what they actually contain is mild. They need
+ *     very little scrim: 0.18.
+ *   - A CONFIGURED dashboard.background is an arbitrary file. Nothing is known about it, so its
+ *     floors can only be proven against the worst an image can be - pure black and pure white -
+ *     and that costs a much heavier scrim: 0.70.
  *
- * --v-faint is the one neutral Veil must redefine. At 4.71:1 on opaque white it sits 0.21 above
- * the AA floor, so ANY translucency sinks it - the same arithmetic that produced the .dimmed bug
- * TestStaleStateContrast guards. Veil darkens it to #68686f. Everything else in the palette
- * already clears unchanged.
+ * This is the same distinction the gradient-versus-photograph argument drew, applied one level
+ * down. A file whose bytes are in the repo is not an unknown, and paying the unknown's price for
+ * it is what made the preset look like frosted glass over nothing.
+ *
+ * ## What the tests prove
+ *
+ * TestVeilContrast (bundled) walks the real JPEGs; TestVeilImageContrast (configured) walks the
+ * two extremes. Both share two pieces of care that are easy to get wrong:
+ *
+ *   - Contrast is V-shaped in backdrop luminance, so the worst backdrop is the reachable one
+ *     CLOSEST to the text colour, not the darkest or the lightest. Checking only the extremes is
+ *     sound only while every text token sits outside the reachable range - which stops being true
+ *     as the surface gets more transparent, exactly what this preset just did.
+ *   - The bound is taken per CHANNEL, not per pixel, because backdrop-filter blurs what is behind
+ *     the card: a blurred sample is a convex combination of neighbours in each channel
+ *     independently, so it can pair one pixel's red with another's blue. The all-minimums and
+ *     all-maximums corners bound every blur radius exactly.
+ *
+ * The gradient below the painting is the fallback if the image has not loaded or 404s. Its stops
+ * are chosen INSIDE the painting's channel box, so it inherits the painting's proof rather than
+ * needing one of its own - TestVeilFallbackGradientIsInsideTheBackdrop holds that.
  */
 
 :root[data-appearance="veil"] {
-  --v-veil-alpha: 0.78;
+  --v-veil-alpha: 0.55;
   --v-veil-tint: 255 255 255;
-  --v-backdrop-from: #b4c9e4;   /* daylit sky */
-  --v-backdrop-to: #f0dcc4;     /* warm horizon haze */
+  --v-backdrop-from: #cdd6e0;   /* daylit sky, inside the Canaletto's channel box */
+  --v-backdrop-to: #e4dcd0;     /* warm horizon haze, likewise */
 
-  /* The scrim is not decoration and is not optional. A painting's pixels cannot be bounded by
-   * arithmetic the way the gradient's can, so contrast is guaranteed instead by bounding what
-   * reaches the text: at 0.80 the image contributes at most 20% of the backdrop, and
-   * TestVeilImageContrast proves every text token still clears its floor against BOTH extremes an
-   * image can present - pure black and pure white - rather than against the two paintings that
-   * happen to ship today, which would say nothing about a background an operator configures.
-   *
-   * Note the bound runs in both directions: in dark the scrim caps composited luminance from
-   * above, because light text needs the backdrop to stay dark, and a white image is the adversary;
-   * in light it imposes a floor, and a black image is. That is why each scheme carries its own
-   * scrim colour rather than sharing one.
-   *
-   * The visible cost is real and deliberate: only part of the painting shows through. Guaranteeing
-   * AA over an arbitrary image and showing that image at full strength are not compatible, and
-   * this project resolves that in favour of legibility. */
-  --v-scrim-alpha: 0.8;
+  --v-scrim-alpha: 0.18;
   --v-scrim: 232 238 246;
   --v-backdrop-image: url("./backdrops/canaletto-molo.jpg");
 
   --v-surface: rgb(var(--v-veil-tint) / var(--v-veil-alpha));
-  --v-surface-2: rgb(var(--v-veil-tint) / 0.55);
-  --v-border: #d5dbe4;
-  --v-faint: #68686f;
-  --v-blur-filter: blur(16px) saturate(1.4);
-  --v-shadow: 0 1px 2px rgb(30 40 60 / 8%), 0 8px 28px rgb(30 40 60 / 10%);
+  /* Nested panels are MORE opaque than the card, never less: stacked on the card their effective
+   * tint is 0.55 + 0.45 x 0.38 = 0.72, so anything legible on --v-surface is legible on this
+   * without a second proof. TestVeilContrast checks it rather than assuming it. */
+  --v-surface-2: rgb(var(--v-veil-tint) / 0.38);
+  --v-muted: #4f4f58;
+  --v-faint: #55555e;
+  --v-border: #a9b2c0;
+  --v-blur-filter: blur(22px) saturate(1.5);
+  --v-shadow: 0 1px 2px rgb(30 40 60 / 10%), 0 10px 32px rgb(30 40 60 / 14%);
 }
+
+/* Veil redefines four neutrals, and the reason is the same for all four: a 55%-opaque card lets
+ * the backdrop move the surface under the text far more than an opaque one does, so the tokens
+ * that sat closest to their floor have to step away from it. --v-faint was already the tightest
+ * in the opaque palette - 4.71:1, 0.21 above the AA floor, the same arithmetic that produced the
+ * .dimmed bug TestStaleStateContrast guards - and --v-border is the one that has to stay visible
+ * against a surface that is now nearly the backdrop. Everything else clears unchanged. */
 
 :root[data-appearance="veil"][data-theme="dark"],
 :root[data-appearance="veil"]:not([data-theme="light"]) {
   --v-veil-tint: 23 23 26;
-  --v-backdrop-from: #1b2c58;   /* deep dusk sky */
-  --v-backdrop-to: #46264a;     /* plum horizon glow */
+  --v-backdrop-from: #232a3d;   /* deep dusk sky, inside the Vernet's channel box */
+  --v-backdrop-to: #3a2f42;     /* plum horizon glow, likewise */
   --v-scrim: 13 16 24;
   --v-backdrop-image: url("./backdrops/vernet-palermo.jpg");
-  --v-border: #33333c;
-  --v-faint: #8b8b95;
-  --v-shadow: 0 1px 2px rgb(0 0 0 / 50%), 0 8px 28px rgb(0 0 0 / 34%);
+  --v-muted: #b6b6c0;
+  --v-faint: #a8a8b3;
+  --v-border: #5e5e6c;
+  --v-shadow: 0 1px 2px rgb(0 0 0 / 55%), 0 10px 32px rgb(0 0 0 / 40%);
 }
 
 /* The dark block above uses :not([data-theme="light"]) so it also applies under the system dark
@@ -197,13 +211,14 @@ body {
 @media (prefers-color-scheme: light) {
   :root[data-appearance="veil"]:not([data-theme="dark"]) {
     --v-veil-tint: 255 255 255;
-    --v-backdrop-from: #b4c9e4;
-    --v-backdrop-to: #f0dcc4;
+    --v-backdrop-from: #cdd6e0;
+    --v-backdrop-to: #e4dcd0;
     --v-scrim: 232 238 246;
     --v-backdrop-image: url("./backdrops/canaletto-molo.jpg");
-    --v-border: #d5dbe4;
-    --v-faint: #68686f;
-    --v-shadow: 0 1px 2px rgb(30 40 60 / 8%), 0 8px 28px rgb(30 40 60 / 10%);
+    --v-muted: #4f4f58;
+    --v-faint: #55555e;
+    --v-border: #a9b2c0;
+    --v-shadow: 0 1px 2px rgb(30 40 60 / 10%), 0 10px 32px rgb(30 40 60 / 14%);
   }
 }
 
@@ -234,14 +249,24 @@ body {
 
 /* ── Veil with a configured background image ─────────────────────────────────────────────────
  *
- * dashboard.background replaces the shipped painting and nothing else: the scrim above it, the
- * gradient beneath it and every contrast floor are the same declarations either way, so the
- * guarantee cannot be lost by configuring a background. That is the whole point of expressing this
- * as one variable rather than a second copy of the background shorthand - the earlier version
- * restated all four background properties here, and a scrim stated twice is a scrim that can
- * drift.
+ * dashboard.background changes exactly two things: which image is painted, and how hard the scrim
+ * over it has to work. Everything else - the gradient beneath, the card alpha, every palette
+ * token - is the same declaration either way.
+ *
+ * The heavier scrim is the price of not knowing the file. At 0.70 the image contributes at most
+ * 30% of the backdrop, and TestVeilImageContrast proves every text token still clears its floor
+ * against both extremes an image can present. That bound runs in both directions: in dark the
+ * scrim caps composited luminance from above, because light text needs the backdrop to stay dark,
+ * and a white image is the adversary; in light it imposes a floor, and a black image is.
+ *
+ * The cost is real and deliberate: a configured wallpaper shows less of itself than the bundled
+ * paintings do. Guaranteeing AA over an arbitrary image and showing that image at full strength
+ * are not compatible, and this project resolves that in favour of legibility. The way to get a
+ * background that shows more is to tone it down before configuring it, which is exactly what the
+ * bundled ones did.
  */
 
 :root[data-appearance="veil"][data-backdrop="image"] {
+  --v-scrim-alpha: 0.7;
   --v-backdrop-image: url("/api/v1/background");
 }

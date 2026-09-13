@@ -24,7 +24,7 @@ states](web/tests/visual.spec.ts-snapshots/dashboard-light-chromium-linux.png)
 ![The same dashboard in the Veil preset, dark: translucent blurred cards over a dimmed moonlit
 harbour painting](web/tests/visual.spec.ts-snapshots/dashboard-veil-dark-chromium-linux.png)
 
-*Veil, dark — translucent cards over Vernet's moonlit Palermo, set with `dashboard.appearance: veil`.*
+*Veil, dark — glass cards over Vernet's moonlit Palermo, set with `dashboard.appearance: veil`.*
 
 Neither image is a marketing shot taken by hand — both are visual-regression baselines the test
 suite compares against on every push ([`web/tests/visual.spec.ts`](web/tests/visual.spec.ts)),
@@ -34,9 +34,12 @@ fails until the baselines are regenerated, so the screenshots cannot drift away 
 Light and dark follow your browser, and the preset follows the instance's `dashboard.appearance` —
 but both are yours to override, from two controls in the header, remembered in your own browser and
 stored nowhere on the server. Veil's backdrop is a public-domain veduta chosen for the colour
-scheme, shipped dimmed and desaturated so it stays a backdrop; a mandatory scrim over it is what
-lets the text contrast be proven in CI against the worst image anyone could supply, rather than
-eyeballed (`TestVeilImageContrast`).
+scheme, shipped desaturated and flattened so it stays a backdrop, with cards at 55% opacity and a
+22px blur over it. Its text contrast is proven in CI rather than eyeballed — against the
+paintings' own pixels, because they are files in this repository (`TestVeilContrast`), and against
+the worst image anyone could supply for `dashboard.background`, because that one is not
+(`TestVeilImageContrast`). That is why the bundled backdrop can show through and a configured one
+shows less.
 
 > **Experimental: the plugin ABI will change.** Veduta is pre-1.0. The WebAssembly guest ABI, the
 > host functions in [`sdk/rust`](sdk/rust), and the integration manifest schema are **not** stable

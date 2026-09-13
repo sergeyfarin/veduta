@@ -116,15 +116,17 @@ previewing.
 
 Two gaps the 2026-09-13 amendment leaves open, neither blocking:
 
-- **The bundled backdrops are barely visible, by construction.** The scrim that makes contrast
-  provable against any image caps the painting at 20% of the backdrop, and the binding constraint
-  is light-scheme `--v-faint`, which fails below `--v-scrim-alpha: 0.75`. So 0.80 is 0.05 of margin
-  from the floor, and buying visible strength means either a weaker guarantee or per-token work on
-  the light palette to create headroom. Revisit if people report the backdrop reads as a smudge
-  rather than as a picture - the fix is palette headroom, not a lower scrim.
+- **A configured `dashboard.background` still shows less of itself than the bundled paintings do.**
+  Its scrim is 0.70 against the bundled 0.18, and the gap is not arbitrary: the bundled files are
+  in the repository, so their floors are proven against their actual pixels, while an arbitrary
+  image can only be defended worst-case. The honest workaround is documented rather than built -
+  tone the image down before configuring it, which is what the bundled ones do. A build step that
+  did that toning for the operator is the real fix, and would need a decode/re-encode path the
+  asset milestone is already planning. Priority: when that milestone lands.
 - **The Canaletto ships at 956x640**, the largest reproduction on Commons of that exact painting.
-  It is soft on a large display, though at 20% strength and under blur that has not been visible
-  in review. Replace it if a higher-resolution public-domain scan appears.
+  It is soft on a large display, and more so now that the scrim only holds back 18% of it. Not
+  visible in review at 1440px, plausible above that. Replace it if a higher-resolution
+  public-domain scan appears.
 
 Priority: on demand. Nothing here blocks anything; the entry is the record of a decision not to
 build, which is easy to forget and expensive to rediscover.
