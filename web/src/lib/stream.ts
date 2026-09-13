@@ -7,7 +7,8 @@ export type StreamStatus = 'connecting' | 'live' | 'offline';
 export function connectCardStream(
   onCard: (card: CardState) => void,
   onReset: () => void,
-  onStatus: (status: StreamStatus) => void
+  onStatus: (status: StreamStatus) => void,
+  onConfig: () => void = () => {}
 ): () => void {
   if (typeof EventSource === 'undefined') {
     onStatus('offline');
@@ -25,5 +26,10 @@ export function connectCardStream(
     }
   });
   stream.addEventListener('reset', onReset);
+  // A new configuration generation changes the LAYOUT - cards added or removed, titles, spans,
+  // appearance - none of which a card-state event can express. A client disconnected when it was
+  // sent either replays it from the server's ring on reconnect, or receives 'reset' instead
+  // because the ring moved past, and 'reset' already means refetch everything.
+  stream.addEventListener('config', onConfig);
   return () => stream.close();
 }

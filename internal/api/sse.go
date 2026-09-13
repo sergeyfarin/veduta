@@ -21,8 +21,13 @@ const maxSSEClients = 128
 const maxSSEClientsPerSession = 4
 
 type sseEvent struct {
-	id   string
-	data []byte
+	id string
+	// event is the SSE event name - "card" for a card state, "config" for a new configuration
+	// generation. It is carried on the ring entry rather than assumed at write time, so a replay
+	// after a reconnect reproduces the same event types the live stream sent. Without it a
+	// replayed config event would arrive as a card and be parsed as one.
+	event string
+	data  []byte
 }
 type sseHub struct {
 	mu    sync.Mutex
@@ -49,10 +54,25 @@ func newSSEHub(m *scheduler.Manager) *sseHub {
 }
 func (h *sseHub) publish(ev scheduler.Event) {
 	data, _ := json.Marshal(ev.State)
+	h.broadcast("card", data)
+}
+
+// publishConfig announces that a new configuration generation is live. Card states alone cannot
+// carry this: a card added, removed, retitled, respanned or restyled changes the LAYOUT, which
+// the frontend fetches once from /dashboard, so before this every such change needed a browser
+// reload to become visible. It goes on the same ring as card events, which is what makes it
+// survive a reconnect - a client that was disconnected when it happened either replays it from
+// the ring or, if the ring has moved past, gets the reset that already means "refetch
+// everything".
+func (h *sseHub) publishConfig(generation uint64) {
+	h.broadcast("config", []byte(`{"generation":`+strconv.FormatUint(generation, 10)+`}`))
+}
+
+func (h *sseHub) broadcast(event string, data []byte) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.next++
-	e := sseEvent{id: h.nonce + "-" + strconv.FormatUint(h.next, 10), data: data}
+	e := sseEvent{id: h.nonce + "-" + strconv.FormatUint(h.next, 10), event: event, data: data}
 	h.ring = append(h.ring, e)
 	if len(h.ring) > replaySize {
 		h.ring = h.ring[len(h.ring)-replaySize:]
@@ -151,7 +171,7 @@ func (s *Server) routeSSE(mux *http.ServeMux) {
 			f.Flush()
 		}
 		for _, e := range replay {
-			writeSSE(w, "card", e.id, e.data)
+			writeSSE(w, e.event, e.id, e.data)
 			f.Flush()
 		}
 		ticker := time.NewTicker(20 * time.Second)
@@ -164,7 +184,7 @@ func (s *Server) routeSSE(mux *http.ServeMux) {
 				if !open {
 					return
 				}
-				writeSSE(w, "card", e.id, e.data)
+				writeSSE(w, e.event, e.id, e.data)
 				f.Flush()
 			case <-ticker.C:
 				writeSSE(w, "ping", "", []byte(`{}`))

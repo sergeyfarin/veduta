@@ -45,13 +45,18 @@ type Status struct {
 
 // Store owns the process-wide immutable config snapshot and its live-reload status.
 type Store struct {
-	path     string
-	load     Loader
-	log      *slog.Logger
-	current  atomic.Pointer[Snapshot]
-	mu       sync.RWMutex
-	status   Status
-	activate Activator
+	path    string
+	load    Loader
+	log     *slog.Logger
+	current atomic.Pointer[Snapshot]
+	// published is called after a new snapshot is live and readable through Snapshot(), never
+	// before. An Activator runs earlier, while the previous generation is still the one Snapshot()
+	// returns, so notifying from there would tell clients to refetch a layout that has not
+	// changed yet.
+	published func(uint64)
+	mu        sync.RWMutex
+	status    Status
+	activate  Activator
 }
 
 // Open loads the initial snapshot. The server must not start without one valid configuration.
@@ -249,11 +254,11 @@ func (s *Store) reload(ctx context.Context) {
 		}
 	}
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.status.AttemptedAt = now
 	s.status.Diagnostics = copyDiagnostics(diags)
 	if snapshot == nil || diags.HasErrors() {
 		s.status.OK = false
+		s.mu.Unlock()
 		s.log.Error("config reload rejected; keeping previous configuration", "diagnostics", diags.String())
 		return
 	}
@@ -262,7 +267,22 @@ func (s *Store) reload(ctx context.Context) {
 	s.status.Generation = nextGeneration
 	s.status.Checksum = snapshotChecksum(snapshot)
 	s.status.LoadedAt = now
-	s.log.Info("configuration reloaded", "generation", s.status.Generation, "checksum", s.status.Checksum)
+	published, generation, checksum := s.published, s.status.Generation, s.status.Checksum
+	s.mu.Unlock()
+
+	s.log.Info("configuration reloaded", "generation", generation, "checksum", checksum)
+	// Announced only now, with the lock released and the new snapshot already readable, so a
+	// client that refetches the instant it hears gets the generation it was told about.
+	if published != nil {
+		published(generation)
+	}
+}
+
+// SetPublished registers fn to be called after each new generation becomes live and readable.
+func (s *Store) SetPublished(fn func(uint64)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.published = fn
 }
 
 func snapshotChecksum(snapshot *Snapshot) string {

@@ -78,10 +78,22 @@
       });
   });
 
-  async function reloadCards() {
-    const response = await fetch('/api/v1/cards');
-    if (!response.ok) throw new Error(`GET /cards: HTTP ${response.status}`);
-    const cards = (await response.json()) as CardEnvelope[];
+  // Layout and state together. The stream carries card states, so a configuration change - a card
+  // added or removed, a retitled or respanned one, a new appearance - used to need a browser
+  // reload to appear. Both 'config' (a new generation was published) and 'reset' (the client may
+  // have missed one) come here, so a missed notification is recovered on reconnect rather than
+  // leaving a stale layout on screen until someone presses refresh.
+  async function reloadDashboard() {
+    const [layout, cards] = await Promise.all([
+      fetch('/api/v1/dashboard').then((r) =>
+        r.ok ? (r.json() as Promise<Dashboard>) : Promise.reject(new Error(`GET /dashboard: HTTP ${r.status}`))
+      ),
+      fetch('/api/v1/cards').then((r) =>
+        r.ok ? (r.json() as Promise<CardEnvelope[]>) : Promise.reject(new Error(`GET /cards: HTTP ${r.status}`))
+      )
+    ]);
+    dashboard = layout;
+    applyAppearance(layout.appearance, layout.background ?? false);
     cardsById = new Map(cards.map((card) => [card.cardId, card]));
   }
 
@@ -93,10 +105,13 @@
         nextCards.set(card.cardId, card);
         cardsById = nextCards;
       },
-      () => { void reloadCards().catch((error: unknown) => {
+      () => { void reloadDashboard().catch((error: unknown) => {
         loadError = error instanceof Error ? error.message : String(error);
       }); },
-      (status) => { streamStatus = status; }
+      (status) => { streamStatus = status; },
+      () => { void reloadDashboard().catch((error: unknown) => {
+        loadError = error instanceof Error ? error.message : String(error);
+      }); }
     );
   });
 

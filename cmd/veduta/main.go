@@ -304,6 +304,13 @@ func serve(args []string) error {
 		return err
 	}
 
+	// Registered after the server exists and, more importantly, fired after the store has
+	// published the new snapshot - a layout refetch triggered any earlier would read the
+	// generation that is being replaced.
+	if cfg.ConfigStore != nil {
+		cfg.ConfigStore.SetPublished(srv.NotifyConfigChanged)
+	}
+
 	if cfg.ConfigStore != nil {
 		go func() {
 			if err := cfg.ConfigStore.Watch(ctx); err != nil && !errors.Is(err, context.Canceled) {

@@ -218,3 +218,48 @@ func TestSSEDoneAfterDropDoesNotDoubleRelease(t *testing.T) {
 		t.Fatalf("session count=%d, want 1 remaining stream", sessions)
 	}
 }
+
+// TestSSEReplayPreservesEventTypes is the regression test for what makes a config notification
+// survive a reconnect. Every ring entry used to be written back as "card" on replay, because the
+// event name was assumed at write time rather than stored; a replayed config event would have
+// arrived as a card and been parsed as a card state. A client that was briefly disconnected is
+// exactly the client that most needs to hear its layout changed.
+func TestSSEReplayPreservesEventTypes(t *testing.T) {
+	h := &sseHub{nonce: "n", clients: map[chan sseEvent]string{}, sessions: map[string]int{}}
+	h.broadcast("card", []byte(`{"cardId":"a"}`))
+	h.publishConfig(7)
+
+	replay, _, reset, accepted, done := h.subscribe("n-1", "session")
+	defer done()
+	if !accepted || reset {
+		t.Fatalf("accepted=%v reset=%v, want a clean replay from a known event id", accepted, reset)
+	}
+	if len(replay) != 1 {
+		t.Fatalf("replayed %d events, want 1", len(replay))
+	}
+	if replay[0].event != "config" {
+		t.Fatalf("replayed event = %q, want %q", replay[0].event, "config")
+	}
+	if string(replay[0].data) != `{"generation":7}` {
+		t.Fatalf("replayed data = %s", replay[0].data)
+	}
+}
+
+// TestPublishConfigReachesLiveClients covers the ordinary path: a connected client is told.
+func TestPublishConfigReachesLiveClients(t *testing.T) {
+	h := &sseHub{nonce: "n", clients: map[chan sseEvent]string{}, sessions: map[string]int{}}
+	_, ch, _, accepted, done := h.subscribe("", "session")
+	if !accepted {
+		t.Fatal("subscribe was refused")
+	}
+	defer done()
+	h.publishConfig(3)
+	select {
+	case e := <-ch:
+		if e.event != "config" || string(e.data) != `{"generation":3}` {
+			t.Fatalf("event = %q data = %s", e.event, e.data)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("a live client was never told about the new generation")
+	}
+}

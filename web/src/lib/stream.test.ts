@@ -35,4 +35,22 @@ describe('connectCardStream', () => {
     disconnect();
     expect(FakeEventSource.current.close).toHaveBeenCalledOnce();
   });
+
+  // A configuration generation changes the layout, which card states cannot express - before the
+  // stream carried this, an added or removed card needed a browser reload to appear.
+  it('reports a new configuration generation so the layout can be refetched', () => {
+    vi.stubGlobal('EventSource', FakeEventSource);
+    const config = vi.fn();
+    connectCardStream(vi.fn(), vi.fn(), vi.fn(), config);
+    FakeEventSource.current.emit('config');
+    expect(config).toHaveBeenCalledOnce();
+  });
+
+  // Omitted by callers that do not care, and by the existing test above: a missing handler must
+  // not throw when the server sends one anyway.
+  it('tolerates a configuration event with no handler supplied', () => {
+    vi.stubGlobal('EventSource', FakeEventSource);
+    connectCardStream(vi.fn(), vi.fn(), vi.fn());
+    expect(() => FakeEventSource.current.emit('config')).not.toThrow();
+  });
 });

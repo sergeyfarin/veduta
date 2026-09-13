@@ -440,3 +440,12 @@ func (s *Server) Run(ctx context.Context) error {
 
 // Handler exposes the routes for testing without binding a socket.
 func (s *Server) Handler() http.Handler { return s.routes() }
+
+// NotifyConfigChanged announces a new live configuration generation to every connected stream, so
+// clients refetch the dashboard layout rather than only card states. Call it after the generation
+// is readable through the config store, never from an activator - see config.Store.SetPublished.
+func (s *Server) NotifyConfigChanged(generation uint64) {
+	if s.hub != nil {
+		s.hub.publishConfig(generation)
+	}
+}
