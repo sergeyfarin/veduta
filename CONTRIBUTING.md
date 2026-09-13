@@ -31,9 +31,16 @@ that talk to Veduta only through the published Integration API are not derived w
 
 ```bash
 mise install && pnpm install
-pnpm dev      # Go API on 127.0.0.1:8099 and Vite on :5173
-pnpm check    # go vet, go test, svelte-check — what CI runs
+pnpm dev        # Go API on 127.0.0.1:8099 and Vite on :5173
+mise run check  # everything CI runs, including the linter
 ```
+
+`mise run check` is the one to run before pushing. `pnpm check` is a faster subset for the inner
+loop — go vet, go test, svelte-check, vitest — and it deliberately leaves out `golangci-lint`,
+which CI runs as a separate job and which catches a class of thing `go vet` does not
+(`.golangci.yml` adds gosec, revive, errorlint, gocritic, usestdlibvars and more). A change can
+pass `pnpm check` and still fail CI on lint alone. golangci-lint is pinned in `mise.toml` and
+resolves only through mise, so reach it via `mise run lint` rather than calling it directly.
 
 ## What a change needs
 
