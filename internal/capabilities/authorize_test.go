@@ -290,16 +290,36 @@ func TestAuthorize_AssetRouteDoesNotCrossSlots(t *testing.T) {
 	}
 }
 
-// TestAuthorizesRedirect_DoesNotCrossSlots covers the redirect hop, which reuses the same
-// matcher and so had the same hole.
-func TestAuthorizesRedirect_DoesNotCrossSlots(t *testing.T) {
+// TestAuthorize_RedirectShapedRequestDoesNotCrossSlots covers the redirect hop. It no longer has
+// an authorisation function of its own - the broker builds an HTTPRequest describing the
+// destination and runs this same Authorize - so the slot comparison it needs is the one above.
+func TestAuthorize_RedirectShapedRequestDoesNotCrossSlots(t *testing.T) {
 	route := capabilities.Route{Slot: "public", Method: "GET", Path: "/api/stats", Use: capabilities.UseData}
 	g := multiSlotGrant([]capabilities.Route{route}, []capabilities.Route{route})
 
-	if err := g.AuthorizesRedirect("public", "GET", "/api/stats"); err != nil {
+	onGrantedSlot := capabilities.HTTPRequest{Slot: "public", Method: "GET", Path: "/api/stats"}
+	if err := g.Authorize(onGrantedSlot, capabilities.UseData); err != nil {
 		t.Fatalf("the granted slot's own redirect must still be allowed, got %v", err)
 	}
-	if err := g.AuthorizesRedirect("private", "GET", "/api/stats"); !errors.Is(err, capabilities.ErrRouteDenied) {
+	onOtherSlot := capabilities.HTTPRequest{Slot: "private", Method: "GET", Path: "/api/stats"}
+	if err := g.Authorize(onOtherSlot, capabilities.UseData); !errors.Is(err, capabilities.ErrRouteDenied) {
 		t.Fatalf("a redirect must not cross slots, got %v", err)
+	}
+}
+
+// TestAuthorize_UnknownBodyLengthIsRefused pins the distinction between an empty body and one
+// whose size nobody can state. A redirect destination with no Content-Length arrives as -1, and
+// a ceiling cannot be shown to accommodate a length that is unknown.
+func TestAuthorize_UnknownBodyLengthIsRefused(t *testing.T) {
+	route := capabilities.Route{Slot: "server", Method: "POST", Path: "/api/search", Use: capabilities.UseData, MaxBodyKB: 8}
+	g := grantWithRoutes([]capabilities.Route{route}, []capabilities.Route{route}, nil)
+
+	known := capabilities.HTTPRequest{Slot: "server", Method: "POST", Path: "/api/search", BodyLen: 1024}
+	if err := g.Authorize(known, capabilities.UseData); err != nil {
+		t.Fatalf("a stated length inside the ceiling must be allowed, got %v", err)
+	}
+	unknown := capabilities.HTTPRequest{Slot: "server", Method: "POST", Path: "/api/search", BodyLen: -1}
+	if err := g.Authorize(unknown, capabilities.UseData); !errors.Is(err, capabilities.ErrRouteDenied) {
+		t.Fatalf("an unknown body length must be refused, got %v", err)
 	}
 }

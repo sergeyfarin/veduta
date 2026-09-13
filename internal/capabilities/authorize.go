@@ -52,7 +52,7 @@ func anyRouteAllows(routes []Route, req HTTPRequest, canonicalPath string, use U
 		if !contentTypeAllowed(route.ContentType, req.Header) {
 			continue
 		}
-		if !bodySizeAllowed(route.MaxBodyKB, manifestRequestBodyKB, req.Body) {
+		if !bodySizeAllowed(route.MaxBodyKB, manifestRequestBodyKB, req.bodyLen()) {
 			continue
 		}
 		return true
@@ -86,45 +86,17 @@ func routeMatchesSlotMethodAndPath(route Route, slot, method, canonicalPath stri
 	return routepath.Match(routePattern, canonicalPath)
 }
 
-// AuthorizesRedirect reports whether method+path - the destination of an already-authorised
-// request's HTTP redirect, not a new caller-constructed request - remains covered by a manifest
-// route, a lock-approved route, and the connection's own allowedPaths for slot. Found in review:
-// redirectPolicy (internal/connections/client.go) could check host, scheme and a connection's
-// allowedPaths on a redirect hop, but had no way to re-run the manifest/lock route grant itself,
-// since only the broker holds the Grant - an authorised `/api/public` on a connection with no
-// (or a permissive) allowedPaths could redirect to `/api/admin` on the identical host and the
-// credentialed request would simply follow it. Deliberately narrower than Authorize:
-// queryKeys/contentType/maxBodyKB are not re-checked here, because a redirect response carries
-// none of the original request's query, content-type or body - only the destination changed.
-func (g Grant) AuthorizesRedirect(slot, method, path string) error {
-	canonicalPath, err := routepath.Canonicalise(path)
-	if err != nil {
-		return fmt.Errorf("%w: %w", ErrRouteDenied, err)
-	}
-	if !anyRoutePathAllows(g.ManifestRoutes, slot, method, canonicalPath, UseData) {
-		return fmt.Errorf("%w: no manifest route permits a redirect to %s %s", ErrRouteDenied, method, canonicalPath)
-	}
-	if !anyRoutePathAllows(g.ApprovedRoutes, slot, method, canonicalPath, UseData) {
-		return fmt.Errorf("%w: no approved (lock) route permits a redirect to %s %s", ErrRouteDenied, method, canonicalPath)
-	}
-	if policy, ok := g.ConnectionPolicy[slot]; ok && !connectionAllows(policy, canonicalPath) {
-		return fmt.Errorf("%w: the connection's own allowedPaths forbids a redirect to %s", ErrRouteDenied, canonicalPath)
-	}
-	return nil
-}
-
-func anyRoutePathAllows(routes []Route, slot, method, canonicalPath string, use UseKind) bool {
-	for _, route := range routes {
-		if routeMatchesSlotMethodAndPath(route, slot, method, canonicalPath, use) {
-			return true
-		}
-	}
-	return false
-}
-
 // queryKeysAllowed implements the nil-vs-empty distinction docs/01-architecture.md is explicit
-// about: nil means unconstrained (any key - connection-owned keys are stripped before Authorize
-// ever sees the request, see headers.go); a non-nil slice, even empty, is an allowlist.
+// about: nil means unconstrained (any key), a non-nil slice, even empty, is an allowlist.
+//
+// This deliberately says nothing about connection-owned keys. An earlier version of this comment
+// asserted they "are stripped before Authorize ever sees the request", which was not true of the
+// ordinary request path: capabilities.Broker.HTTP calls Authorize first and only builds the
+// connection's ownership set afterwards, so a plugin supplying the connection's own auth
+// parameter is DENIED here (unless a route names that key) and then stripped by filterQuery
+// regardless. That order is fail-closed and stays. The redirect path is the one place the
+// stripping genuinely has to happen first, because there the key can arrive from the upstream's
+// own Location header rather than from the plugin - connections.redirectPolicy does it there.
 func queryKeysAllowed(allowed []string, query map[string]string) bool {
 	if allowed == nil {
 		return true
@@ -178,8 +150,13 @@ func normaliseMediaType(v string) (string, error) {
 }
 
 // bodySizeAllowed enforces the effective ceiling: the route's own MaxBodyKB narrows the
-// manifest's requestBodyKB, which narrows the core default - never unlimited.
-func bodySizeAllowed(routeMaxKB, manifestRequestBodyKB int, body []byte) bool {
+// manifest's requestBodyKB, which narrows the core default - never unlimited. A negative bodyLen
+// is an UNKNOWN length, not an empty body: nothing can establish that it fits, so it is refused
+// rather than compared.
+func bodySizeAllowed(routeMaxKB, manifestRequestBodyKB int, bodyLen int64) bool {
+	if bodyLen < 0 {
+		return false
+	}
 	effectiveKB := manifestRequestBodyKB
 	if effectiveKB <= 0 {
 		effectiveKB = coreDefaultBodyKB
@@ -187,7 +164,7 @@ func bodySizeAllowed(routeMaxKB, manifestRequestBodyKB int, body []byte) bool {
 	if routeMaxKB > 0 && routeMaxKB < effectiveKB {
 		effectiveKB = routeMaxKB
 	}
-	return len(body) <= effectiveKB*1024
+	return bodyLen <= int64(effectiveKB)*1024
 }
 
 // connectionAllows checks a connection's own allowedPaths - the third, independent policy.

@@ -507,3 +507,100 @@ func TestBroker_Cache_ExpiredEntryIsGone(t *testing.T) {
 		t.Fatal("an expired entry should no longer be readable")
 	}
 }
+
+// redirectingRegistry serves /api/start as a redirect to dest with the given status, and
+// everything else as a 200, through a real connection following real redirects.
+func redirectingRegistry(t *testing.T, status int, dest string) connections.Registry {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/start" {
+			http.Redirect(w, r, dest, status)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("landed"))
+	}))
+	t.Cleanup(srv.Close)
+	reg, err := connections.New(map[string]config.Connection{
+		"conn1": {Kind: "http", HTTP: &config.HTTPConnection{BaseURL: srv.URL, Auth: config.ConnectionAuth{Type: "none"}, MaxRedirects: 3}},
+	}, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return reg
+}
+
+// TestBroker_HTTP_RedirectIsDeniedByTheDestinationsForbiddenQueryKey is the query half of the
+// finding that the redirect recheck skipped most of the route tuple. Both routes below are
+// approved, so slot, method and path all match at the destination - the only thing wrong is a
+// parameter the upstream introduced through its Location header alone, which the destination
+// route's queryKeys does not permit. Under the old narrower check this was followed and the
+// parameter went upstream with the connection's credentials.
+func TestBroker_HTTP_RedirectIsDeniedByTheDestinationsForbiddenQueryKey(t *testing.T) {
+	reg := redirectingRegistry(t, http.StatusFound, "/api/landing?include=secrets")
+	b := capabilities.NewBroker(reg, capabilities.NewMemCache(), capabilities.NewMemAudit(), nil)
+	g := fullGrant([]capabilities.Route{
+		{Slot: "server", Method: "GET", Path: "/api/start", Use: capabilities.UseData},
+		{Slot: "server", Method: "GET", Path: "/api/landing", Use: capabilities.UseData, QueryKeys: []string{}},
+	})
+
+	_, err := b.HTTP(context.Background(), g, capabilities.HTTPRequest{Slot: "server", Method: "GET", Path: "/api/start"})
+	if !errors.Is(err, capabilities.ErrRouteDenied) {
+		t.Fatalf("err = %v, want ErrRouteDenied - the destination route permits no query parameters", err)
+	}
+}
+
+// TestBroker_HTTP_RedirectAllowsTheDestinationsPermittedQueryKey proves the check above is a real
+// comparison rather than a blanket refusal of any redirect carrying a query.
+func TestBroker_HTTP_RedirectAllowsTheDestinationsPermittedQueryKey(t *testing.T) {
+	reg := redirectingRegistry(t, http.StatusFound, "/api/landing?page=2")
+	b := capabilities.NewBroker(reg, capabilities.NewMemCache(), capabilities.NewMemAudit(), nil)
+	g := fullGrant([]capabilities.Route{
+		{Slot: "server", Method: "GET", Path: "/api/start", Use: capabilities.UseData},
+		{Slot: "server", Method: "GET", Path: "/api/landing", Use: capabilities.UseData, QueryKeys: []string{"page"}},
+	})
+
+	if _, err := b.HTTP(context.Background(), g, capabilities.HTTPRequest{Slot: "server", Method: "GET", Path: "/api/start"}); err != nil {
+		t.Fatalf("unexpected error for a permitted destination parameter: %v", err)
+	}
+}
+
+// TestBroker_HTTP_PreservedBodyIsJudgedAgainstTheDestinationsCeiling is the body half. A 308
+// preserves method and body, so the bytes that were within the origin route's 8 KiB allowance
+// arrive at a destination route that allows 1 KiB. The old check re-ran neither ceiling.
+func TestBroker_HTTP_PreservedBodyIsJudgedAgainstTheDestinationsCeiling(t *testing.T) {
+	reg := redirectingRegistry(t, http.StatusPermanentRedirect, "/api/landing")
+	b := capabilities.NewBroker(reg, capabilities.NewMemCache(), capabilities.NewMemAudit(), nil)
+	g := fullGrant([]capabilities.Route{
+		{Slot: "server", Method: "POST", Path: "/api/start", Use: capabilities.UseData, MaxBodyKB: 8},
+		{Slot: "server", Method: "POST", Path: "/api/landing", Use: capabilities.UseData, MaxBodyKB: 1},
+	})
+
+	req := capabilities.HTTPRequest{Slot: "server", Method: "POST", Path: "/api/start", Body: make([]byte, 4096)}
+	if _, err := b.HTTP(context.Background(), g, req); !errors.Is(err, capabilities.ErrRouteDenied) {
+		t.Fatalf("err = %v, want ErrRouteDenied - 4 KiB exceeds the destination route's 1 KiB ceiling", err)
+	}
+}
+
+// TestBroker_HTTP_RedirectThatDropsTheBodyIsJudgedOnWhatIsActuallySent is the other side of the
+// same coin, and the case that makes carrying the ORIGINAL request's values forward wrong rather
+// than merely imprecise. A 302 turns the POST into a GET and discards the body, so what is sent
+// is a bodyless GET; judging it against the POST route's content type and 4 KiB body would deny
+// a request that no longer has either.
+func TestBroker_HTTP_RedirectThatDropsTheBodyIsJudgedOnWhatIsActuallySent(t *testing.T) {
+	reg := redirectingRegistry(t, http.StatusFound, "/api/landing")
+	b := capabilities.NewBroker(reg, capabilities.NewMemCache(), capabilities.NewMemAudit(), nil)
+	g := fullGrant([]capabilities.Route{
+		{Slot: "server", Method: "POST", Path: "/api/start", Use: capabilities.UseData, ContentType: "application/json", MaxBodyKB: 8},
+		{Slot: "server", Method: "GET", Path: "/api/landing", Use: capabilities.UseData, MaxBodyKB: 1},
+	})
+
+	req := capabilities.HTTPRequest{
+		Slot: "server", Method: "POST", Path: "/api/start",
+		Header: map[string]string{"Content-Type": "application/json"},
+		Body:   make([]byte, 4096),
+	}
+	if _, err := b.HTTP(context.Background(), g, req); err != nil {
+		t.Fatalf("unexpected error: the 302 sends a bodyless GET, which the destination route permits: %v", err)
+	}
+}

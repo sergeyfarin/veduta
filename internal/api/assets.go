@@ -74,6 +74,26 @@ func (s *Server) routeAssets(mux *http.ServeMux) {
 			return
 		}
 		result, err := p.Cache.GetOrFetch(r.Context(), assettokens.CacheKey(payload), payload.Connection, func(ctx context.Context) (assetcache.Result, error) {
+			// The signed token authorises one path; following a redirect would fetch a
+			// different one under the same signature. Found in review: the broker attaches this
+			// same re-check for a plugin's own HTTP calls, but the asset proxy never did, so an
+			// approved thumbnail that redirected to an unapproved path was fetched with the
+			// connection's credentials and served as an image. The destination is re-run through
+			// the very authorisation this request already passed, against the asset permissions
+			// as they stand now.
+			ctx = connections.WithRedirectAuthorizer(ctx, func(dest connections.RedirectRequest) error {
+				destination := payload
+				destination.Path = dest.Path
+				destination.Query = url.Values(valuesOf(dest.Query)).Encode()
+				allowed, authErr := p.Authorize(ctx, destination)
+				if authErr != nil {
+					return authErr
+				}
+				if !allowed {
+					return fmt.Errorf("no asset route permits a redirect to %s %s", dest.Method, dest.Path)
+				}
+				return nil
+			})
 			resp, requestErr := p.Registry.Do(ctx, payload.Connection, connections.Request{Method: "GET", Path: payload.Path, Query: firstQueryValues(query), MaxResponseBytes: maxAssetBytes})
 			if requestErr != nil {
 				return assetcache.Result{}, requestErr
@@ -133,6 +153,16 @@ func firstQueryValues(q url.Values) map[string]string {
 	return out
 }
 func canonicalQueryValues(q url.Values) string { return q.Encode() }
+
+// valuesOf turns redirectPolicy's single-valued query map back into url.Values, the shape the
+// asset payload and its authorisation both speak in.
+func valuesOf(q map[string]string) map[string][]string {
+	out := make(map[string][]string, len(q))
+	for k, v := range q {
+		out[k] = []string{v}
+	}
+	return out
+}
 
 var servedTransform = regexp.MustCompile(`^(w=(160|320|640|1280))?(,f=(webp|jpeg))?$`)
 

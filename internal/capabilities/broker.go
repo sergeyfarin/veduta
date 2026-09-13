@@ -111,9 +111,27 @@ func (b *broker) HTTP(ctx context.Context, g Grant, req HTTPRequest) (HTTPRespon
 	// host/scheme/allowedPaths (connections.redirectPolicy's own, connection-level checks) -
 	// found in review: only the broker holds the Grant, so closing this gap needs the Grant
 	// threaded down through ctx to where the redirect is actually decided.
+	//
+	// It runs the SAME Authorize the original request went through, against the destination
+	// request redirectPolicy describes. There used to be a narrower AuthorizesRedirect that
+	// checked slot, method and path but skipped queryKeys, contentType and maxBodyKB, on the
+	// reasoning that a redirect carries none of the original request's query, content type or
+	// body. That reasoning confused the original request with the destination one: the
+	// destination has its own query (an upstream can introduce a forbidden parameter through
+	// Location alone) and, on a 307 or 308, carries the method, the body and the Content-Type
+	// forward unchanged, so a destination route's own narrower ceiling went unenforced. A second
+	// authorisation function that is a subset of the first is also exactly the shape that let
+	// the slot comparison go missing from one of them, so there is now only one.
 	slot := req.Slot
-	ctx = connections.WithRedirectAuthorizer(ctx, func(method, path string) error {
-		return g.AuthorizesRedirect(slot, method, path)
+	ctx = connections.WithRedirectAuthorizer(ctx, func(dest connections.RedirectRequest) error {
+		return g.Authorize(HTTPRequest{
+			Slot:    slot,
+			Method:  dest.Method,
+			Path:    dest.Path,
+			Query:   dest.Query,
+			Header:  dest.Header,
+			BodyLen: dest.BodyLen,
+		}, UseData)
 	})
 	// g.Limits.ResponseMB is the manifest's own per-response ceiling, narrower than (never wider
 	// than) the connection's own MaxResponseBytes. Found in review, in two parts: (1) this field
