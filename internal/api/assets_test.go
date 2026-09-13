@@ -199,7 +199,7 @@ func TestAssetProxyDeniesARedirectToAnUnapprovedPath(t *testing.T) {
 
 	token := mintedAsset(t, tokens, db, func(p *assettokens.Payload) { p.Query = "" })
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, httptest.NewRequest("GET", "/api/v1/assets/"+token, nil))
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/assets/"+token, nil))
 
 	if rec.Code == http.StatusOK {
 		t.Fatalf("the redirect to an unapproved path was followed and served (%d bytes)", rec.Body.Len())

@@ -112,7 +112,7 @@ func captureRedirect(t *testing.T, base *url.URL, auth Auth, headers map[string]
 // redirect. joinPath's inverse has to be applied before the grant sees it.
 func TestRedirectPolicy_PathIsRelativeToABaseWithItsOwnPath(t *testing.T) {
 	base := mustParseURL(t, "https://svc.example/api")
-	req := &http.Request{Method: "GET", URL: mustParseURL(t, "https://svc.example/api/items")}
+	req := &http.Request{Method: http.MethodGet, URL: mustParseURL(t, "https://svc.example/api/items")}
 	got, err := captureRedirect(t, base, Auth{}, nil, req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -127,7 +127,7 @@ func TestRedirectPolicy_PathIsRelativeToABaseWithItsOwnPath(t *testing.T) {
 // would be inventing a path the grant never described, so it is refused instead.
 func TestRedirectPolicy_RefusesADestinationOutsideTheBasePath(t *testing.T) {
 	base := mustParseURL(t, "https://svc.example/api")
-	req := &http.Request{Method: "GET", URL: mustParseURL(t, "https://svc.example/admin")}
+	req := &http.Request{Method: http.MethodGet, URL: mustParseURL(t, "https://svc.example/admin")}
 	if _, err := captureRedirect(t, base, Auth{}, nil, req); err == nil {
 		t.Fatal("expected a destination outside the base path to be refused")
 	}
@@ -140,7 +140,7 @@ func TestRedirectPolicy_RefusesADestinationOutsideTheBasePath(t *testing.T) {
 func TestRedirectPolicy_StripsTheConnectionsOwnQueryCredential(t *testing.T) {
 	base := mustParseURL(t, "https://svc.example/")
 	auth := Auth{Type: AuthQuery, Name: "api_key"}
-	req := &http.Request{Method: "GET", URL: mustParseURL(t, "https://svc.example/items?api_key=secret&page=2")}
+	req := &http.Request{Method: http.MethodGet, URL: mustParseURL(t, "https://svc.example/items?api_key=secret&page=2")}
 	got, err := captureRedirect(t, base, auth, nil, req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -158,7 +158,7 @@ func TestRedirectPolicy_StripsTheConnectionsOwnQueryCredential(t *testing.T) {
 // of the request that will actually be sent with the connection's credentials.
 func TestRedirectPolicy_CarriesTheDestinationsOwnQuery(t *testing.T) {
 	base := mustParseURL(t, "https://svc.example/")
-	req := &http.Request{Method: "GET", URL: mustParseURL(t, "https://svc.example/items?include=secrets")}
+	req := &http.Request{Method: http.MethodGet, URL: mustParseURL(t, "https://svc.example/items?include=secrets")}
 	got, err := captureRedirect(t, base, Auth{}, nil, req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -172,7 +172,7 @@ func TestRedirectPolicy_CarriesTheDestinationsOwnQuery(t *testing.T) {
 // cannot state. Flattening that to zero would let it satisfy any ceiling.
 func TestRedirectPolicy_ReportsAnUnknownBodyLengthAsUnknown(t *testing.T) {
 	base := mustParseURL(t, "https://svc.example/")
-	req := &http.Request{Method: "POST", URL: mustParseURL(t, "https://svc.example/items"), ContentLength: -1}
+	req := &http.Request{Method: http.MethodPost, URL: mustParseURL(t, "https://svc.example/items"), ContentLength: -1}
 	got, err := captureRedirect(t, base, Auth{}, nil, req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
