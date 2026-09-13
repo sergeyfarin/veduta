@@ -113,15 +113,60 @@ func (s *Service) Reconfigure(ctx context.Context, cfg Config) error {
 	if strings.TrimSpace(cfg.Username) == "" {
 		return errors.New("auth: username is required")
 	}
-	_, err = s.store.DB().ExecContext(ctx, `UPDATE users SET username=?,password_hash=? WHERE id='admin'`, cfg.Username, passwordHash.Reveal())
+	// The whole rotation - reading what the credentials were, writing what they now are, and
+	// revoking what the old ones authorised - happens under the same exclusive lock Login and
+	// OpenSudo hold for reading across their entire verify-and-issue sequence. Without that,
+	// rotation has a window as wide as an Argon2 verification (~100ms at the default cost) in
+	// which a login that captured the OLD hash finishes, and inserts a brand new session using
+	// credentials that no longer exist. A database transaction would not close it: the stale
+	// parameters were already read into memory before the transaction began.
+	s.configMu.Lock()
+	defer s.configMu.Unlock()
+
+	changed, err := credentialsDiffer(ctx, s.store.DB(), cfg.Username, passwordHash.Reveal())
 	if err != nil {
 		return err
 	}
-	s.configMu.Lock()
+	if _, err = s.store.DB().ExecContext(ctx, `UPDATE users SET username=?,password_hash=? WHERE id='admin'`, cfg.Username, passwordHash.Reveal()); err != nil {
+		return err
+	}
 	s.username = cfg.Username
 	s.params = params
 	s.ttl = ttl
-	s.configMu.Unlock()
+	if changed {
+		return s.revokeEverythingLocked(ctx)
+	}
+	return nil
+}
+
+// credentialsDiffer reports whether the stored administrator differs from the one being
+// configured. Revocation is conditional on this rather than unconditional because New runs on
+// every startup: revoking there regardless would log the operator out every time the process
+// restarted, which is not what "changing your password ends other sessions" means.
+func credentialsDiffer(ctx context.Context, db *sql.DB, username, passwordHash string) (bool, error) {
+	var storedUsername, storedHash string
+	err := db.QueryRowContext(ctx, `SELECT username,password_hash FROM users WHERE id='admin'`).Scan(&storedUsername, &storedHash)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil // first run: there is no prior credential, and no prior session either
+	}
+	if err != nil {
+		return false, err
+	}
+	return storedUsername != username || storedHash != passwordHash, nil
+}
+
+// revokeEverythingLocked drops every server-side session and every sudo window. Caller holds
+// s.configMu for writing, which is what keeps an in-flight Login or OpenSudo from reinstating
+// either one immediately afterwards. The sudo map is in-process rather than in the database, so
+// it cannot be cleared "in the same transaction" as the session rows - the exclusive lock, not a
+// transaction, is what makes the pair atomic with respect to anyone who could recreate them.
+func (s *Service) revokeEverythingLocked(ctx context.Context) error {
+	if _, err := s.store.DB().ExecContext(ctx, `DELETE FROM sessions`); err != nil {
+		return err
+	}
+	s.sudoMu.Lock()
+	clear(s.sudoUntil)
+	s.sudoMu.Unlock()
 	return nil
 }
 
@@ -146,9 +191,24 @@ func New(ctx context.Context, cfg Config) (*Service, error) {
 		cfg.Now = time.Now
 	}
 	now := cfg.Now().UTC().Format(time.RFC3339Nano)
+	// Startup reconciliation is a credential change like any other. An operator who edits the
+	// configured password while the process is down expects that to end the sessions the old one
+	// authorised - otherwise rotation cannot evict someone holding a stolen session, which is
+	// most of what rotating a credential is for. Sessions live in the database and survived the
+	// restart; the comparison is against what is stored, so an unchanged credential leaves them
+	// alone and a restart on its own logs nobody out.
+	changed, err := credentialsDiffer(ctx, cfg.Store.DB(), cfg.Username, passwordHash.Reveal())
+	if err != nil {
+		return nil, err
+	}
 	_, err = cfg.Store.DB().ExecContext(ctx, `INSERT INTO users(id,username,password_hash,created_at) VALUES('admin',?,?,?) ON CONFLICT(id) DO UPDATE SET username=excluded.username,password_hash=excluded.password_hash`, cfg.Username, passwordHash.Reveal(), now)
 	if err != nil {
 		return nil, err
+	}
+	if changed {
+		if _, err = cfg.Store.DB().ExecContext(ctx, `DELETE FROM sessions`); err != nil {
+			return nil, err
+		}
 	}
 	return &Service{store: cfg.Store, username: cfg.Username, params: params, ttl: ttl, now: cfg.Now,
 		verifier: newVerifier(maxConcurrentVerifications, maxQueuedVerifications),
@@ -157,11 +217,16 @@ func New(ctx context.Context, cfg Config) (*Service, error) {
 
 // Login verifies credentials, applies source lockout, and creates a fresh server-side session.
 func (s *Service) Login(ctx context.Context, username, password, userAgent, ip string) (Session, error) {
+	// Held until this function returns, which is the point: the credentials read here must still
+	// be the configured ones when the session they authorise is inserted. Reconfigure takes the
+	// exclusive counterpart across its own read-modify-revoke, so a login that began before a
+	// rotation either completes before it or is serialised after it - never verifies against the
+	// old hash and then inserts a session the revocation has already passed by.
 	s.configMu.RLock()
+	defer s.configMu.RUnlock()
 	configuredUsername := s.username
 	params := s.params
 	ttl := s.ttl
-	s.configMu.RUnlock()
 	key := strings.ToLower(strings.TrimSpace(username)) + "\x00" + ip
 	now := s.now()
 	s.mu.Lock()
@@ -303,9 +368,12 @@ func (s *Service) OpenSudo(ctx context.Context, sessionToken, password, ip strin
 	if err != nil {
 		return err
 	}
+	// Held across verification and the grant, for the same reason Login holds it: a sudo
+	// verification that started before a rotation must not reinstate a window the rotation just
+	// cleared.
 	s.configMu.RLock()
+	defer s.configMu.RUnlock()
 	params := s.params
-	s.configMu.RUnlock()
 
 	key := "sudo\x00" + identity.SessionID + "\x00" + ip
 	now := s.now()
