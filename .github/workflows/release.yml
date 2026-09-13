@@ -23,8 +23,50 @@ env:
   DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
 
 jobs:
+  gate:
+    name: Required checks for this exact commit
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      # Publishing and testing were independent: CI triggers on pushes to main and on pull
+      # requests, and a tag push triggers neither, so a tag could be cut on any commit - including
+      # one whose CI run failed or never happened - and this workflow would build, sign, push to
+      # GHCR and create the release without a single test having run for it. The artefact
+      # verification further down proves the binary runs and carries its notices; it does not
+      # prove the code in it passed anything.
+      #
+      # This gate asks the one question that matters at release time: did the required suite
+      # succeed for THIS commit, not for something near it. A tag pointing at a main commit
+      # normally has that run already; a tag on an unmerged or amended commit does not, and that
+      # is precisely the case worth stopping. A run still in progress is not a pass either - the
+      # message says to wait rather than pretending the tag is bad.
+      - name: Require a successful CI run for this commit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          successes="$(gh api \
+            "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?head_sha=${GITHUB_SHA}&status=completed" \
+            --jq '[.workflow_runs[] | select(.conclusion == "success")] | length')"
+          if [ "$successes" -gt 0 ]; then
+            echo "CI succeeded for ${GITHUB_SHA}"
+            exit 0
+          fi
+          echo "No successful CI run for ${GITHUB_SHA}."
+          echo "Push the commit to main, let CI finish, and tag that exact commit."
+          # A dry run exists to exercise this pipeline, including this gate, on commits that may
+          # never have been on main. It reports and continues; only a real publication is blocked.
+          if [ "${DRY_RUN}" = "true" ]; then
+            echo "::warning::Dry run continuing without a successful CI run for this commit."
+            exit 0
+          fi
+          exit 1
+
   binaries:
     name: Binaries and checksums
+    needs: [gate]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -129,6 +171,7 @@ jobs:
 
   image:
     name: Multi-arch image
+    needs: [gate]
     runs-on: ubuntu-latest
     permissions:
       contents: read

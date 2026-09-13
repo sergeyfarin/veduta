@@ -7,6 +7,11 @@ A lightweight, self-hosted dashboard for your home and homelab. It shows **rich 
 services and machines, performs a small set of **explicitly approved actions**, and
 **notifies** you when something needs attention.
 
+> **Actions are not executable in 0.1.** A card's declared action buttons render, and they are
+> permanently disabled. Executing one needs authentication, an authorisation check and an audit
+> trail on the core side, and until all three exist an enabled button that did nothing on click
+> would be worse than a visibly disabled one. Everything else on this page is implemented.
+
 Its distinguishing bet: **community integrations are sandboxed by design**. An integration
 describes what it wants; the core decides whether it is allowed, and holds every credential.
 
