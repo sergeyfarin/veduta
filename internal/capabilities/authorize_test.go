@@ -249,3 +249,57 @@ func TestAuthorize_ConnectionPolicy_MalformedAllowedPathIgnored(t *testing.T) {
 		t.Fatalf("a malformed allowedPaths entry should be skipped, not fatal, got %v", err)
 	}
 }
+
+// multiSlotGrant binds two slots to two different connections, the shape in which a route
+// approved for one slot must never authorise a request against the other's credentials.
+func multiSlotGrant(manifest, approved []capabilities.Route) capabilities.Grant {
+	return capabilities.NewGrant("plug", "1.0.0", "inst",
+		map[string]string{"public": "conn-public", "private": "conn-private"},
+		capabilities.NewCapSet("http", "assets"),
+		manifest, approved, nil, capabilities.Limits{}, capabilities.ExecutionIdentity{})
+}
+
+// TestAuthorize_RouteDoesNotCrossSlots pins the first element of the route identity tuple
+// docs/01-architecture.md section 6 defines. Before this check existed, every assertion below
+// passed authorisation: the matcher compared use, method and path and simply never looked at
+// the slot, so one approved route covered the same path on every connection the card bound.
+func TestAuthorize_RouteDoesNotCrossSlots(t *testing.T) {
+	route := capabilities.Route{Slot: "public", Method: "GET", Path: "/api/stats", Use: capabilities.UseData}
+	g := multiSlotGrant([]capabilities.Route{route}, []capabilities.Route{route})
+
+	onGrantedSlot := capabilities.HTTPRequest{Slot: "public", Method: "GET", Path: "/api/stats"}
+	if err := g.Authorize(onGrantedSlot, capabilities.UseData); err != nil {
+		t.Fatalf("the slot the route was approved for must still be allowed, got %v", err)
+	}
+
+	onOtherSlot := capabilities.HTTPRequest{Slot: "private", Method: "GET", Path: "/api/stats"}
+	if err := g.Authorize(onOtherSlot, capabilities.UseData); !errors.Is(err, capabilities.ErrRouteDenied) {
+		t.Fatalf("a route approved for slot \"public\" must not authorise slot \"private\", got %v", err)
+	}
+}
+
+// TestAuthorize_AssetRouteDoesNotCrossSlots is the same boundary on the asset path: an approved
+// thumbnail route on one connection must not mint refs against another connection.
+func TestAuthorize_AssetRouteDoesNotCrossSlots(t *testing.T) {
+	route := capabilities.Route{Slot: "public", Method: "GET", Path: "/api/thumb/*", Use: capabilities.UseAsset}
+	g := multiSlotGrant([]capabilities.Route{route}, []capabilities.Route{route})
+
+	req := capabilities.HTTPRequest{Slot: "private", Method: "GET", Path: "/api/thumb/1"}
+	if err := g.Authorize(req, capabilities.UseAsset); !errors.Is(err, capabilities.ErrRouteDenied) {
+		t.Fatalf("an asset route approved for slot \"public\" must not authorise slot \"private\", got %v", err)
+	}
+}
+
+// TestAuthorizesRedirect_DoesNotCrossSlots covers the redirect hop, which reuses the same
+// matcher and so had the same hole.
+func TestAuthorizesRedirect_DoesNotCrossSlots(t *testing.T) {
+	route := capabilities.Route{Slot: "public", Method: "GET", Path: "/api/stats", Use: capabilities.UseData}
+	g := multiSlotGrant([]capabilities.Route{route}, []capabilities.Route{route})
+
+	if err := g.AuthorizesRedirect("public", "GET", "/api/stats"); err != nil {
+		t.Fatalf("the granted slot's own redirect must still be allowed, got %v", err)
+	}
+	if err := g.AuthorizesRedirect("private", "GET", "/api/stats"); !errors.Is(err, capabilities.ErrRouteDenied) {
+		t.Fatalf("a redirect must not cross slots, got %v", err)
+	}
+}

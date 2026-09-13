@@ -43,7 +43,7 @@ func (g Grant) Authorize(req HTTPRequest, use UseKind) error {
 // a route only "matches" if the ENTIRE tuple is satisfied, not just method+path.
 func anyRouteAllows(routes []Route, req HTTPRequest, canonicalPath string, use UseKind, manifestRequestBodyKB int) bool {
 	for _, route := range routes {
-		if !routeMatchesMethodAndPath(route, req.Method, canonicalPath, use) {
+		if !routeMatchesSlotMethodAndPath(route, req.Slot, req.Method, canonicalPath, use) {
 			continue
 		}
 		if !queryKeysAllowed(route.QueryKeys, req.Query) {
@@ -60,13 +60,22 @@ func anyRouteAllows(routes []Route, req HTTPRequest, canonicalPath string, use U
 	return false
 }
 
-// routeMatchesMethodAndPath is anyRouteAllows' method+path+use match, factored out so
+// routeMatchesSlotMethodAndPath is anyRouteAllows' slot+method+path+use match, factored out so
 // AuthorizesRedirect can reuse it without the query/content-type/body checks that only apply to
-// a caller-constructed request - a redirect response carries none of the original request's
-// query, content-type or body, so re-checking those against the redirect target would be
-// checking the wrong thing, not a stricter check.
-func routeMatchesMethodAndPath(route Route, method, canonicalPath string, use UseKind) bool {
-	if route.Use != use || route.Method != method {
+// a caller-constructed request.
+//
+// The slot comparison is the first thing checked, and it is not optional. Route identity is
+// defined by docs/01-architecture.md section 6 - and by plugin-manifest.v1.schema.json's own
+// description - as "(slot, method, canonical path, use, sorted queryKeys, normalised
+// contentType, effective maxBodyKB)", with slot as its FIRST element. Found in review: every
+// other element of that tuple was compared here and slot was not, so for an integration bound
+// to more than one connection, a route approved for one slot authorised the identical
+// method+path against a DIFFERENT slot's connection and credentials - approval to read one
+// service became approval to read another. The broker's own g.Slots[req.Slot] check does not
+// catch this: it only proves the requested slot is bound to some connection, never that the
+// route being matched is the one approved for it.
+func routeMatchesSlotMethodAndPath(route Route, slot, method, canonicalPath string, use UseKind) bool {
+	if route.Slot != slot || route.Use != use || route.Method != method {
 		return false
 	}
 	routePattern, err := routepath.Canonicalise(route.Path)
@@ -92,10 +101,10 @@ func (g Grant) AuthorizesRedirect(slot, method, path string) error {
 	if err != nil {
 		return fmt.Errorf("%w: %w", ErrRouteDenied, err)
 	}
-	if !anyRoutePathAllows(g.ManifestRoutes, method, canonicalPath, UseData) {
+	if !anyRoutePathAllows(g.ManifestRoutes, slot, method, canonicalPath, UseData) {
 		return fmt.Errorf("%w: no manifest route permits a redirect to %s %s", ErrRouteDenied, method, canonicalPath)
 	}
-	if !anyRoutePathAllows(g.ApprovedRoutes, method, canonicalPath, UseData) {
+	if !anyRoutePathAllows(g.ApprovedRoutes, slot, method, canonicalPath, UseData) {
 		return fmt.Errorf("%w: no approved (lock) route permits a redirect to %s %s", ErrRouteDenied, method, canonicalPath)
 	}
 	if policy, ok := g.ConnectionPolicy[slot]; ok && !connectionAllows(policy, canonicalPath) {
@@ -104,9 +113,9 @@ func (g Grant) AuthorizesRedirect(slot, method, path string) error {
 	return nil
 }
 
-func anyRoutePathAllows(routes []Route, method, canonicalPath string, use UseKind) bool {
+func anyRoutePathAllows(routes []Route, slot, method, canonicalPath string, use UseKind) bool {
 	for _, route := range routes {
-		if routeMatchesMethodAndPath(route, method, canonicalPath, use) {
+		if routeMatchesSlotMethodAndPath(route, slot, method, canonicalPath, use) {
 			return true
 		}
 	}
