@@ -5,7 +5,10 @@
   import Section from './lib/Section.svelte';
   import Skeleton from './lib/Skeleton.svelte';
   import Login from './lib/Login.svelte';
-  import { apply, applyAppearance, next, stored, type Theme } from './lib/theme';
+  import {
+    apply, applyAppearance, next, nextAppearance, stored, storedAppearance,
+    type Appearance, type Theme
+  } from './lib/theme';
   import { formatRelativeTime } from './lib/format';
   import { isStale, isError, isDisabled, isPending, type CardState as CardEnvelope } from './lib/types/cardstate';
   import type { Dashboard } from './lib/types/dashboard';
@@ -20,6 +23,7 @@
    * the scheduler (Phase F) will drive once they exist; only the data source changes underneath.
    */
   let theme = $state<Theme>(stored());
+  let appearance = $state<Appearance>(storedAppearance());
   let build = $state<BuildInfo | null>(null);
   let dashboard = $state<Dashboard | null>(null);
   let cardsById = $state<Map<string, CardEnvelope>>(new Map());
@@ -30,6 +34,14 @@
 
   $effect(() => {
     apply(theme);
+  });
+
+  // Both axes are the viewer's, so both are applied from state rather than from whichever fetch
+  // last returned. The preset additionally depends on the layout, because 'auto' means "whatever
+  // dashboard.appearance says" - so this effect reads both and re-runs when either moves, and a
+  // config reload that changes the instance preset lands without a browser refresh.
+  $effect(() => {
+    applyAppearance(appearance, dashboard?.appearance, dashboard?.background ?? false);
   });
 
   $effect(() => {
@@ -69,7 +81,6 @@
     ])
       .then(([d, cards]) => {
         dashboard = d;
-        applyAppearance(d.appearance, d.background ?? false);
         cardsById = new Map(cards.map((c) => [c.cardId, c]));
         loadError = null;
       })
@@ -93,7 +104,6 @@
       )
     ]);
     dashboard = layout;
-    applyAppearance(layout.appearance, layout.background ?? false);
     cardsById = new Map(cards.map((card) => [card.cardId, card]));
   }
 
@@ -155,6 +165,9 @@
     {#if authMode === 'password'}<button onclick={() => void logout()}>Sign out</button>{/if}
     <button onclick={() => (theme = next(theme))}>
       Theme: {theme}
+    </button>
+    <button onclick={() => (appearance = nextAppearance(appearance))}>
+      Appearance: {appearance}
     </button>
   </header>
 

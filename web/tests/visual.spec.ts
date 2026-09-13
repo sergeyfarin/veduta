@@ -19,10 +19,11 @@ async function loadDashboard(
 ) {
   await page.emulateMedia({ colorScheme });
   await page.clock.setFixedTime(new Date(FROZEN_NOW));
-  // The preset is instance configuration, and --fixtures serves one fixed showcase. Rewriting the
-  // real GET /dashboard body is deliberately not the same as setting data-appearance by hand: it
-  // drives the actual applyAppearance path the browser takes in production, so this baseline
-  // fails if that wiring breaks, not only if the CSS changes.
+  // --fixtures serves one fixed showcase, so the preset is varied by rewriting the real
+  // GET /dashboard body. That is deliberately not the same as setting data-appearance by hand: it
+  // drives the actual applyAppearance path the browser takes in production - including its
+  // resolution of the viewer's default 'auto' against the instance's configured preset - so these
+  // baselines fail if that wiring breaks, not only if the CSS changes.
   if (appearance !== 'clean') {
     await page.route('**/api/v1/dashboard', async (route) => {
       const response = await route.fetch();
@@ -56,14 +57,48 @@ test('dashboard - dark', async ({ page }) => {
   await expect(page).toHaveScreenshot('dashboard-dark.png', { fullPage: true });
 });
 
-// Veil, the translucent preset, in dark - the pairing the README shows beside Clean-light. Its
-// contrast is proven arithmetically by TestVeilContrast; this baseline covers what arithmetic
-// cannot: that the blur, the backdrop gradient and the card edges actually render.
+// Veil, the translucent preset, in both colour schemes. Its contrast is proven arithmetically by
+// TestVeilContrast and TestVeilImageContrast, and the calm of its backdrop by
+// TestBundledBackdropTone; these baselines cover what arithmetic cannot - that the blur, the
+// bundled painting and the card edges actually render.
+//
+// They do NOT cover whether the painting loaded: this suite compares with pixelmatch's default
+// per-pixel threshold of 0.2, which is generous in exactly the low-contrast places a backdrop
+// lives. Replacing Veil's backdrop outright moved 91.6% of the dark baseline's pixels and only
+// 0.02% of them far enough to count, well inside the 2% budget. So the asset is asserted
+// functionally, once, in the test below rather than hoped for here.
 test('dashboard - veil dark', async ({ page }) => {
   await loadDashboard(page, 'dark', 'veil');
   await stabilizeCanvas(page, 1407);
   await expect(page).toHaveScreenshot('dashboard-veil-dark.png', { fullPage: true });
 });
+
+test('dashboard - veil light', async ({ page }) => {
+  await loadDashboard(page, 'light', 'veil');
+  await stabilizeCanvas(page, 1407);
+  await expect(page).toHaveScreenshot('dashboard-veil-light.png', { fullPage: true });
+});
+
+// The screenshots above cannot see a 404 for the backdrop - see their comment - so this asserts it
+// directly: the CSS names a bundled file, and the browser gets it. Not a baseline, because what is
+// being checked is a request and a response, and pinning pixels to check a fetch is how a test ends
+// up failing for an unrelated reason.
+for (const [scheme, file] of [['light', 'canaletto'], ['dark', 'vernet']] as const) {
+  test(`veil ${scheme} loads its bundled backdrop`, async ({ page }) => {
+    await loadDashboard(page, scheme, 'veil');
+
+    const url = await page.evaluate(() =>
+      getComputedStyle(document.documentElement).getPropertyValue('--v-backdrop-image')
+    );
+    expect(url).toContain(file);
+
+    const href = url.match(/url\((?:"|')?([^"')]+)/)?.[1];
+    expect(href, `--v-backdrop-image is not a url(): ${url}`).toBeTruthy();
+    const response = await page.request.get(new URL(href!, page.url()).toString());
+    expect(response.status(), `${href} did not load`).toBe(200);
+    expect(response.headers()['content-type']).toContain('image/');
+  });
+}
 
 test('dashboard - mobile', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });

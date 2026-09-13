@@ -19,6 +19,7 @@ priority (which milestone should absorb it, or "before X" for a hard blocker).
 | [Does Jellyfin still earn being the WASM proof case?](#open-question-does-jellyfin-still-earn-being-the-wasm-proof-case) | Plugins | Open decision |
 | [Should there be a frontend plugin surface at all?](#open-question-should-there-be-a-frontend-plugin-surface-at-all) | Frontend | Open decision |
 | [Appearance options are deferred until asked for](#appearance-options-are-deferred-until-asked-for) | Frontend | On demand |
+| [The visual baseline's per-pixel threshold hides whole-area changes](#the-visual-baselines-per-pixel-threshold-hides-whole-area-changes) | Frontend | Low-medium |
 | [Asset format coverage is narrower than the allowlist](#asset-format-coverage-is-narrower-than-the-architectures-final-allowlist) | Assets | 0.2 transform milestone |
 | [Asset-cache startup does not reconcile orphan files](#asset-cache-startup-does-not-reconcile-orphan-files) | Assets | Low |
 | [Lock-write race against a concurrent CLI approval](#the-lock-write-race-is-closed-only-within-one-process-not-against-a-concurrent-cli-approval) | Integrations | Low |
@@ -93,6 +94,12 @@ Recorded by [decisions/0002-theming-and-visual-customisation.md](decisions/0002-
 Veduta ships two fixed presets - `dashboard.appearance: clean | veil` - and no public knobs. A
 preset privately owns its surface opacity, scrim, border alpha, shadow and blur.
 
+Amended 2026-09-13, when two of that ADR's own revisit triggers fired. The preset is now a
+per-viewer choice with `dashboard.appearance` as the instance default - stored in the viewer's
+`localStorage` exactly as light/dark is, so no server-side preference store appears and D5 is
+untouched - and Veil's backdrop is two bundled public-domain vedute instead of a generated
+gradient. Neither adds a public knob; what is still deferred is everything below.
+
 This entry exists so the reasoning is not relitigated. An earlier draft of that ADR planned to
 build Veil, observe which design tokens differed from Clean, and promote those to typed config.
 That was rejected on review: it derives a public API from an implementation diff, exposes coupled
@@ -107,8 +114,48 @@ local or proxied background reference rather than an arbitrary URL, possibly a s
 bundled font stacks. A preview UI waits until there are enough real choices to be worth
 previewing.
 
+Two gaps the 2026-09-13 amendment leaves open, neither blocking:
+
+- **The bundled backdrops are barely visible, by construction.** The scrim that makes contrast
+  provable against any image caps the painting at 20% of the backdrop, and the binding constraint
+  is light-scheme `--v-faint`, which fails below `--v-scrim-alpha: 0.75`. So 0.80 is 0.05 of margin
+  from the floor, and buying visible strength means either a weaker guarantee or per-token work on
+  the light palette to create headroom. Revisit if people report the backdrop reads as a smudge
+  rather than as a picture - the fix is palette headroom, not a lower scrim.
+- **The Canaletto ships at 956x640**, the largest reproduction on Commons of that exact painting.
+  It is soft on a large display, though at 20% strength and under blur that has not been visible
+  in review. Replace it if a higher-resolution public-domain scan appears.
+
 Priority: on demand. Nothing here blocks anything; the entry is the record of a decision not to
 build, which is easy to forget and expensive to rediscover.
+
+### The visual baseline's per-pixel threshold hides whole-area changes
+
+Found while replacing Veil's backdrop with the bundled paintings. The new backdrop rendered, the
+suite compared it against the old gradient baseline, and **it passed** - so did Clean's two
+baselines, which had gained a button in the header.
+
+`playwright.config.ts` tunes `maxDiffPixelRatio` to 0.02 with a careful account of why, but leaves
+pixelmatch's per-pixel `threshold` at its default of 0.2. That default is generous in exactly the
+places a backdrop lives: low-contrast, low-saturation, large. Measured on the two baselines:
+**91.58% of pixels differed, and 0.02% of them differed far enough to be counted** - three orders
+of magnitude inside a budget that reads, in the config comment, as if it were the whole story.
+
+The budget is not the problem; the config comment's own evidence (a deliberate one-line CSS change
+moving "24-36% of pixels") is about a change that alters edges, where the per-pixel threshold is
+not the binding constraint. A wash across a large area is the case it does not cover.
+
+Not fixed here, because lowering `threshold` interacts with the inter-container font-rendering
+noise the 2% ratio was measured against, and retuning a suite that several baselines depend on is
+not a side effect a backdrop change should have. In the meantime the two bundled backdrops are
+asserted functionally instead - `veil {light,dark} loads its bundled backdrop` in
+`web/tests/visual.spec.ts` checks the computed `--v-backdrop-image` and fetches it - which covers
+the failure that matters most (a 404 leaving a blank preset) without touching the thresholds.
+
+Priority: low-medium. It does not affect what ships, only how much CI notices. The fix is a
+measured `threshold` chosen the way the ratio was: regenerate in the pinned image, re-verify in a
+fresh container, and record the noise floor for the new pair rather than assuming the old one
+transfers.
 
 ### Asset format coverage is narrower than the architecture's final allowlist
 

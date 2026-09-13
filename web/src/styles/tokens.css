@@ -115,29 +115,35 @@ body {
 
 /* ── Veil: the translucent preset ────────────────────────────────────────────────────────────
  *
- * Selected by dashboard.appearance, applied as data-appearance="veil" on <html>. A preset owns
- * its own effect mechanics - surface alpha, blur, backdrop - and they are deliberately not
- * configurable; see docs/decisions/0002-theming-and-visual-customisation.md.
+ * Selected by dashboard.appearance and by the viewer's own override, applied as
+ * data-appearance="veil" on <html>. A preset owns its own effect mechanics - surface alpha, blur,
+ * backdrop - and they are deliberately not configurable; see
+ * docs/decisions/0002-theming-and-visual-customisation.md.
  *
- * The default backdrop is a GRADIENT, not a shipped photograph. That is not a shortcut: a
- * veduta is the Italian genre of wide topographical views, whose defining device is aerial
- * perspective - distance rendered as haze lightening toward the horizon - which is what these
- * two stops are. It also costs zero bytes in the binary, needs no font/image licence, flips with
- * the colour scheme (a JPEG cannot), and - the part that matters for the contrast contract - has
- * a luminance range that is EXACTLY computable at build time.
+ * The backdrop is a veduta: the Italian genre of wide topographical views this project is named
+ * after. Each colour scheme gets the painting that belongs to its light - Canaletto's daylit Molo
+ * seen from the Bacino di San Marco, and Vernet's moonlit entrance to the port of Palermo. Both
+ * are public domain and both are shipped pre-toned: desaturated and contrast-compressed toward
+ * the scheme's own scrim colour at build time, not with a CSS filter. A filter on the root would
+ * cost a composited layer on every paint and could not be checked by a test; a baked file can,
+ * and TestBundledBackdropTone holds that line.
  *
- * Why exactly computable: the stops interpolate each sRGB channel monotonically, and relative
- * luminance is monotonic in each channel, so composited luminance along the gradient is bounded
- * by the two stops. TestVeilContrast composites --v-veil-tint at --v-veil-alpha over each stop
- * and runs the same pairs TestTokenContrast runs on the opaque palette. Blurring a smooth
- * gradient does not widen that range - a gradient is already low-frequency - so backdrop-filter
- * does not invalidate the bound. A user-supplied photograph has no such bound, which is why that
- * case needs a scrim and worst-case (pure black / pure white) evaluation instead.
+ * Three layers, painted top to bottom:
+ *
+ *   1. the scrim, which is what makes the contrast contract provable at all;
+ *   2. the painting;
+ *   3. the generated gradient, which is the floor if the painting has not loaded or 404s.
+ *
+ * The gradient is not decoration and is not dead code. Its two stops interpolate each sRGB
+ * channel monotonically, and relative luminance is monotonic in each channel, so composited
+ * luminance along it is bounded by its value at the two stops - which is what lets TestVeilContrast
+ * prove the no-image case exhaustively rather than by sampling. A shipped or configured photograph
+ * has no such bound, which is why layer 1 sits above it and is mandatory.
  *
  * --v-faint is the one neutral Veil must redefine. At 4.71:1 on opaque white it sits 0.21 above
  * the AA floor, so ANY translucency sinks it - the same arithmetic that produced the .dimmed bug
- * TestStaleStateContrast guards. Veil darkens it to #68686f, which clears at 5.09:1 against the
- * darkest composited surface. Everything else in the palette already clears unchanged.
+ * TestStaleStateContrast guards. Veil darkens it to #68686f. Everything else in the palette
+ * already clears unchanged.
  */
 
 :root[data-appearance="veil"] {
@@ -145,6 +151,25 @@ body {
   --v-veil-tint: 255 255 255;
   --v-backdrop-from: #b4c9e4;   /* daylit sky */
   --v-backdrop-to: #f0dcc4;     /* warm horizon haze */
+
+  /* The scrim is not decoration and is not optional. A painting's pixels cannot be bounded by
+   * arithmetic the way the gradient's can, so contrast is guaranteed instead by bounding what
+   * reaches the text: at 0.80 the image contributes at most 20% of the backdrop, and
+   * TestVeilImageContrast proves every text token still clears its floor against BOTH extremes an
+   * image can present - pure black and pure white - rather than against the two paintings that
+   * happen to ship today, which would say nothing about a background an operator configures.
+   *
+   * Note the bound runs in both directions: in dark the scrim caps composited luminance from
+   * above, because light text needs the backdrop to stay dark, and a white image is the adversary;
+   * in light it imposes a floor, and a black image is. That is why each scheme carries its own
+   * scrim colour rather than sharing one.
+   *
+   * The visible cost is real and deliberate: only part of the painting shows through. Guaranteeing
+   * AA over an arbitrary image and showing that image at full strength are not compatible, and
+   * this project resolves that in favour of legibility. */
+  --v-scrim-alpha: 0.8;
+  --v-scrim: 232 238 246;
+  --v-backdrop-image: url("./backdrops/canaletto-molo.jpg");
 
   --v-surface: rgb(var(--v-veil-tint) / var(--v-veil-alpha));
   --v-surface-2: rgb(var(--v-veil-tint) / 0.55);
@@ -159,6 +184,8 @@ body {
   --v-veil-tint: 23 23 26;
   --v-backdrop-from: #1b2c58;   /* deep dusk sky */
   --v-backdrop-to: #46264a;     /* plum horizon glow */
+  --v-scrim: 13 16 24;
+  --v-backdrop-image: url("./backdrops/vernet-palermo.jpg");
   --v-border: #33333c;
   --v-faint: #8b8b95;
   --v-shadow: 0 1px 2px rgb(0 0 0 / 50%), 0 8px 28px rgb(0 0 0 / 34%);
@@ -172,6 +199,8 @@ body {
     --v-veil-tint: 255 255 255;
     --v-backdrop-from: #b4c9e4;
     --v-backdrop-to: #f0dcc4;
+    --v-scrim: 232 238 246;
+    --v-backdrop-image: url("./backdrops/canaletto-molo.jpg");
     --v-border: #d5dbe4;
     --v-faint: #68686f;
     --v-shadow: 0 1px 2px rgb(30 40 60 / 8%), 0 8px 28px rgb(30 40 60 / 10%);
@@ -180,11 +209,23 @@ body {
 
 /* The backdrop goes on the ROOT element, not body. A root background is propagated to the canvas
  * and therefore covers the whole page however tall it grows; body's would be painted only within
- * body's own box, and `fixed` sizes a background to the VIEWPORT, so a full-page render showed the
- * gradient compressed into the first viewport-height and the canvas below it still --v-bg. */
+ * body's own box.
+ *
+ * And it does NOT use background-attachment: fixed, which sizes a background to the VIEWPORT. A
+ * fixed wallpaper looks right while scrolling, but it leaves every part of the canvas past the
+ * first viewport-height painted by nothing - which a full-page render shows as a flat band, and
+ * which would mean the scrim proven to sit under the text does not cover the page it is proven
+ * over. Scrolling with the content keeps all three layers over the whole canvas, which is the
+ * property the contrast tests assume; it also avoids the repaint-per-scroll cost of `fixed` and
+ * its silent no-op on iOS Safari. */
 :root[data-appearance="veil"] {
-  background: linear-gradient(170deg, var(--v-backdrop-from) 0%, var(--v-backdrop-to) 100%);
-  background-repeat: no-repeat;
+  background-image:
+    linear-gradient(rgb(var(--v-scrim) / var(--v-scrim-alpha)), rgb(var(--v-scrim) / var(--v-scrim-alpha))),
+    var(--v-backdrop-image),
+    linear-gradient(170deg, var(--v-backdrop-from) 0%, var(--v-backdrop-to) 100%);
+  background-size: cover, cover, cover;
+  background-position: center, center, center;
+  background-repeat: no-repeat, no-repeat, no-repeat;
 }
 
 :root[data-appearance="veil"] body {
@@ -193,41 +234,14 @@ body {
 
 /* ── Veil with a configured background image ─────────────────────────────────────────────────
  *
- * The scrim is not decoration and is not optional. The generated gradient above has a luminance
- * range known at build time; a user's photograph has none, so contrast can only be guaranteed by
- * bounding what reaches the text. --v-scrim-alpha does that: at 0.80 the image contributes at
- * most 20% of the backdrop, and TestVeilImageContrast proves every text token still clears its
- * floor against BOTH extremes a photograph can present - pure black and pure white - rather than
- * against a representative image, which would prove nothing about the next one.
- *
- * Note the bound runs in both directions: in dark the scrim caps composited luminance from above
- * (light text needs the backdrop to stay dark), in light it imposes a floor. That is why each
- * scheme has its own scrim colour rather than sharing one.
- *
- * The visible cost is real and deliberate: only part of the image shows through. Guaranteeing AA
- * over an arbitrary photograph and showing that photograph at full strength are not compatible,
- * and this project resolves that in favour of legibility.
+ * dashboard.background replaces the shipped painting and nothing else: the scrim above it, the
+ * gradient beneath it and every contrast floor are the same declarations either way, so the
+ * guarantee cannot be lost by configuring a background. That is the whole point of expressing this
+ * as one variable rather than a second copy of the background shorthand - the earlier version
+ * restated all four background properties here, and a scrim stated twice is a scrim that can
+ * drift.
  */
 
 :root[data-appearance="veil"][data-backdrop="image"] {
-  --v-scrim-alpha: 0.8;
-  --v-scrim: 232 238 246;
-  background-image:
-    linear-gradient(rgb(var(--v-scrim) / var(--v-scrim-alpha)), rgb(var(--v-scrim) / var(--v-scrim-alpha))),
-    url("/api/v1/background");
-  background-size: cover, cover;
-  background-position: center, center;
-  background-attachment: fixed, fixed;
-  background-repeat: no-repeat, no-repeat;
-}
-
-:root[data-appearance="veil"][data-backdrop="image"][data-theme="dark"],
-:root[data-appearance="veil"][data-backdrop="image"]:not([data-theme="light"]) {
-  --v-scrim: 13 16 24;
-}
-
-@media (prefers-color-scheme: light) {
-  :root[data-appearance="veil"][data-backdrop="image"]:not([data-theme="dark"]) {
-    --v-scrim: 232 238 246;
-  }
+  --v-backdrop-image: url("/api/v1/background");
 }

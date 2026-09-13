@@ -127,7 +127,11 @@ func generate() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	icons, err := readIcons()
+	icons, err := readSourceSection("Embedded offline icon pack")
+	if err != nil {
+		return nil, err
+	}
+	artwork, err := readSourceSection("Bundled backdrop artwork")
 	if err != nil {
 		return nil, err
 	}
@@ -164,6 +168,13 @@ func generate() ([]byte, error) {
 	out.WriteString("a CDN. Simple Icons is CC0-1.0, which waives copyright but **not** trademark rights: the\n")
 	out.WriteString("brand marks it contains remain the property of their owners.\n\n")
 	writeSourceTable(&out, icons)
+
+	out.WriteString("\n## Bundled backdrop artwork\n\n")
+	out.WriteString("Two paintings compiled into the binary as the Veil preset's backdrop, one per colour\n")
+	out.WriteString("scheme. Both are public domain and both are shipped re-encoded - downscaled, desaturated\n")
+	out.WriteString("and contrast-compressed - which a public-domain work permits without condition. Nothing\n")
+	out.WriteString("here is legally required; provenance for a shipped binary asset is worth recording anyway.\n\n")
+	writeSourceTable(&out, artwork)
 
 	return out.Bytes(), nil
 }
@@ -346,14 +357,15 @@ func readGoLicenses() ([]entry, error) {
 	return sorted(entries), nil
 }
 
-// readIcons mirrors the embedded offline icon pack: SVG assets compiled into the binary by L2, so
-// they are redistributed even though no lockfile describes them.
-func readIcons() ([]entry, error) {
+// readSourceSection mirrors one of the curated prose-named tables in THIRD-PARTY-LICENSES.md -
+// the icon pack, the backdrop paintings - into the generated notices. These are assets compiled
+// into the binary and so redistributed, but no lockfile describes them, which is why the curated
+// file is their source of truth rather than a resolver.
+func readSourceSection(section string) ([]entry, error) {
 	raw, err := os.ReadFile(goLicenses)
 	if err != nil {
 		return nil, fmt.Errorf("read %s: %w", goLicenses, err)
 	}
-	const section = "Embedded offline icon pack"
 	lines, ok := sectionsOf(string(raw))[section]
 	if !ok {
 		return nil, fmt.Errorf("%s: section %q not found", goLicenses, section)
@@ -367,7 +379,7 @@ func readIcons() ([]entry, error) {
 		entries = append(entries, entry{Name: match[1], Version: match[2], License: match[3]})
 	}
 	if len(entries) == 0 {
-		return nil, fmt.Errorf("%s: no icon rows found in %q", goLicenses, section)
+		return nil, fmt.Errorf("%s: no rows found in %q", goLicenses, section)
 	}
 	return sorted(entries), nil
 }

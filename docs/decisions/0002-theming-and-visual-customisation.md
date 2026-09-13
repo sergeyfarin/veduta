@@ -1,7 +1,7 @@
 # Theming: two fixed presets, no public knobs, no user-authored CSS
 
-Status: accepted 2026-09-10, amended the same day after review. Revisit under the
-triggers below.
+Status: accepted 2026-09-10, amended the same day after review, amended again 2026-09-13
+on two of its own revisit triggers. Revisit under the triggers below.
 
 The amendment matters enough to state plainly: the first draft renamed
 `dashboard.theme` to carry the preset axis, and planned to derive a public knob
@@ -181,6 +181,84 @@ compatible, and this project resolves that toward legibility.
 A background under `appearance: clean` is a **configuration error**, not a
 silently ignored field — the schema requires `appearance: veil` alongside it.
 Accepting configuration that does nothing is the defect `dashboard.theme` was.
+
+## Amended 2026-09-13: a preset picker, and paintings instead of a gradient
+
+Two triggers this decision wrote down have fired, and both are answered here. Neither overturns
+the security or accessibility posture; one narrows what "not configurable" means, the other
+changes what the backdrop is made of.
+
+### Appearance is a viewer preference with a configured default
+
+*Trigger: "Per-user appearance becomes worth building if ... one instance serves audiences with
+genuinely different needs."* It was asked for directly, which is the same signal arriving sooner.
+
+`dashboard.appearance` is now the instance's **default**, not its only say. A viewer can choose
+Clean or Veil for themselves; the choice lives in their own `localStorage` under
+`veduta.appearance`, alongside `veduta.theme`, and `auto` means "whatever the operator
+configured". The config field, the schema and every contrast guarantee are unchanged — what moved
+is who gets the last word, and only in their own browser.
+
+The original text declined "a server-side theme editor" on D5 grounds: a server that rewrote
+hand-authored YAML would destroy the operator's comments, and writing to the `settings` table
+would create the duelling store D5 exists to prevent. **That reasoning is untouched and still
+holds** — this stores nothing server-side. It is the same mechanism light/dark has always used,
+applied to the axis next to it.
+
+**Two controls, not one with four values.** The two axes are independent and all four combinations
+ship, so a single four-valued control would have to drop a value, and the value it would drop is
+`auto`. That is the wrong one to lose twice over: `auto` is the default on both axes, it is the
+only value that changes on its own (the system flipping to dark at sunset), and the two `auto`s do
+not even mean the same thing — one resolves in CSS against `prefers-color-scheme`, the other
+resolves against configuration the browser only learns from `GET /dashboard`. Three values times
+two controls covers six states honestly; four values would cover four and lie about the rest.
+
+### Veil's backdrop is two public-domain vedute
+
+*Trigger: "a background reference" was named as a plausible future option, and the existing
+`dashboard.background` had already established the mechanism.*
+
+The default backdrop is no longer the generated gradient alone. Veil now ships a painting per
+colour scheme — Canaletto's daylit *Molo, Venice, from the Bacino di San Marco* for light,
+Vernet's *Entrance to the Port of Palermo by Moonlight* for dark. Both are public domain; both are
+recorded in THIRD-PARTY-LICENSES.md.
+
+The original argued for a gradient on four grounds. Three are answered and one is accepted as a
+cost:
+
+- *"It costs zero bytes in the binary."* Now ~218 KB, for two files that are cached immutably by
+  content hash and fetched once. That is the real price and it is paid knowingly.
+- *"It needs no font or image licence."* Both works are public domain, and the reproductions are
+  faithful photographs of two-dimensional public-domain works.
+- *"It flips with the colour scheme (a JPEG cannot)."* One JPEG cannot; two can, and each is
+  toned for the scheme it serves.
+- *"Its luminance range is exactly computable at build time."* A painting's is not — which is
+  precisely the case this decision had already solved for `dashboard.background`. The bundled
+  paintings sit under the same mandatory scrim, proven the same worst-case way, by the same test.
+  Configuring a background now overrides one variable, `--v-backdrop-image`, and nothing else, so
+  the bundled and configured cases cannot drift apart.
+
+**The gradient is kept, as the layer beneath the painting.** It is what renders if the image has
+not loaded or 404s, and it is the only part of the backdrop whose luminance is bounded by
+arithmetic — so `TestVeilContrast` still proves the no-image case exhaustively, which no
+image-based test can do.
+
+**The naming argument reverses cleanly.** The original justified the gradient as aerial
+perspective, "the defining device of the veduta genre this project is named after". A veduta is
+not a device, it is a painting; two of them are now what the preset shows.
+
+**Toning is baked into the files, not applied in CSS.** Each painting is desaturated and
+contrast-compressed toward its scheme's scrim colour at encode time. A `filter` on the root would
+cost a composited layer on every paint, and — the deciding half — could not be asserted. A baked
+file can: `TestBundledBackdropTone` measures the *composited* backdrop's luminance span against
+the gradient it replaced, so "calm enough to sit behind text" is a property of the repository
+rather than a judgement someone once made in an image editor.
+
+### What did not change
+
+No user-authored CSS. No theme editor. No public knobs for surface alpha, scrim, border alpha,
+blur radius. No server-side storage of anyone's preference. The contrast matrix, and the
+worst-case evaluation that backs it for any image, are the same.
 
 ## Revisit triggers
 

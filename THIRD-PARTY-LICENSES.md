@@ -81,6 +81,24 @@ first-party plugins, not into the Go host.
 | Material Design Icons (`@mdi/svg`) | 7.4.47 | Apache-2.0 |
 | Simple Icons | 16.29.0 | CC0-1.0 (trademark rights are not waived) |
 
+## Bundled backdrop artwork
+
+Two paintings compiled into the binary as the Veil preset's backdrop, one per colour scheme. Both
+artists died more than a century ago, so the works are in the public domain worldwide; the
+reproductions are faithful photographs of two-dimensional public-domain works, which under
+Wikimedia's PD-Art position and *Bridgeman v. Corel* attract no new copyright of their own. Neither
+attribution nor a licence notice is therefore required — they are recorded here because a shipped
+binary asset should have a traceable provenance, and because over-disclosure is the safe direction.
+
+Both files are re-encoded before they ship: downscaled, desaturated and contrast-compressed toward
+the preset's scrim colour, which is a modification of a public-domain work and permitted without
+condition. `TestBundledBackdropTone` asserts the result.
+
+| Source | Version | Licence |
+| --- | --- | --- |
+| Canaletto, *The Molo, Venice, from the Bacino di San Marco* (1730s) | Wikimedia Commons, retrieved 2026-09-13 | Public domain (PD-old-100, PD-Art) |
+| Joseph Vernet, *Entrance to the Port of Palermo by Moonlight* (1769) | Wikimedia Commons, retrieved 2026-09-13 | Public domain (PD-old-100, PD-Art) |
+
 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) is the generated companion to this file: it
 covers the shipped frontend bundle (read from Rollup's real module graph, so it lists what the
 browser receives rather than the build tooling above) and the complete locked Rust dependency

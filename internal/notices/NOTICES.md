@@ -113,3 +113,15 @@ brand marks it contains remain the property of their owners.
 | Homarr Labs Dashboard Icons | commit `c1f7e6b91c9e23317ac72b81f0ee3f9a4ac14aec` | Apache-2.0 |
 | Material Design Icons (`@mdi/svg`) | 7.4.47 | Apache-2.0 |
 | Simple Icons | 16.29.0 | CC0-1.0 (trademark rights are not waived) |
+
+## Bundled backdrop artwork
+
+Two paintings compiled into the binary as the Veil preset's backdrop, one per colour
+scheme. Both are public domain and both are shipped re-encoded - downscaled, desaturated
+and contrast-compressed - which a public-domain work permits without condition. Nothing
+here is legally required; provenance for a shipped binary asset is worth recording anyway.
+
+| Source | Version | Licence |
+| --- | --- | --- |
+| Canaletto, *The Molo, Venice, from the Bacino di San Marco* (1730s) | Wikimedia Commons, retrieved 2026-09-13 | Public domain (PD-old-100, PD-Art) |
+| Joseph Vernet, *Entrance to the Port of Palermo by Moonlight* (1769) | Wikimedia Commons, retrieved 2026-09-13 | Public domain (PD-old-100, PD-Art) |
