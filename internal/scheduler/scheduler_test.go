@@ -259,3 +259,84 @@ func TestCircuitActuallyRunsHalfOpenProbeAndCloses(t *testing.T) {
 		t.Fatalf("calls=%d want three failures plus a probe", calls.Load())
 	}
 }
+
+// The flight must be released however runShared leaves, not only on its success path. It used to
+// be released inline before each return, so a panic in a card's Run left the key in m.flights
+// with its done channel never closed - and every later refresh of that card, from the loop or
+// from the API, blocked on that channel for the life of the generation. The card stayed pending
+// forever with no error, no retry and nothing in the log.
+//
+// The panic is driven through Refresh rather than Apply on purpose: Apply's loop runs the card on
+// its own goroutine, where a panic would take the test process down and prove nothing. The
+// barrier that stops that reaching the scheduler at all lives in internal/app; this pins the
+// scheduler's own invariant, which must not depend on every caller installing one first.
+func TestAPanickingRunReleasesItsFlightSoTheCardRunsAgain(t *testing.T) {
+	m := scheduler.New(nil)
+	defer m.Close()
+	var calls atomic.Int32
+	var explode atomic.Bool
+	run := func(context.Context) (widgets.Document, error) {
+		calls.Add(1)
+		if explode.Load() {
+			panic("integration exploded")
+		}
+		return widgets.Document{Blocks: []widgets.Block{}}, nil
+	}
+	d := scheduler.Definition{ID: "card", Hash: "card", Refresh: time.Hour, Timeout: time.Second, Run: run}
+	if err := m.Apply(context.Background(), []scheduler.Definition{d}); err != nil {
+		t.Fatal(err)
+	}
+	waitForState(t, m, "card", state.StateOK)
+
+	explode.Store(true)
+	func() {
+		defer func() {
+			if recover() == nil {
+				t.Error("the run did not panic; this test no longer exercises the case")
+			}
+		}()
+		_ = m.Refresh(context.Background(), "card")
+	}()
+	explode.Store(false)
+
+	// The refresh below must not block on the panicked run's flight. Against the old code it
+	// blocks forever, so the timeout is the assertion.
+	done := make(chan error, 1)
+	go func() { done <- m.Refresh(context.Background(), "card") }()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("refresh after a panicked run: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("refresh blocked on the panicked run's flight")
+	}
+	if calls.Load() != 3 {
+		t.Fatalf("calls=%d want 3 (initial, panicking, recovered)", calls.Load())
+	}
+}
+
+// A panicked run is classified as an internal fault, not an upstream one: nothing was wrong with
+// the service the card queries, and an operator reading "upstream" would go and check it.
+func TestPanickedRunIsReportedAsAnInternalError(t *testing.T) {
+	m := scheduler.New(nil)
+	defer m.Close()
+	d := scheduler.Definition{ID: "card", Hash: "card", Refresh: time.Hour, Timeout: time.Second,
+		Run: func(context.Context) (widgets.Document, error) {
+			return widgets.Document{}, scheduler.ErrRunPanicked
+		}}
+	if err := m.Apply(context.Background(), []scheduler.Definition{d}); err != nil {
+		t.Fatal(err)
+	}
+	cs := waitForState(t, m, "card", state.StateError)
+	if cs.Execution.Error == nil {
+		t.Fatal("no error recorded")
+	}
+	if cs.Execution.Error.Code != state.ErrorInternal {
+		t.Fatalf("code=%q want %q", cs.Execution.Error.Code, state.ErrorInternal)
+	}
+	// The tile's text says what happened and where to look, and carries no panic value.
+	if !strings.Contains(cs.Execution.Error.Message, "server log") {
+		t.Fatalf("message=%q does not point at the log", cs.Execution.Error.Message)
+	}
+}

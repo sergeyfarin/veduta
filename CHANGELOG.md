@@ -112,6 +112,11 @@ actions, and notifies when something needs attention.
 
 ### Fixed
 
+- A panic anywhere under a card refresh no longer ends the process. Integration code runs behind a
+  barrier that logs the panic and its stack against the card that caused it and fails that card
+  with an `internal` error, leaving the rest of the dashboard serving; the scheduler releases the
+  card's single-flight entry however a run leaves, so a panicking card can no longer wedge every
+  later refresh of itself.
 - A card that declared no `params:` block crashed the server: its nil parameter map marshalled to
   the JSON literal `null`, which the declarative runtime decoded over the map it was about to
   write the manifest's defaults into. Defaults now apply identically whether a card omits

@@ -7,8 +7,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"path/filepath"
+	"runtime/debug"
 	"sort"
 	"time"
 
@@ -152,10 +154,10 @@ func BuildGenerationWithAuditAndEvents(ctx context.Context, snap *config.Snapsho
 				d.ManifestDigest = m.Digest
 				d.Key = definitionKey(m.Digest, card.Operation, card.Slots, slotRevisions, card.Params)
 				params, _ := json.Marshal(card.Params)
-				d.Run = func(c context.Context) (widgets.Document, error) {
+				d.Run = guarded(logger, card.ID, func(c context.Context) (widgets.Document, error) {
 					r, e := inst.Invoke(c, integrations.InvokeRequest{Operation: "request", Params: params, Grant: g.Fresh()})
 					return r.Document, e
-				}
+				})
 				built.Definitions = append(built.Definitions, d)
 				continue
 			}
@@ -240,10 +242,10 @@ func BuildGenerationWithAuditAndEvents(ctx context.Context, snap *config.Snapsho
 			d.Timeout = time.Duration(entry.EffectiveLimits.TimeoutMs) * time.Millisecond
 			params, _ := json.Marshal(card.Params)
 			operationID := card.Operation
-			d.Run = func(c context.Context) (widgets.Document, error) {
+			d.Run = guarded(logger, card.ID, func(c context.Context) (widgets.Document, error) {
 				r, e := inst.Invoke(c, integrations.InvokeRequest{Operation: operationID, Params: params, Grant: g.Fresh()})
 				return r.Document, e
-			}
+			})
 			built.Definitions = append(built.Definitions, d)
 		}
 	}
@@ -259,6 +261,44 @@ func BuildGenerationWithAuditAndEvents(ctx context.Context, snap *config.Snapsho
 		built.RuleDefinitions = append(built.RuleDefinitions, definition)
 	}
 	return built, nil
+}
+
+// guarded is the panic barrier around integration code. Declarative integrations evaluate in this
+// process - only the WASM runtime is sandboxed - so a defect in a manifest's pipeline, or in the
+// runtime evaluating it, is an ordinary Go panic on the scheduler's goroutine. Nothing above
+// recovers: it would unwind past scheduler.(*Manager).loop and end the program, which under a
+// container's restart policy becomes a crash loop that re-panics on the same card every few
+// seconds and never says which one.
+//
+// The barrier sits here rather than in the scheduler because this is the boundary where untrusted
+// integration code is entered, and because the scrubbing logger and the card's identity are both
+// in scope. The dashboard's stance everywhere else is that one failing card degrades to an error
+// tile while the rest keeps serving; a panic is no longer the exception to that.
+func guarded(logger *slog.Logger, cardID string, run scheduler.RunFunc) scheduler.RunFunc {
+	if logger == nil {
+		// Matching internal/rules and internal/notify. It also matters more here than there: this
+		// logger is only ever reached while already recovering from a panic, and a nil dereference
+		// at that point would re-panic from inside the deferred function with the original cause
+		// lost.
+		logger = slog.Default()
+	}
+	return func(c context.Context) (doc widgets.Document, err error) {
+		defer func() {
+			v := recover()
+			if v == nil {
+				return
+			}
+			// Through the configured logger, not slog's default: cmd/veduta wraps it in the
+			// secret-scrubbing handler, and a panic value or a stack frame can carry arbitrary
+			// in-process data. The card gets scheduler.ErrRunPanicked, whose text is fixed and
+			// carries neither the value nor the stack.
+			logger.Error("card run panicked",
+				"card", cardID, "panic", fmt.Sprint(v), "stack", string(debug.Stack()))
+			doc = widgets.Document{}
+			err = scheduler.ErrRunPanicked
+		}()
+		return run(c)
+	}
 }
 
 func signalTypes(signals []manifestload.SignalDecl) map[string]string {

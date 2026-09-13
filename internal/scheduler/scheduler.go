@@ -75,6 +75,12 @@ var (
 	// verbatim. Its message is deliberately fixed and value-free: it becomes a card's visible
 	// error text, so it must describe the leak without repeating it.
 	ErrSecretInDocument = errors.New("scheduler: document contains a configured secret value")
+	// ErrRunPanicked indicates that a card's run panicked and was converted into a failed run
+	// rather than being allowed to unwind. The panic value and its stack go to the log, through
+	// the scrubbing handler; this message is what the card shows, and is fixed and value-free for
+	// the same reason ErrSecretInDocument's is - a panic value is arbitrary in-process data, and
+	// a dashboard tile is the wrong place to render it.
+	ErrRunPanicked = errors.New("scheduler: the integration failed unexpectedly; see the server log")
 )
 
 // New creates a scheduler backed by store. A nil store disables persistence. Produced documents
@@ -347,15 +353,23 @@ func (m *Manager) runShared(ctx context.Context, d Definition) (widgets.Document
 	f := &flight{done: make(chan struct{})}
 	m.flights[key] = f
 	m.mu.Unlock()
+	// The flight is visible to every other caller from the line above, and they block on f.done.
+	// Releasing it on the way out, whatever the reason, is what makes that safe: this used to
+	// happen inline on each return path, so a panic below left the key occupied and the channel
+	// unclosed, and every later refresh of that card blocked on it for the life of the
+	// generation. d.Run no longer panics past its own barrier (see internal/app), but the
+	// invariant here should not depend on a caller in another package getting that right.
+	defer func() {
+		m.mu.Lock()
+		delete(m.flights, key)
+		close(f.done)
+		m.mu.Unlock()
+	}()
 	select {
 	case m.workers <- struct{}{}:
 		defer func() { <-m.workers }()
 	case <-ctx.Done():
-		m.mu.Lock()
-		delete(m.flights, key)
 		f.err = ctx.Err()
-		close(f.done)
-		m.mu.Unlock()
 		return widgets.Document{}, 0, ctx.Err()
 	}
 	start := time.Now()
@@ -363,10 +377,6 @@ func (m *Manager) runShared(ctx context.Context, d Definition) (widgets.Document
 	f.doc, f.err = d.Run(runCtx)
 	cancel()
 	f.duration = time.Since(start)
-	m.mu.Lock()
-	delete(m.flights, key)
-	close(f.done)
-	m.mu.Unlock()
 	return f.doc, f.duration, f.err
 }
 
@@ -475,6 +485,9 @@ func classify(err error) state.ErrorCode {
 	}
 	if errors.Is(err, ErrSecretInDocument) {
 		return state.ErrorInvalid
+	}
+	if errors.Is(err, ErrRunPanicked) {
+		return state.ErrorInternal
 	}
 	return state.ErrorUpstream
 }

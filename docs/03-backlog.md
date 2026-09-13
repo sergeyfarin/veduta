@@ -27,7 +27,6 @@ priority (which milestone should absorb it, or "before X" for a hard blocker).
 | [Approve flow can't grant a limit above its default](#the-documented-approve-flow-has-no-way-to-grant-a-limit-above-its-documented-default) | Docs | Low |
 | [Go plugin SDK needs a WASI-free toolchain](#go-plugin-sdk-requires-a-maintained-wasi-free-toolchain) | Plugins | Low |
 | [The lock file is written 0600, but is meant to be committed](#veduta-lock-yaml-is-written-0600-by-a-uid-the-operator-is-not) | Deployment | Low |
-| [A panicking integration takes the whole process down](#a-panic-inside-a-card-refresh-kills-the-process-and-leaks-its-single-flight-entry) | Scheduler | Medium |
 
 ---
 
@@ -219,32 +218,3 @@ runtime user is a defensible answer to that. But `0600` restricts reading as wel
 
 Priority: low, and a decision rather than a fix - settle it the next time the approval flow is
 touched. Documented as a consequence in `docs/docker.md` in the meantime.
-
-### A panic inside a card refresh kills the process, and leaks its single-flight entry
-
-Found when a genuine panic in the declarative runtime crashed a running container, 2026-09-12 -
-the nil-params bug now fixed in `internal/integrations/declarative/runtime.go` (see
-[03-backlog-resolved.md](03-backlog-resolved.md)). The panic itself is closed; that it was fatal
-to the process is not.
-
-`Manager.runShared` calls `d.Run(runCtx)` with no recovery, on a goroutine started by
-`Manager.Apply`, so a panic anywhere under a card refresh unwinds past `loop` and terminates the
-program. Under `restart: unless-stopped` that is a crash loop: every restart re-runs the same card
-and panics again. Only `internal/api/server.go` has a `recover()`; a card refresh does not come
-through it, so nothing catches this.
-
-The dashboard's whole stance elsewhere is that one failing card degrades to an error tile while
-the rest keeps serving - an unreachable upstream, a denied route and a restricted Docker proxy all
-behave that way. A panic is the one failure mode that does not, and it is the one the operator can
-least diagnose, because the process is gone and the card that caused it is not named.
-
-Not fixed on the spot because it is slightly more than wrapping `d.Run` in a `recover()`. The
-panic also skips `close(f.done)` and the `delete(m.flights, key)` beside it, so every other
-caller waiting on that single-flight entry blocks forever and the key is never reusable. A correct
-fix converts the panic into an ordinary `error` for that card - so it becomes an error tile with
-the stack in the log - and makes the flight cleanup happen on the way out whatever the reason,
-which means restructuring that block around a `defer`. The declarative runtime is in-process; only
-the WASM one is sandboxed, so this is the guest-code path that can actually do it.
-
-Priority: medium, and worth doing before the 0.1.0 tag if there is time - a self-hosted dashboard
-that exits on a bad card is a poor first impression, and the crash loop hides the cause.

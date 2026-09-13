@@ -631,3 +631,48 @@ the docs described in five ways, each verified by running it:
 - No `depends_on` between the two: a missing proxy degrades one card to a warning, which is
   better than a dashboard that will not start. Observed directly - the first refresh after
   `up -d` failed DNS resolution and the card recovered on its own at the next one.
+
+## Resolved after the first real deployment
+
+### A panic inside a card refresh killed the process and leaked its single-flight entry
+
+Carried as an open entry from 2026-09-12, raised by the nil-params panic above: that panic was
+fixed on the spot, but that *any* panic was fatal was not. `Manager.runShared` called `d.Run` with
+no recovery, on a goroutine started by `Manager.Apply`, so a panic anywhere under a card refresh
+unwound past `loop` and ended the program - and under `restart: unless-stopped` that is a crash
+loop re-panicking on the same card every few seconds, never naming it.
+
+Resolved in two places, because there are two separate invariants and they belong to different
+packages.
+
+**The barrier is in `internal/app`**, wrapping both sites where a card's `Run` enters integration
+code. That is the boundary where untrusted code is entered, and it is where the card's identity
+and the configured logger are both already in scope - the logger being the one `cmd/veduta` wraps
+in the secret-scrubbing handler, which matters, because a panic value or a stack frame can carry
+arbitrary in-process data and `slog.Default()` would bypass the scrubber. The panic value and its
+stack go to the log at error level with the card id; the card gets `scheduler.ErrRunPanicked`,
+whose text is fixed and value-free for exactly the reason `ErrSecretInDocument`'s is - a run error
+becomes a tile's visible text, and a dashboard is the wrong place to render a panic value. It
+classifies as `state.ErrorInternal` rather than `upstream`: nothing was wrong with the service the
+card queries, and an operator reading "upstream" would go and check it.
+
+**The flight release is in `internal/scheduler`**, restructured from an inline release on each
+return path into a `defer`. This is the half that was more than a `recover()`: a panic also
+skipped `close(f.done)` and `delete(m.flights, key)`, so the key stayed occupied with its channel
+never closed and every later refresh of that card - from the loop or from the API - blocked on it
+for the life of the generation. The card would have sat pending forever with no error, no retry
+and nothing logged. That invariant must not depend on a caller in another package installing a
+barrier first, so it is enforced structurally rather than by the barrier's existence.
+
+Tests: `TestGuardedTurnsAPanicIntoAFailedRun` asserts both directions at once - the log carries
+the card, the panic value and a real stack frame, and the error text carries neither. The
+scheduler's `TestAPanickingRunReleasesItsFlightSoTheCardRunsAgain` drives the panic through
+`Refresh` rather than `Apply`, since `Apply`'s loop panics on its own goroutine where it would
+take the test process down and prove nothing; against the old code it does not fail but *hangs*,
+which is the honest reproduction, so its two-second timeout is the assertion.
+
+Verified end to end by reintroducing the original nil-map panic, building the image and running
+the compose stack against it: the card showed `error`/`internal` with the fixed text, the log
+carried `card=immich-recent panic="assignment to entry in nil map"` with the `applyParamDefaults`
+frame, the Docker card on the same dashboard kept its own state, and the container reported zero
+restarts and `healthy`. The same build before the fix crash-looped.
