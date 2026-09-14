@@ -18,6 +18,7 @@ priority (which milestone should absorb it, or "before X" for a hard blocker).
 | --- | --- | --- |
 | [Does Jellyfin still earn being the WASM proof case?](#open-question-does-jellyfin-still-earn-being-the-wasm-proof-case) | Plugins | Open decision |
 | [Should there be a frontend plugin surface at all?](#open-question-should-there-be-a-frontend-plugin-surface-at-all) | Frontend | Open decision |
+| [The approval API has no client](#the-approval-api-has-no-client) | Frontend | Open decision |
 | [Appearance options are deferred until asked for](#appearance-options-are-deferred-until-asked-for) | Frontend | On demand |
 | [The visual baseline's per-pixel threshold hides whole-area changes](#the-visual-baselines-per-pixel-threshold-hides-whole-area-changes) | Frontend | Low-medium |
 | [Asset format coverage is narrower than the allowlist](#asset-format-coverage-is-narrower-than-the-architectures-final-allowlist) | Assets | 0.2 transform milestone |
@@ -87,6 +88,38 @@ Deferred, deliberately, with no work planned. Revisit only if a concrete integra
 expressed as a Widget Document *and* the missing block type is too specific to justify adding to
 the core renderer - that pair is the trigger, and neither half has been observed yet. Until then
 the answer is the first option.
+
+### The approval API has no client
+
+Noticed 2026-09-14, from the reasonable expectation that a dashboard with a login has a settings
+page behind it. It does not, and for the config half that is decision D5 working as intended -
+YAML is the single source of truth for 0.1, and the editor is a 0.3 frontend project over
+`config.Store.Apply` (architecture section on Writes, and challenge C6). Nothing to fix there.
+
+The integrations half is a different situation. D2b built `GET /api/v1/integrations`,
+`GET /api/v1/integrations/{id}/approval` and `POST /api/v1/integrations/{id}/approve`, and H2 gated
+them properly: a fresh sudo window in password mode, the configured admin group under forward auth,
+`privilegedOperations: cli-only` by default in forward mode. D2b's own acceptance criteria are
+written in terms of a UI - "the UI shows a human-readable applicability report". That UI was never
+built, and no milestone owns it.
+
+Two consequences, neither fatal:
+
+- **Approving is CLI-only in practice**, including in password mode where the REST path is fully
+  authorized. An operator running the container without shell access has an endpoint they can only
+  reach with `curl` and a hand-managed sudo window.
+- **The REST approve path has no real client**, so it is exercised only by its own tests. The
+  handler is well covered, but nothing proves the sequence a browser would actually perform -
+  preview, sudo, approve with `expectedManifestSha256`, handle the 409 on a stale digest.
+
+This is not the 0.3 config editor and does not need D5 reopened: approval writes `veduta.lock.yaml`,
+which is already a machine-written file, not the operator's commented config. It is a page over
+three endpoints that already exist.
+
+Priority: open decision. The question is whether 0.1 ships a read-only integrations view (cheap,
+makes the state visible, leaves approval at the CLI where the security model is most defensible),
+the full approve flow, or nothing - and whether a settings entry point in the header is wanted at
+all before there is more than one thing behind it.
 
 ### Appearance options are deferred until asked for
 
