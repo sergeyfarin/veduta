@@ -25,6 +25,7 @@ priority (which milestone should absorb it, or "before X" for a hard blocker).
 | [Asset-cache startup does not reconcile orphan files](#asset-cache-startup-does-not-reconcile-orphan-files) | Assets | Low |
 | [Lock-write race against a concurrent CLI approval](#the-lock-write-race-is-closed-only-within-one-process-not-against-a-concurrent-cli-approval) | Integrations | Low |
 | [`httpConnection.headers` are not secret-capable](#config-httpconnectionheaders-values-are-plain-strings-not-secret-capable) | Config schema | Low-medium |
+| [A pipeline path cannot carry a card parameter](#a-pipeline-path-cannot-carry-a-card-parameter) | Manifest DSL | 0.2 |
 | [`CacheEntries` can't represent an explicit zero](#manifestloadlimitscacheentries-cant-represent-an-explicit-zero) | Integrations | When declarative caching lands |
 | [Approve flow can't grant a limit above its default](#the-documented-approve-flow-has-no-way-to-grant-a-limit-above-its-documented-default) | Docs | Low |
 | [Go plugin SDK needs a WASI-free toolchain](#go-plugin-sdk-requires-a-maintained-wasi-free-toolchain) | Plugins | Low |
@@ -32,6 +33,32 @@ priority (which milestone should absorb it, or "before X" for a hard blocker).
 | [ARM runtime performance has no measured evidence](#arm-runtime-performance-has-no-measured-evidence) | Plugins | **Decide before 0.1** |
 
 ---
+
+### A pipeline path cannot carry a card parameter
+
+Found while writing `plugins/arcane` and `plugins/homeassistant`. A v1 pipeline step's `path` must
+be a literal string: `internal/contracts/semantic.go` refuses an expression-valued path because
+route coverage would otherwise stop being decidable at approval time, which is the point of
+declaring routes at all. The manifest schema's `valueNode` allows an expression there, and the
+declarative runtime evaluates one perfectly well - the semantic layer is what says no. That
+mismatch is itself worth resolving in either direction.
+
+The cost is concrete in two shipped integrations:
+
+- **Arcane** scopes everything by environment id as a path segment (`/api/environments/{id}/...`),
+  so `plugins/arcane` watches the local environment (`0`) only. A remote host or agent added to
+  the same Arcane cannot be given a card.
+- **Home Assistant** serves one entity at `/api/states/<entity_id>`. `plugins/homeassistant`'s
+  `sensor` operation instead reads the whole `/api/states` array and selects one entity from it -
+  correct, but it transfers the entire state set to render one number, which on a large
+  installation is megabytes per refresh per card.
+
+A middle way exists and is probably the right shape: let a route declare named path segments whose
+values come from `params` under a declared pattern (`/api/environments/{environmentId}/containers`
+with `environmentId` constrained by the operation's own params schema). Coverage stays decidable -
+the glob is still fixed, and the substitution is bounded by a schema the approver can read - while
+the path stops being a template the checker cannot reason about. Worth doing before more
+integrations are shaped around the limitation rather than around their upstream.
 
 ### Open question: does Jellyfin still earn being the WASM proof case?
 

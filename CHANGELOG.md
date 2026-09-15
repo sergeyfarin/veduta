@@ -13,7 +13,30 @@ project is pre-1.0:
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- Four first-party declarative integrations, bringing the shipped set to ten:
+  **Proxmox VE** (`cluster-overview` — node availability, VM and LXC counts, and core-weighted
+  cluster CPU and memory from one read-only `/api2/json/cluster/resources`), **Home Assistant**
+  (`overview` — entity, light, switch, person and unavailable-entity counts; and `sensor` — one
+  entity, with a numeric signal emitted only when the entity carries a unit and is actually
+  reporting), **Arcane** (`containers` — status counts and a container page in a single request),
+  and **Dockhand** (`overview` — container, stack and image totals summed across every environment
+  it manages). Every route in all four is a `GET`, so none can act on the system it watches.
+  Documented in the new [docs/integrations.md](docs/integrations.md).
+- `veduta import homepage` now maps Homepage's `homeassistant` and `proxmox` widgets onto real
+  integrations instead of importing them as link-only cards. Home Assistant's Homepage key is its
+  bearer token and carries across; a Proxmox token is two Homepage fields joined into one
+  non-standard header, so the importer writes the card and the URL, deliberately leaves the
+  connection with no auth rather than guessing, and prints the header to add.
+
+### Fixed
+
+- `plugins/beszel/manifest.yaml` was never schema-validated by the contract suite, which named
+  each manifest individually and had not been updated when Beszel was added. The suite now finds
+  every `plugins/*/manifest.yaml`, and a new check asserts each one is also listed in
+  `hack/stage-plugins.sh` — a manifest missing from that allowlist ships in no release archive and
+  no container image, and nothing previously noticed.
 
 ## [0.1.0] — unreleased
 

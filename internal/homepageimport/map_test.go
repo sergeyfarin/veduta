@@ -3,6 +3,7 @@
 package homepageimport_test
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -40,7 +41,7 @@ notifications: {channels: {}}
 	if len(report.EnvironmentVariables) == 0 || len(warnings) == 0 {
 		t.Fatalf("environment=%v warnings=%v", report.EnvironmentVariables, warnings)
 	}
-	if len(patch.Integrations) != 3 {
+	if len(patch.Integrations) != 5 {
 		t.Fatalf("plugin declarations = %#v", patch.Integrations)
 	}
 	if err = config.Apply(configPath, patch); err != nil {
@@ -80,5 +81,56 @@ func TestMapDeduplicatesBaseURLsAndExistingIDs(t *testing.T) {
 	cards := patch.Sections[0]["cards"].([]any)
 	if cards[0].(map[string]any)["id"] != "jellyfin-2" || cards[1].(map[string]any)["id"] != "jellyfin-3" {
 		t.Fatalf("card ids were not made unique: %#v", cards)
+	}
+}
+
+// TestMapCredentialShapeThatCannotBeTranslated covers the two ends of the auth question the
+// importer has to answer per widget. Home Assistant's Homepage key IS its bearer token, so the
+// import is complete and the secret reference is written for it. Proxmox's is not: Proxmox wants
+// one Authorization header assembled from Homepage's separate username and password fields, in a
+// scheme that is neither bearer nor basic. The importer must then write NO auth block at all -
+// a plausible-looking wrong one would fail at the first refresh with nothing in the file to
+// explain why - and must say so in a warning.
+func TestMapCredentialShapeThatCannotBeTranslated(t *testing.T) {
+	model := homepageimport.Model{Groups: []homepageimport.Group{{Name: "Infrastructure", Services: []homepageimport.Service{
+		{Name: "Proxmox", Widgets: []homepageimport.Widget{{Type: "proxmox", URL: "https://pve.example.test:8006", Key: "ignored"}}},
+		{Name: "Home Assistant", Widgets: []homepageimport.Widget{{Type: "homeassistant", URL: "http://ha.example.test:8123", Key: "ha-token"}}},
+	}}}}
+	patch, report, warnings := homepageimport.Map(model, nil, homepageimport.MapOptions{})
+
+	if _, hasAuth := patch.Connections["proxmox"]["auth"]; hasAuth {
+		t.Errorf("proxmox connection carries a guessed auth block: %#v", patch.Connections["proxmox"])
+	}
+	for _, name := range report.EnvironmentVariables {
+		if strings.Contains(name, "PROXMOX") {
+			t.Errorf("a secret variable was promised for a credential that was not written: %q", name)
+		}
+	}
+	var explained bool
+	for _, warning := range warnings {
+		if strings.Contains(warning.Message, "PVEAPIToken") {
+			explained = true
+		}
+	}
+	if !explained {
+		t.Errorf("no warning explains the Proxmox token the operator must write: %#v", warnings)
+	}
+
+	auth, ok := patch.Connections["home-assistant"]["auth"].(map[string]any)
+	if !ok || auth["type"] != "bearer" || auth["value"] != "${secret:HOMEPAGE_HOME_ASSISTANT_KEY}" {
+		t.Errorf("home assistant bearer token was not carried across: %#v", patch.Connections["home-assistant"])
+	}
+	if strings.Contains(fmt.Sprint(patch.Connections), "ha-token") {
+		t.Errorf("the source credential was written into the configuration: %#v", patch.Connections)
+	}
+
+	cards := patch.Sections[0]["cards"].([]any)
+	first := cards[0].(map[string]any)
+	if first["integration"] != "proxmox" || first["operation"] != "cluster-overview" {
+		t.Errorf("proxmox card = %#v", first)
+	}
+	second := cards[1].(map[string]any)
+	if second["integration"] != "homeassistant" || second["operation"] != "overview" {
+		t.Errorf("home assistant card = %#v", second)
 	}
 }

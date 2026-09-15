@@ -90,7 +90,8 @@ open gaps found along the way. Rule transitions and their event/outbox effects n
 transaction, clearing the final pre-L3 implementation blocker.
 
 New users can follow the focused [getting-started guide](docs/getting-started.md). The generated
-[configuration reference](docs/configuration.md), [integration authoring guide](docs/integration-authoring.md),
+[configuration reference](docs/configuration.md), the [shipped integrations](docs/integrations.md),
+[integration authoring guide](docs/integration-authoring.md),
 [security model](docs/security.md), and [migration guide](docs/migration.md) cover deployment and
 extension beyond the showcase.
 
@@ -127,7 +128,9 @@ This repository currently contains:
 | --- | --- |
 | [docs/getting-started.md](docs/getting-started.md) | Build, first launch, authentication, secrets, and integration approval |
 | [docs/configuration.md](docs/configuration.md) | Configuration field reference generated from the authoritative JSON Schema |
+| [docs/integrations.md](docs/integrations.md) | The ten shipped integrations: what each needs, the connection it expects, the signals it emits |
 | [docs/integration-authoring.md](docs/integration-authoring.md) | Declarative and Rust/WASM integration authoring and validation |
+| [docs/host-metrics.md](docs/host-metrics.md) | Glances and Beszel over HTTP, so a monitored host needs no SSH account |
 | [docs/security.md](docs/security.md) | Operator security model and deployment checklist |
 | [docs/migration.md](docs/migration.md) | Homepage import, review, rollback, and Veduta upgrade guidance |
 | [docs/00-review-and-prior-art.md](docs/00-review-and-prior-art.md) | Competitive research, reuse decisions, and eight rounds of adversarial review with verdicts |
@@ -146,7 +149,7 @@ This repository currently contains:
 | [TRADEMARK.md](TRADEMARK.md) | Use of the name; permissive, and short |
 | [schemas/](schemas/) | JSON Schemas: Widget Document, card-state envelope, plugin manifest, integration lock, configuration |
 | [examples/veduta.yaml](examples/veduta.yaml) | Target configuration file (validates against the config schema) |
-| [plugins/](plugins/) | Four integrations: Immich, Glances and Beszel (declarative), plus Jellyfin (WASM) |
+| [plugins/](plugins/) | Eight integrations: Immich, Glances, Beszel, Proxmox, Home Assistant, Arcane and Dockhand (declarative), plus Jellyfin (WASM) — see [docs/integrations.md](docs/integrations.md) |
 | [examples/veduta.lock.yaml](examples/veduta.lock.yaml) | Approved capabilities and routes per integration |
 | [testdata/widgets/](testdata/widgets/) | Golden Widget Document and card-state fixtures |
 | [testdata/schema-cases.json](testdata/schema-cases.json) | 79-case adversarial schema corpus |

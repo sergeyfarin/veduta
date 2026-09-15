@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -174,11 +175,14 @@ func TestFixturesValidate(t *testing.T) {
 	fixtures := []struct{ path, schema string }{
 		{"examples/veduta.yaml", "config"},
 		{"examples/veduta.lock.yaml", "lock"},
-		{"plugins/immich/manifest.yaml", "manifest"},
-		{"plugins/glances/manifest.yaml", "manifest"},
-		{"plugins/jellyfin/manifest.yaml", "manifest"},
 		{"testdata/widgets/jellyfin-recent.golden.json", "widget"},
 		{"testdata/widgets/jellyfin-recent.cardstate.json", "cardstate"},
+	}
+	// Every shipped manifest, found rather than listed: naming them one by one meant a plugin
+	// added later was silently exempt from the schema, which is how plugins/beszel went
+	// unvalidated here from the milestone that added it.
+	for _, manifest := range shippedManifests(t, root) {
+		fixtures = append(fixtures, struct{ path, schema string }{manifest, "manifest"})
 	}
 	for _, f := range fixtures {
 		t.Run(f.path, func(t *testing.T) {
@@ -194,6 +198,30 @@ func TestFixturesValidate(t *testing.T) {
 			}
 		})
 	}
+}
+
+// shippedManifests returns every plugins/<id>/manifest.yaml, repo-relative and sorted. An empty
+// result is a failure rather than a vacuous pass: a glob that matches nothing must not read as
+// "all manifests validate".
+func shippedManifests(t *testing.T, root string) []string {
+	t.Helper()
+	matches, err := filepath.Glob(filepath.Join(root, "plugins", "*", "manifest.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(matches) == 0 {
+		t.Fatal("no plugins/*/manifest.yaml found; the glob or the layout changed")
+	}
+	out := make([]string, 0, len(matches))
+	for _, match := range matches {
+		relative, relErr := filepath.Rel(root, match)
+		if relErr != nil {
+			t.Fatal(relErr)
+		}
+		out = append(out, filepath.ToSlash(relative))
+	}
+	sort.Strings(out)
+	return out
 }
 
 type schemaCase struct {
@@ -449,3 +477,27 @@ func TestCodeSpansIgnoreStringLiterals(t *testing.T) {
 }
 
 var _ = yaml.Unmarshal
+
+// TestShippedManifestsAreStagedForRelease closes the gap between "a manifest exists in the
+// repository" and "a manifest reaches a user". hack/stage-plugins.sh is an explicit allowlist by
+// design - build material under plugins/ must never be distributed - but an allowlist silently
+// omits anything added after it was last edited, and nothing before this test noticed. The
+// release workflow does diff the list against the staged archive, so a stale list produces an
+// archive that is internally consistent and quietly missing an integration.
+func TestShippedManifestsAreStagedForRelease(t *testing.T) {
+	root := repoRoot(t)
+	out, err := exec.Command(filepath.Join(root, "hack", "stage-plugins.sh"), "--list").Output()
+	if err != nil {
+		t.Fatalf("hack/stage-plugins.sh --list: %v", err)
+	}
+	staged := map[string]bool{}
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		staged[strings.TrimSpace(line)] = true
+	}
+	for _, manifest := range shippedManifests(t, root) {
+		relative := strings.TrimPrefix(manifest, "plugins/")
+		if !staged[relative] {
+			t.Errorf("%s is in the repository but not in hack/stage-plugins.sh, so no release archive or container image carries it", manifest)
+		}
+	}
+}

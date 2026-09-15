@@ -16,6 +16,11 @@ type mappingSpec struct {
 	integration string
 	operation   string
 	header      string
+	// authNote names what the operator has to supply by hand, for widgets whose Homepage
+	// credential is not the single `key` field the importer knows how to translate. Writing a
+	// connection with no auth and saying nothing would produce a card that fails on first
+	// refresh for a reason nothing in the file explains.
+	authNote string
 }
 
 // The common Homepage widget surface is classified explicitly. Empty integration means its
@@ -25,14 +30,24 @@ var widgetMappings = map[string]mappingSpec{
 	"beszel": {integration: "beszel", operation: "overview"}, "calibreweb": {},
 	"changedetectionio": {}, "cloudflared": {}, "coinmarketcap": {}, "deluge": {},
 	"docker": {}, "emby": {}, "frigate": {},
-	"glances": {integration: "glances", operation: "overview"}, "homeassistant": {},
-	"immich":   {integration: "immich", operation: "recent-assets", header: "x-api-key"},
-	"jellyfin": {integration: "jellyfin", operation: "recently-added", header: "X-Emby-Token"},
-	"komga":    {}, "lidarr": {header: "X-Api-Key"}, "nextcloud": {},
+	"glances": {integration: "glances", operation: "overview"},
+	// Homepage's Home Assistant widget carries a long-lived access token in `key`, and Home
+	// Assistant wants it as an ordinary bearer - so this one maps across completely.
+	"homeassistant": {integration: "homeassistant", operation: "overview"},
+	"immich":        {integration: "immich", operation: "recent-assets", header: "x-api-key"},
+	"jellyfin":      {integration: "jellyfin", operation: "recently-added", header: "X-Emby-Token"},
+	"komga":         {}, "lidarr": {header: "X-Api-Key"}, "nextcloud": {},
 	"nginxproxymanager": {}, "omada": {}, "openweathermap": {}, "overseerr": {},
 	"pihole": {}, "plex": {header: "X-Plex-Token"}, "portainer": {},
-	"prowlarr": {header: "X-Api-Key"}, "proxmox": {}, "qbittorrent": {},
-	"radarr": {header: "X-Api-Key"}, "sabnzbd": {}, "sonarr": {header: "X-Api-Key"}, "speedtest": {},
+	"prowlarr": {header: "X-Api-Key"},
+	// Homepage splits a Proxmox API token across `username` (user@realm!tokenid) and `password`
+	// (the secret), and Proxmox joins them into one non-standard Authorization value. Two source
+	// fields, one target, and a scheme that is neither bearer nor basic: the importer maps the
+	// card and the URL and says plainly that the token is the operator's to write.
+	"proxmox": {integration: "proxmox", operation: "cluster-overview",
+		authNote: `Proxmox needs auth: { type: header, name: Authorization, value: 'PVEAPIToken=<user@realm!tokenid>=<secret>' } - Homepage's username and password fields are not carried across`},
+	"qbittorrent": {},
+	"radarr":      {header: "X-Api-Key"}, "sabnzbd": {}, "sonarr": {header: "X-Api-Key"}, "speedtest": {},
 	"tautulli": {}, "traefik": {}, "transmission": {}, "truenas": {}, "uptimekuma": {},
 	"watchtower": {},
 }
@@ -159,6 +174,9 @@ func (m *mapper) mapService(service Service, sourcePath string) map[string]any {
 		m.warnings = append(m.warnings, Warning{Source: "mapping", Path: sourcePath + "." + service.Name, Message: fmt.Sprintf("%s widget has no usable URL; imported as a link-only card", widget.Type)})
 		return card
 	}
+	if spec.authNote != "" {
+		m.warnings = append(m.warnings, Warning{Source: "mapping", Path: sourcePath + "." + service.Name, Message: spec.authNote})
+	}
 	m.declarePlugin(spec.integration)
 	card["integration"] = spec.integration
 	card["operation"] = spec.operation
@@ -182,7 +200,11 @@ func (m *mapper) connectionFor(serviceName string, widget Widget, spec mappingSp
 	}
 	id := m.uniqueConnectionID(serviceName)
 	connection := map[string]any{"kind": "http", "enabled": false, "baseUrl": baseURL}
-	if widget.Key != "" {
+	// A spec that declares an authNote is one whose upstream wants an authentication shape the
+	// importer cannot assemble from Homepage's fields. Writing a bearer block anyway would be a
+	// confident wrong answer; leaving auth out makes the operator write the one the warning
+	// describes.
+	if widget.Key != "" && spec.authNote == "" {
 		environmentName := "HOMEPAGE_" + strings.ToUpper(strings.ReplaceAll(id, "-", "_")) + "_KEY"
 		auth := map[string]any{"type": "bearer", "value": "${secret:" + environmentName + "}"}
 		if spec.header != "" {

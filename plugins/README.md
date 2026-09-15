@@ -31,8 +31,12 @@ ABI.
 shows multi-request broker calls, typed response mapping, asset-reference
 minting, signals, and partial-data notices.
 
-The first-party declarative manifests need no compilation: Immich provides media summaries,
-Glances provides direct host metrics, and Beszel reads one authorised system record from a Hub.
+The first-party declarative manifests need no compilation. Immich provides media summaries;
+Glances provides direct host metrics and Beszel reads one authorised system record from a Hub;
+Proxmox describes a whole cluster from one read-only call; Home Assistant counts entities and
+renders a single sensor; and Arcane and Dockhand report container state from a Docker management
+UI. Every route in all seven is a GET, so none of them can act on what it watches.
+[`docs/integrations.md`](../docs/integrations.md) documents the connection each one expects.
 
 The Go core remains the supported Veduta host. The measured Go plugin toolchain
 requires WASI and does not meet the strict guest profile; its revisit criteria

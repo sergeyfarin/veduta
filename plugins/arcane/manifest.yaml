@@ -1,0 +1,98 @@
+# Arcane's container listing returns the page AND the aggregate status counts in one response, so
+# the whole card costs a single GET. Nothing here can start, stop or change a container: every
+# mutating Arcane route is a POST, and no POST is declared.
+#
+# The connection carries an Arcane API key in Arcane's own header:
+#
+#   connections:
+#     arcane:
+#       kind: http
+#       baseUrl: http://arcane.lan:3552
+#       auth: { type: header, name: X-Api-Key, value: "${secret:ARCANE_API_KEY}" }
+#
+# Arcane scopes its API by environment, and the environment id is a PATH segment: "0" is the local
+# Docker host (types.LocalDockerEnvironmentID upstream), and remote hosts and agents are 1, 2, ...
+# A v1 manifest's pipeline path must be a literal so that route coverage is decidable when the
+# integration is approved rather than when it runs, which means an environment id cannot come from
+# a card parameter. This operation therefore watches the local environment only. Watching a remote
+# Arcane environment needs a per-environment path, which v1 cannot express - see
+# docs/03-backlog.md.
+apiVersion: veduta.dev/v1
+kind: Integration
+metadata:
+  id: arcane
+  name: Arcane
+  version: 0.1.0
+  description: Container status counts and a container list from Arcane's local Docker environment.
+  license: Apache-2.0
+  icon: sh:arcane
+spec:
+  runtime: declarative
+  slots:
+    - name: server
+      kind: http
+      description: An Arcane instance with an API key
+  capabilities: [http]
+  limits: { httpRequests: 1, timeoutMs: 6000, inputMB: 2, iterations: 20000 }
+  operations:
+    - id: containers
+      name: Containers
+      defaultRefresh: 1m
+      routes:
+        # Fully spelled out rather than globbed: an approver reads the exact request this
+        # integration can make. It cannot be walked into /containers/<id>/stop either - that is a
+        # different route, and a POST besides.
+        - slot: server
+          method: GET
+          path: /api/environments/0/containers
+          queryKeys: [limit, includeInternal]
+          reason: One page of containers plus the environment's aggregate status counts
+      signals:
+        - { name: containers.running, type: number, unit: count, history: true }
+        - { name: containers.stopped, type: number, unit: count, history: true }
+        - { name: containers.total,   type: number, unit: count, history: true }
+      params:
+        type: object
+        properties:
+          limit: { type: integer, minimum: 1, maximum: 24, default: 8 }
+      pipeline:
+        - as: containers
+          request:
+            slot: server
+            method: GET
+            path: /api/environments/0/containers
+            query:
+              limit: { expr: 'string(params.limit)' }
+              includeInternal: "false"
+      output:
+        title: Arcane
+        status:
+          # Deliberately NOT "warn if anything is stopped": a real host always has a few stopped
+          # containers, and a card that is permanently yellow is a card nobody reads. Everything
+          # being down is the condition worth colouring.
+          level: { expr: 'containers.counts.totalContainers > 0 && containers.counts.runningContainers == 0 ? "error" : "ok"' }
+          text:  { expr: 'string(containers.counts.runningContainers) + " of " + string(containers.counts.totalContainers) + " running"' }
+        signals:
+          containers.running: { value: { expr: containers.counts.runningContainers } }
+          containers.stopped: { value: { expr: containers.counts.stoppedContainers } }
+          containers.total:   { value: { expr: containers.counts.totalContainers } }
+        blocks:
+          - type: metrics
+            items:
+              - { label: Running, value: { expr: containers.counts.runningContainers }, format: number }
+              - { label: Stopped, value: { expr: containers.counts.stoppedContainers }, format: number }
+              - { label: Total,   value: { expr: containers.counts.totalContainers },   format: number }
+          - type: list
+            title: Containers
+            empty: No containers
+            # Arcane returns Docker's own names array, whose entries keep the leading slash.
+            items:
+              each: { expr: 'take(containers.data, params.limit)' }
+              as: container
+              item:
+                id:       { expr: container.id }
+                title:    { expr: 'trim(first(container.names), "/")' }
+                subtitle: { expr: container.status }
+                value:    { expr: container.state }
+                format: text
+                level:    { expr: 'container.state == "running" ? "ok" : (container.state == "paused" ? "info" : "muted")' }

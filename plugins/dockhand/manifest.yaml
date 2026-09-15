@@ -1,0 +1,101 @@
+# Dockhand already aggregates every environment it manages - local sockets, TLS hosts and Hawser
+# agents alike - into one dashboard payload, so this integration asks for that one endpoint and
+# nothing else. The whole route surface is a single GET; nothing here can deploy, prune or
+# restart anything.
+#
+# The connection carries a Dockhand API token as an ordinary bearer:
+#
+#   connections:
+#     dockhand:
+#       kind: http
+#       baseUrl: http://dockhand.lan:3000
+#       auth: { type: bearer, value: "${secret:DOCKHAND_TOKEN}" }
+#
+# Create the token in Dockhand's settings and give its role only the environments:view permission,
+# which is what /api/dashboard/stats checks.
+apiVersion: veduta.dev/v1
+kind: Integration
+metadata:
+  id: dockhand
+  name: Dockhand
+  version: 0.1.0
+  description: Container, stack and image totals across every Docker environment Dockhand manages.
+  license: Apache-2.0
+  # No icon: the pinned dashboard-icons pack has no Dockhand entry (checked at
+  # internal/icons.shCommit and at that repository's HEAD), and pointing this at Docker's own
+  # whale would put the wrong project's mark on the card. Set `icon:` on the card to choose one.
+spec:
+  runtime: declarative
+  slots:
+    - name: server
+      kind: http
+      description: A Dockhand instance with an API token
+  capabilities: [http]
+  # Dockhand collects disk usage and per-container metrics to answer this, so it is a slow
+  # endpoint by nature rather than a cheap counter read. The timeout is generous and the refresh
+  # deliberately slow.
+  limits: { httpRequests: 1, timeoutMs: 15000, inputMB: 4, iterations: 20000 }
+  operations:
+    - id: overview
+      name: Environment overview
+      defaultRefresh: 2m
+      routes:
+        - slot: server
+          method: GET
+          path: /api/dashboard/stats
+          reason: Per-environment container, stack, image and volume totals
+      signals:
+        - { name: environments.online,        type: number, unit: count, history: true }
+        - { name: environments.total,         type: number, unit: count, history: true }
+        - { name: containers.running,         type: number, unit: count, history: true }
+        - { name: containers.total,           type: number, unit: count, history: true }
+        - { name: containers.unhealthy,       type: number, unit: count, history: true }
+        - { name: containers.pending_updates, type: number, unit: count, history: true }
+        - { name: stacks.running,             type: number, unit: count, history: true }
+        - { name: images.total,               type: number, unit: count, history: true }
+      params:
+        type: object
+        properties:
+          limit: { type: integer, minimum: 1, maximum: 12, default: 6 }
+      pipeline:
+        # Called without ?env=, Dockhand returns one object per environment. Supplying env would
+        # return a bare object instead of an array, which is a different shape for every
+        # expression below - so this operation deliberately never sends it.
+        - as: stats
+          request: { slot: server, method: GET, path: /api/dashboard/stats }
+      output:
+        title: Dockhand
+        status:
+          # An environment Dockhand cannot reach reports online:false, and one still connecting
+          # omits the field entirely. Only an explicit false is a problem worth colouring.
+          level: { expr: 'len(stats) == 0 ? "unknown" : (len(filter(stats, .online == false)) == 0 ? "ok" : "error")' }
+          text:  { expr: 'string(len(filter(stats, .online == true))) + " of " + string(len(stats)) + " environments online"' }
+        signals:
+          environments.online:        { value: { expr: 'len(filter(stats, .online == true))' } }
+          environments.total:         { value: { expr: 'len(stats)' } }
+          containers.running:         { value: { expr: 'sum(stats, .containers.running)' } }
+          containers.total:           { value: { expr: 'sum(stats, .containers.total)' } }
+          containers.unhealthy:       { value: { expr: 'sum(stats, .containers.unhealthy)' } }
+          containers.pending_updates: { value: { expr: 'sum(stats, .containers.pendingUpdates)' } }
+          stacks.running:             { value: { expr: 'sum(stats, .stacks.running)' } }
+          images.total:               { value: { expr: 'sum(stats, .images.total)' } }
+        blocks:
+          - type: metrics
+            items:
+              - { label: Running,   value: { expr: 'sum(stats, .containers.running)' }, format: number }
+              - { label: Unhealthy, value: { expr: 'sum(stats, .containers.unhealthy)' }, format: number, level: warn }
+              - { label: Updates,   value: { expr: 'sum(stats, .containers.pendingUpdates)' }, format: number }
+              - { label: Stacks,    value: { expr: 'sum(stats, .stacks.running)' }, format: number }
+          - type: list
+            title: Environments
+            empty: No environments configured
+            items:
+              each: { expr: 'take(sortBy(stats, .name), params.limit)' }
+              as: environment
+              item:
+                id:       { expr: 'string(environment.id)' }
+                title:    { expr: environment.name }
+                subtitle: { expr: 'string(environment.containers.running) + " of " + string(environment.containers.total) + " containers running"' }
+                value:    { expr: environment.containers.running }
+                format: number
+                level:    { expr: 'environment.online == true ? "ok" : (environment.online == false ? "error" : "muted")' }

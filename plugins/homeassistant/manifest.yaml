@@ -1,0 +1,160 @@
+# Home Assistant's REST API is read-only here by construction: the two routes below are both GET,
+# and neither /api/services nor /api/template is requested, so an approved grant cannot call a
+# service or evaluate a template no matter what this manifest is later edited to say.
+#
+# The connection carries a long-lived access token as an ordinary bearer:
+#
+#   connections:
+#     homeassistant:
+#       kind: http
+#       baseUrl: http://homeassistant.lan:8123
+#       auth: { type: bearer, value: "${secret:HOMEASSISTANT_TOKEN}" }
+#
+# Home Assistant has no read-only token scope, so the token itself is as privileged as its user.
+# Create a dedicated non-administrator user for it; the route grant is what keeps Veduta honest,
+# not the token.
+apiVersion: veduta.dev/v1
+kind: Integration
+metadata:
+  id: homeassistant
+  name: Home Assistant
+  version: 0.1.0
+  description: Entity counts, unavailable entities and single-sensor readings from Home Assistant.
+  license: Apache-2.0
+  icon: sh:home-assistant
+spec:
+  runtime: declarative
+  slots:
+    - name: server
+      kind: http
+      description: Your Home Assistant instance, usually on port 8123
+  capabilities: [http]
+  # /api/states returns EVERY entity, which on a large installation is several megabytes and tens
+  # of thousands of JSON nodes. These ceilings are sized for that rather than for a tidy demo, and
+  # are the reason the overview refreshes once a minute instead of every few seconds.
+  limits: { httpRequests: 1, timeoutMs: 10000, inputMB: 8, responseMB: 8, jsonNodes: 500000, iterations: 80000 }
+  operations:
+    - id: overview
+      name: Home overview
+      defaultRefresh: 1m
+      routes:
+        - slot: server
+          method: GET
+          path: /api/states
+          reason: Current state of every entity, for counts and unavailability
+      signals:
+        - { name: entities,     type: number, unit: count, history: true }
+        - { name: unavailable,  type: number, unit: count, history: true }
+        - { name: lights.on,    type: number, unit: count, history: true }
+        - { name: switches.on,  type: number, unit: count, history: true }
+        - { name: persons.home, type: number, unit: count, history: true }
+      params:
+        type: object
+        properties:
+          limit: { type: integer, minimum: 1, maximum: 24, default: 6 }
+      pipeline:
+        - as: states
+          request: { slot: server, method: GET, path: /api/states }
+      output:
+        title: Home Assistant
+        status:
+          # "unknown" is a state an entity legitimately holds before its first update;
+          # "unavailable" means the integration behind it is not answering. Only the second is
+          # worth waking someone about, so only the second counts here.
+          level: { expr: 'len(filter(states, .state == "unavailable")) == 0 ? "ok" : "warn"' }
+          text:  { expr: 'string(len(states)) + " entities"' }
+        signals:
+          entities:     { value: { expr: 'len(states)' } }
+          unavailable:  { value: { expr: 'len(filter(states, .state == "unavailable"))' } }
+          lights.on:    { value: { expr: 'len(filter(states, hasPrefix(.entity_id, "light.") && .state == "on"))' } }
+          switches.on:  { value: { expr: 'len(filter(states, hasPrefix(.entity_id, "switch.") && .state == "on"))' } }
+          persons.home: { value: { expr: 'len(filter(states, hasPrefix(.entity_id, "person.") && .state == "home"))' } }
+        blocks:
+          - type: metrics
+            items:
+              - { label: Lights on,   value: { expr: 'len(filter(states, hasPrefix(.entity_id, "light.") && .state == "on"))' },   format: number }
+              - { label: Switches on, value: { expr: 'len(filter(states, hasPrefix(.entity_id, "switch.") && .state == "on"))' },  format: number }
+              - { label: People home, value: { expr: 'len(filter(states, hasPrefix(.entity_id, "person.") && .state == "home"))' }, format: number }
+              - { label: Entities,    value: { expr: 'len(states)' }, format: number }
+          - type: list
+            title: Unavailable
+            empty: Everything is responding
+            items:
+              each: { expr: 'take(sortBy(filter(states, .state == "unavailable"), .entity_id), params.limit)' }
+              as: entity
+              item:
+                id:    { expr: entity.entity_id }
+                title: { expr: '"friendly_name" in entity.attributes ? entity.attributes.friendly_name : entity.entity_id' }
+                subtitle: { expr: entity.entity_id }
+                level: warn
+                timestamp: { expr: entity.last_changed }
+
+    # A whole-home summary is not what most people want on a wall dashboard; one sensor is.
+    #
+    # Home Assistant serves a single entity at GET /api/states/<entity_id>, which would be the
+    # cheap way to do this - but a v1 manifest's pipeline path must be a literal, so that the
+    # approver can see at load time which routes an operation can actually reach. A path built
+    # from a card parameter is not decidable that way and is refused. So this operation reads the
+    # same full /api/states as the overview does and selects one entity from it: correct, and
+    # honestly more expensive than the endpoint it is standing in for. Give sensor cards a slower
+    # refresh than the 30s you might otherwise reach for, and prefer one overview card plus a few
+    # sensor cards over a wall of them.
+    - id: sensor
+      name: One sensor
+      defaultRefresh: 1m
+      routes:
+        - slot: server
+          method: GET
+          path: /api/states
+          reason: Current state of every entity, of which this card renders exactly one
+      signals:
+        - { name: state, type: string, unit: state }
+        # Home Assistant models every state as a string, so a numeric signal can only be emitted
+        # when the entity is one Home Assistant itself considers measurable - it carries a unit -
+        # and is currently reporting. Otherwise the signal is absent, which a rule reads as
+        # unknown rather than as a wrong number.
+        - { name: value, type: number, unit: none, history: true }
+      params:
+        type: object
+        required: [entityId]
+        properties:
+          entityId: { type: string, pattern: "^[a-z_]{1,32}\\.[a-z0-9_]{1,64}$" }
+      pipeline:
+        - as: states
+          request: { slot: server, method: GET, path: /api/states }
+      output:
+        # There is no way to bind the selected entity to a name once - a manifest expression is a
+        # single expression, and `let` is not in the loader's allowlist - so the selection is
+        # spelled out at each leaf. It is repetitive on purpose rather than by oversight; the
+        # iteration budget above is sized for it.
+        title: { expr: 'len(filter(states, .entity_id == params.entityId)) == 0 ? params.entityId : ("friendly_name" in first(filter(states, .entity_id == params.entityId)).attributes ? first(filter(states, .entity_id == params.entityId)).attributes.friendly_name : params.entityId)' }
+        status:
+          # A card naming an entity that no longer exists must say so rather than rendering an
+          # empty, healthy-looking panel - renaming an entity in Home Assistant is a two-click
+          # operation and nothing tells the dashboard it happened.
+          level: { expr: 'len(filter(states, .entity_id == params.entityId)) == 0 ? "error" : (first(filter(states, .entity_id == params.entityId)).state == "unavailable" ? "error" : (first(filter(states, .entity_id == params.entityId)).state == "unknown" ? "unknown" : "ok"))' }
+          text:  { expr: 'len(filter(states, .entity_id == params.entityId)) == 0 ? "no such entity" : first(filter(states, .entity_id == params.entityId)).state' }
+        signals:
+          state:
+            if: { expr: 'len(filter(states, .entity_id == params.entityId)) > 0' }
+            then:
+              value: { expr: 'first(filter(states, .entity_id == params.entityId)).state' }
+          value:
+            if: { expr: 'len(filter(states, .entity_id == params.entityId)) > 0 && "unit_of_measurement" in first(filter(states, .entity_id == params.entityId)).attributes && first(filter(states, .entity_id == params.entityId)).state != "unavailable" && first(filter(states, .entity_id == params.entityId)).state != "unknown"' }
+            then:
+              value: { expr: 'float(first(filter(states, .entity_id == params.entityId)).state)' }
+        blocks:
+          # An each node over a one-element selection, rather than guarded scalars: when the
+          # entity is missing the block renders its empty state instead of every field needing its
+          # own presence branch.
+          - type: list
+            empty: This entity is not in Home Assistant
+            items:
+              each: { expr: 'take(filter(states, .entity_id == params.entityId), 1)' }
+              as: entity
+              item:
+                id:       { expr: entity.entity_id }
+                title:    { expr: '"unit_of_measurement" in entity.attributes ? entity.state + " " + entity.attributes.unit_of_measurement : entity.state' }
+                subtitle: { expr: entity.entity_id }
+                level:    { expr: 'entity.state == "unavailable" ? "error" : "ok"' }
+                timestamp: { expr: entity.last_changed }

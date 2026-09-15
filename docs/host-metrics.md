@@ -1,7 +1,9 @@
 # Host metrics without SSH
 
 Veduta supports Glances and Beszel over HTTP. The monitored host does not need an SSH account or
-key for Veduta.
+key for Veduta. For a Proxmox VE cluster — whose nodes report their own CPU, memory and storage
+through the Proxmox API, so no per-host agent is needed at all — see
+[docs/integrations.md](integrations.md).
 
 Run Glances with its API and web UI disabled:
 

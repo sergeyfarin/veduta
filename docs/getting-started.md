@@ -18,9 +18,13 @@ Each archive is relocatable: unpack it anywhere and run it from there.
 veduta-<version>-<target>/
 ├── veduta
 ├── plugins/          the first-party integrations
+│   ├── arcane/manifest.yaml
 │   ├── beszel/manifest.yaml
+│   ├── dockhand/manifest.yaml
 │   ├── glances/manifest.yaml
+│   ├── homeassistant/manifest.yaml
 │   ├── immich/manifest.yaml
+│   ├── proxmox/manifest.yaml
 │   └── jellyfin/{manifest.yaml,jellyfin.wasm}
 └── LICENSE, LICENSING.md, THIRD-PARTY-NOTICES.md, README.md
 ```

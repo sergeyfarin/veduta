@@ -33,6 +33,8 @@ Imported HTTP connections and external integrations are disabled. Review their b
 ./veduta integration approve --config veduta.yaml immich
 ```
 
+Homepage widget types map onto Veduta integrations where one exists: `glances`, `immich`, `jellyfin`, `homeassistant` and `proxmox` produce a metrics card, and everything else imports as a link-only card. Four of the five carry their credential across — Immich, Jellyfin and Home Assistant each keep theirs in Homepage's single `key` field, and Glances usually needs none — so the importer writes a `${secret:HOMEPAGE_*_KEY}` reference and names the environment variable. Proxmox is the exception: Homepage keeps a Proxmox token as separate `username` and `password` fields, and Proxmox wants them joined into one `Authorization` header in its own scheme. Rather than write a bearer block that would fail at the first refresh with nothing in the file to explain why, the importer writes the card and the URL, leaves the connection with no auth at all, and prints the header you have to add. See [docs/integrations.md](integrations.md) for the shape of each.
+
 Read every warning. “Without widgets” means the service was retained as a link card. “Need manual configuration” means no safe automatic mapping exists. Compare the resulting dashboard with Homepage before removing the old deployment. To roll back the configuration, stop Veduta and restore `veduta.yaml.before-homepage`; keep any `conf.d` files consistent with that version.
 
 ## Upgrading Veduta configuration and data

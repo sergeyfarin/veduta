@@ -1,0 +1,125 @@
+# One read-only call to /cluster/resources describes an entire Proxmox VE cluster: every node,
+# guest and storage, with the counters this card needs. Nothing else is requested, and the API
+# token never leaves the connection.
+#
+# The connection carries a Proxmox API token, which is NOT a bearer token - Proxmox wants its own
+# scheme in the Authorization header:
+#
+#   connections:
+#     proxmox:
+#       kind: http
+#       baseUrl: https://pve.lan:8006
+#       auth:
+#         type: header
+#         name: Authorization
+#         value: 'PVEAPIToken=veduta@pve!dashboard=${secret:PROXMOX_TOKEN}'
+#
+# Give the token user only PVEAuditor on / and Proxmox will refuse anything this manifest does not
+# already refuse. A default Proxmox install presents a self-signed certificate; point tls.caFile at
+# /etc/pve/pve-root-ca.pem rather than reaching for insecureSkipVerify.
+apiVersion: veduta.dev/v1
+kind: Integration
+metadata:
+  id: proxmox
+  name: Proxmox VE
+  version: 0.1.0
+  description: Node health, guest counts and cluster CPU, memory and storage usage from Proxmox VE.
+  license: Apache-2.0
+  icon: sh:proxmox
+spec:
+  runtime: declarative
+  slots:
+    - name: server
+      kind: http
+      description: A Proxmox VE node, usually on port 8006
+  capabilities: [http]
+  # One request, but the response enumerates every guest in the cluster, so the iteration budget
+  # is what actually bounds this integration rather than the request count.
+  limits: { httpRequests: 1, timeoutMs: 8000, inputMB: 4, iterations: 60000 }
+  operations:
+    - id: cluster-overview
+      name: Cluster overview
+      defaultRefresh: 1m
+      routes:
+        - slot: server
+          method: GET
+          path: /api2/json/cluster/resources
+          reason: Nodes, guests and storage in one read-only call
+      signals:
+        - { name: nodes.online,   type: number, unit: count,   history: true }
+        - { name: nodes.total,    type: number, unit: count,   history: true }
+        - { name: vms.running,    type: number, unit: count,   history: true }
+        - { name: vms.total,      type: number, unit: count,   history: true }
+        - { name: lxc.running,    type: number, unit: count,   history: true }
+        - { name: lxc.total,      type: number, unit: count,   history: true }
+        - { name: cpu.percent,    type: number, unit: percent, history: true }
+        - { name: mem.percent,    type: number, unit: percent, history: true }
+      params:
+        type: object
+        properties:
+          guests: { type: integer, minimum: 1, maximum: 24, default: 8 }
+      pipeline:
+        - as: cluster
+          request: { slot: server, method: GET, path: /api2/json/cluster/resources }
+      output:
+        title: Proxmox
+        status:
+          # Offline is the whole point of the card: an unreachable node still appears in
+          # /cluster/resources, with status "unknown", so absence is reported rather than inferred.
+          level: { expr: 'len(filter(cluster.data, .type == "node" && .status != "online")) == 0 ? "ok" : "warn"' }
+          text:  { expr: 'string(len(filter(cluster.data, .type == "node" && .status == "online"))) + " of " + string(len(filter(cluster.data, .type == "node"))) + " nodes online"' }
+        signals:
+          nodes.online: { value: { expr: 'len(filter(cluster.data, .type == "node" && .status == "online"))' } }
+          nodes.total:  { value: { expr: 'len(filter(cluster.data, .type == "node"))' } }
+          vms.running:  { value: { expr: 'len(filter(cluster.data, .type == "qemu" && .status == "running"))' } }
+          vms.total:    { value: { expr: 'len(filter(cluster.data, .type == "qemu"))' } }
+          lxc.running:  { value: { expr: 'len(filter(cluster.data, .type == "lxc" && .status == "running"))' } }
+          lxc.total:    { value: { expr: 'len(filter(cluster.data, .type == "lxc"))' } }
+          # Core-weighted, not a mean of means: a 32-core node and a 4-core node do not contribute
+          # equally to how busy the cluster is. Offline nodes report zeroes, so they are excluded
+          # from both sides of the ratio rather than dragging it down.
+          cpu.percent:  { value: { expr: 'sum(filter(cluster.data, .type == "node" && .status == "online"), .maxcpu) > 0 ? sum(filter(cluster.data, .type == "node" && .status == "online"), .cpu * .maxcpu) / sum(filter(cluster.data, .type == "node" && .status == "online"), .maxcpu) * 100 : 0' } }
+          mem.percent:  { value: { expr: 'sum(filter(cluster.data, .type == "node" && .status == "online"), .maxmem) > 0 ? sum(filter(cluster.data, .type == "node" && .status == "online"), .mem) / sum(filter(cluster.data, .type == "node" && .status == "online"), .maxmem) * 100 : 0' } }
+        blocks:
+          - type: progress
+            items:
+              - label: CPU
+                progress: { expr: 'sum(filter(cluster.data, .type == "node" && .status == "online"), .maxcpu) > 0 ? sum(filter(cluster.data, .type == "node" && .status == "online"), .cpu * .maxcpu) / sum(filter(cluster.data, .type == "node" && .status == "online"), .maxcpu) : 0' }
+                value:    { expr: 'sum(filter(cluster.data, .type == "node" && .status == "online"), .maxcpu) > 0 ? sum(filter(cluster.data, .type == "node" && .status == "online"), .cpu * .maxcpu) / sum(filter(cluster.data, .type == "node" && .status == "online"), .maxcpu) * 100 : 0' }
+                format: percent
+              - label: Memory
+                progress: { expr: 'sum(filter(cluster.data, .type == "node" && .status == "online"), .maxmem) > 0 ? sum(filter(cluster.data, .type == "node" && .status == "online"), .mem) / sum(filter(cluster.data, .type == "node" && .status == "online"), .maxmem) : 0' }
+                value:    { expr: 'sum(filter(cluster.data, .type == "node" && .status == "online"), .maxmem) > 0 ? sum(filter(cluster.data, .type == "node" && .status == "online"), .mem) / sum(filter(cluster.data, .type == "node" && .status == "online"), .maxmem) * 100 : 0' }
+                format: percent
+          - type: metrics
+            items:
+              - { label: VMs,       value: { expr: 'string(len(filter(cluster.data, .type == "qemu" && .status == "running"))) + " / " + string(len(filter(cluster.data, .type == "qemu")))' }, format: text }
+              - { label: Containers, value: { expr: 'string(len(filter(cluster.data, .type == "lxc" && .status == "running"))) + " / " + string(len(filter(cluster.data, .type == "lxc")))' }, format: text }
+              - { label: Memory,    value: { expr: 'sum(filter(cluster.data, .type == "node" && .status == "online"), .mem)' }, format: bytes }
+          - type: list
+            title: Guests
+            empty: No virtual machines or containers
+            items:
+              each: { expr: 'take(sortBy(filter(cluster.data, .type == "qemu" || .type == "lxc"), .name), params.guests)' }
+              as: guest
+              item:
+                id:       { expr: guest.id }
+                title:    { expr: guest.name }
+                subtitle: { expr: guest.node }
+                value:    { expr: guest.status }
+                format: text
+                level:    { expr: 'guest.status == "running" ? "ok" : "muted"' }
+          - type: list
+            title: Storage
+            empty: No storage reported
+            # Shared storage is returned once per node, so each row names its node rather than
+            # pretending the cluster has one aggregate figure.
+            items:
+              each: { expr: 'take(sortBy(filter(cluster.data, .type == "storage" && .maxdisk > 0), .id), 4)' }
+              as: store
+              item:
+                id:       { expr: store.id }
+                title:    { expr: store.storage }
+                subtitle: { expr: store.node }
+                value:    { expr: 'store.disk / store.maxdisk * 100' }
+                format: percent

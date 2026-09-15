@@ -17,11 +17,15 @@ set -euo pipefail
 # The distributed set, as paths under plugins/. A wasm module is listed next to the manifest whose
 # spec.sha256 pins it.
 files=(
+  arcane/manifest.yaml
   beszel/manifest.yaml
+  dockhand/manifest.yaml
   glances/manifest.yaml
+  homeassistant/manifest.yaml
   immich/manifest.yaml
   jellyfin/manifest.yaml
   jellyfin/jellyfin.wasm
+  proxmox/manifest.yaml
 )
 
 if [ "${1:-}" = "--list" ]; then
