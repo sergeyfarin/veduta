@@ -5,3 +5,8 @@ packages:
 # esbuild ships a prebuilt platform binary and needs its postinstall to run; nothing else does.
 allowBuilds:
   esbuild: true
+
+minimumReleaseAgeExclude:
+  - '@vitest/mocker@5.0.1'
+  - '@vitest/spy@5.0.1'
+  - vitest@5.0.1
