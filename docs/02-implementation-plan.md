@@ -1326,12 +1326,15 @@ without a reload.
 
 ### Phase G — WASM integrations and vertical slice #2 (4 d)
 
-**G1 · WASM runtime** · 1.5 d · deps: S1, D2 · **DONE (sandbox; ARM performance acceptance outstanding)**
+**G1 · WASM runtime** · 1.5 d · deps: S1, D2 · **DONE (sandbox; ARM performance acceptance deferred past 0.1)**
 Creates: `internal/integrations/wasm/` (Extism/wazero host, compilation cache, sha256 verification,
 memory/deadline/output limits, instance lifecycle).
 Tests: **the conformance suite from S1, promoted to CI** — no filesystem, no env, no sockets, no
 native HTTP, deadline kill, memory trap, output cap, and a corrupted module rejected before compile.
 Implementation and scope: [S1 / G1 sandbox decision](spikes/s1-wasm-sandbox.md).
+S1a's hardware budgets - cold compile, warm invocation and RSS on ARM - were deliberately taken out
+of the 0.1 gate on 2026-09-16 for want of a board to run them on; the decision and the route back
+to it are recorded in [03-backlog.md](03-backlog.md#arm-runtime-performance-has-no-measured-evidence).
 
 **G2 · Host functions** · 0.5 d · deps: G1 · **DONE**
 Bind `veduta_http`, `veduta_cache_get/put`, `veduta_asset_ref`, `veduta_log` to the broker; encode

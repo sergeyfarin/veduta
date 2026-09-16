@@ -30,7 +30,7 @@ priority (which milestone should absorb it, or "before X" for a hard blocker).
 | [Approve flow can't grant a limit above its default](#the-documented-approve-flow-has-no-way-to-grant-a-limit-above-its-documented-default) | Docs | Low |
 | [Go plugin SDK needs a WASI-free toolchain](#go-plugin-sdk-requires-a-maintained-wasi-free-toolchain) | Plugins | Low |
 | [The lock file is written 0600, but is meant to be committed](#veduta-lock-yaml-is-written-0600-by-a-uid-the-operator-is-not) | Deployment | Low |
-| [ARM runtime performance has no measured evidence](#arm-runtime-performance-has-no-measured-evidence) | Plugins | **Decide before 0.1** |
+| [ARM runtime performance has no measured evidence](#arm-runtime-performance-has-no-measured-evidence) | Plugins | Deferred past 0.1 |
 | [No visualisation block, but the README promises charts](#native-visualisation-blocks-do-not-exist-and-the-readme-promises-one) | Frontend | **README before 0.1**, block 0.2 |
 | [Markdown has no authoring syntax for structure](#markdown-is-prose-only-with-no-authoring-syntax-for-structure) | Frontend | Deferred |
 
@@ -333,8 +333,8 @@ touched. Documented as a consequence in `docs/docker.md` in the meantime.
 
 ### ARM runtime performance has no measured evidence
 
-G1 is marked **DONE (sandbox; ARM performance acceptance outstanding)** in
-[docs/02-implementation-plan.md](02-implementation-plan.md), and that half is still outstanding.
+G1 is marked **DONE (sandbox; ARM performance acceptance deferred past 0.1)** in
+[docs/02-implementation-plan.md](02-implementation-plan.md), and that half is still unmeasured.
 The sandbox conformance suite is real and runs in CI - no filesystem, no env, no sockets, no
 native HTTP, deadline kill, memory trap, output cap, corrupted module rejected before compile.
 None of it measures speed or memory. The ARM scheduler test drives synthetic callbacks, so it
@@ -346,18 +346,26 @@ and resident memory per instance. Those are precisely the figures S1a's budgets 
 against, and precisely the ones that decide whether a Pi-class host is a supported target or an
 aspiration.
 
-**This is a release decision, not a task to schedule.** It is recorded here so it is taken
-deliberately, in one of two ways:
+**Decided 2026-09-16: taken out of the 0.1 gate and deferred, for want of hardware.** No
+ARM board is available to measure against, and the alternatives - buying one, or accepting qemu
+numbers that inflate compile time and would need their own invented threshold - are not worth
+holding a tag for. 0.1 therefore ships with the WASM runtime's ARM cost unmeasured, deliberately
+and on the record here, rather than by nobody choosing.
 
-- **Resolve it** - run the S1a budgets against real ARM hardware (or a qemu-based CI job, noting
-  that emulation inflates compile time and would need its own threshold), record the numbers in
-  the G1 row, and mark the milestone DONE without a qualifier.
-- **Waive it** - state in the release notes that ARM images are published but their WASM runtime
-  performance is unmeasured, and that Pi-class hosts are untested rather than supported for
-  integrations. The images build for linux/arm64 and linux/arm/v7 today and would keep shipping.
+Nothing user-facing is being over-claimed by that: the README, `docs/getting-started.md` and
+`docs/docker.md` promise multi-arch *images*, never Pi-class *performance*, so no release-note
+correction is owed. The constraint this entry now carries is forward-looking - **do not start
+describing Pi-class hosts as a supported target for WASM integrations until the numbers exist.**
+Declarative integrations are unaffected; they never enter the WASM runtime.
 
-What should not happen is the third option, which is shipping 0.1 with the plan still saying
-"acceptance outstanding" and nobody having chosen. Priority: settle before tagging 0.1.
+When it is picked back up, the cheapest route is already half-built: L3's load gate runs the real
+50-card workload on GitHub's native four-core ARM64 runner under a five-second Pi-class budget, so
+native ARM CI hardware is in the pipeline today. Extending that job with S1a's three figures -
+cold compilation of a real plugin, warm invocation, resident memory per instance - would settle
+arm64 without owning a board. It would not settle armv7, which has no native runner. Resolving it
+means recording those numbers in the G1 row and dropping the qualifier; the S1b kill criteria
+(>50 ms warm invocation, >20 MB RSS per instance) stay the thresholds to judge them against.
+Priority: after 0.1, and before any claim of Pi-class support.
 
 ### Native visualisation blocks do not exist, and the README promises one
 
