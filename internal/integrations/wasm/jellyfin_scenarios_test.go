@@ -15,8 +15,8 @@ import (
 // rewrite is feasible were never exercised. These scenarios pin the plugin's actual behaviour on
 // the shapes a real library produces - a poster-less item, an item with no year, a server that
 // answers in PascalCase, and a sub-request that fails - so that any reimplementation can be
-// diffed against a contract rather than an assumption. See docs/03-backlog.md, "does Jellyfin
-// still earn being the WASM proof case?".
+// diffed against a contract rather than an assumption. See docs/decisions/0003-jellyfin-wasm-proof-case.md
+// for the decision to retain this implementation through 0.1.
 func TestJellyfinPluginUpstreamShapes(t *testing.T) {
 	scenario := func(name string) string {
 		return filepath.Join(jellyfinPluginDir, "testdata", "scenarios", name)
@@ -142,8 +142,7 @@ func TestJellyfinPluginUpstreamShapes(t *testing.T) {
 }
 
 // A non-2xx sub-request fails the whole invocation rather than producing a partial document. The
-// declarative runtime does not do this today - it never reads StatusCode and decodes whatever body
-// arrived - which is the fidelity gap recorded in docs/03-backlog.md.
+// declarative runtime now enforces this too; any future rewrite must preserve this behaviour.
 func TestJellyfinPluginFailsOnUpstreamError(t *testing.T) {
 	for _, path := range []string{"/Items", "/Sessions"} {
 		t.Run(path, func(t *testing.T) {

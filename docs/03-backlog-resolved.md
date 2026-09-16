@@ -676,3 +676,38 @@ the compose stack against it: the card showed `error`/`internal` with the fixed 
 carried `card=immich-recent panic="assignment to entry in nil map"` with the `applyParamDefaults`
 frame, the Docker card on the same dashboard kept its own state, and the container reported zero
 restarts and `healthy`. The same build before the fix crash-looped.
+
+### Jellyfin remains the WASM proof case for 0.1
+
+After the Approach-A rewrite (recorded in [03-backlog-resolved.md](03-backlog-resolved.md)), the
+Jellyfin plugin no longer does "send auth header →
+resolve the current user → list": it does one sorted `GET /Items`, two typed `GET /Items` counts
+and `GET /Sessions`, then folds them into one document.
+
+**Measured, 2026-09-12.** A throwaway declarative manifest was built against the current DSL and
+run over the plugin's own fixtures, so the rest of this entry is evidence rather than estimate.
+Two of the three limitations named above are not real: the four-call fan-out works as four ordinary
+pipeline steps (`plugins/glances` already fans out to six), and per-item poster handling works via
+`filter(recent.items, .imageTags != nil && "Primary" in .imageTags)`. What actually blocks a
+rewrite was three general DSL gaps, none of them specific to Jellyfin and all three worth fixing on
+their own merits.
+
+**Two are now closed** (both in [03-backlog-resolved.md](03-backlog-resolved.md)): an asset node is
+a value, so an image can carry `alt` and `aspect`; and `{ if: …, then: … }` omits a key or element,
+which covers both the missing production year and the missing-image notice. **The third is closed too**: a non-2xx pipeline
+response now fails the invocation, matching what the wasm plugin has always done.
+
+What is left is therefore no DSL gap at all, only one deliberate reduction: pinning the CamelCase profile drops
+the plugin's PascalCase tolerance. Spike S2 verified a real Jellyfin 12 honours the explicit
+profile, so that is a defensible trade rather than a regression - but it is a decision to take
+knowingly. `internal/integrations/wasm/jellyfin_scenarios_test.go` pins the behaviour any
+replacement has to reproduce (missing poster, missing year, PascalCase upstream, failing
+sub-request). Not blocking anything.
+
+**Resolved by decision, 2026-09-16:** retain the shipped Rust/WASM integration through 0.1.
+The proof is that a real integration works through the runtime, SDK, HTTP broker and asset broker;
+it does not need to prove that the same integration is impossible in the declarative DSL.
+This preserves the existing PascalCase tolerance, scenario coverage and real-module ARM64
+budget workload without a release-time rewrite. No replacement proof case or declarative
+migration is required for 0.1. See [decision 0003](decisions/0003-jellyfin-wasm-proof-case.md)
+for scope and conditions for revisiting it.

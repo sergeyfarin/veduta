@@ -187,8 +187,8 @@ example lock and `testdata/canonical/expected-digests.json` updated; `hack/captu
 was repointed and re-run, and the scrubbed goldens are in `testdata/upstream/jellyfin/`. The Go
 golden test (`internal/integrations/wasm/jellyfin_test.go`) is unchanged in output — the fixture
 items and counts were kept identical so `testdata/widgets/jellyfin-recent.golden.json` did not move.
-`httpRequests` tightened 5 → 4. Whether Jellyfin still earns being *the* WASM proof case, now that
-the auth dance is gone, is a separate question left in `docs/03-backlog.md`.
+`httpRequests` tightened 5 → 4. The subsequent decision retains Jellyfin as the WASM proof case for 0.1
+for runtime coverage; see [decision 0003](../decisions/0003-jellyfin-wasm-proof-case.md).
 
 ### F5 — confirmed `[live]`
 

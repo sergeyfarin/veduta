@@ -1359,7 +1359,8 @@ AC: a new plugin can be scaffolded and built in under five minutes following the
 
 **G4 · Jellyfin plugin — VERTICAL SLICE #2** · 1 d · deps: G2, S2 · **DONE, live-validated against
 Jellyfin 12.0.0 on 2026-09-09**
-Chosen because it needs real logic: send the `Authorization: MediaBrowser Token="..."` header (F6,
+Retained for 0.1 as the production WASM proof case ([decision 0003](decisions/0003-jellyfin-wasm-proof-case.md)).
+The integration uses the broker to send the `Authorization: MediaBrowser Token="..."` header (F6,
 now `[live]`-confirmed as the only scheme in the 12.0.0 OpenAPI), fan out to a sorted
 recently-added query plus two typed counts plus the session list, and mint poster asset refs.
 **Corrected by S2's live pass:** the design originally "resolved the user" via `GET /Users/Me` -
