@@ -31,7 +31,7 @@ priority (which milestone should absorb it, or "before X" for a hard blocker).
 | [Go plugin SDK needs a WASI-free toolchain](#go-plugin-sdk-requires-a-maintained-wasi-free-toolchain) | Plugins | Low |
 | [The lock file is written 0600, but is meant to be committed](#veduta-lock-yaml-is-written-0600-by-a-uid-the-operator-is-not) | Deployment | Low |
 | [ARM runtime performance has no measured evidence](#arm-runtime-performance-has-no-measured-evidence) | Plugins | Deferred past 0.1 |
-| [No visualisation block, but the README promises charts](#native-visualisation-blocks-do-not-exist-and-the-readme-promises-one) | Frontend | **README before 0.1**, block 0.2 |
+| [No native visualisation block for retained history](#no-native-visualisation-block-for-retained-history) | Frontend | 0.2 |
 | [Markdown has no authoring syntax for structure](#markdown-is-prose-only-with-no-authoring-syntax-for-structure) | Frontend | Deferred |
 
 ---
@@ -367,7 +367,7 @@ means recording those numbers in the G1 row and dropping the qualifier; the S1b 
 (>50 ms warm invocation, >20 MB RSS per instance) stay the thresholds to judge them against.
 Priority: after 0.1, and before any claim of Pi-class support.
 
-### Native visualisation blocks do not exist, and the README promises one
+### No native visualisation block for retained history
 
 Found 2026-09-16 while assessing an external design recommendation to embed Mermaid and Vega-Lite
 as card content. The assessment's incidental finding matters more than its subject: the Widget
@@ -389,12 +389,20 @@ iframe block already considered and rejected under
 [should there be a frontend plugin surface at all?](#open-question-should-there-be-a-frontend-plugin-surface-at-all).
 Recording that here so the comparison is not re-derived the next time someone asks about Mermaid.
 
-**The README half is a hard pre-0.1 item.** README.md's opening sentence sells Veduta as showing
-"photos, posters, camera frames, charts - not just numbers". Three lines below it the page is
-scrupulous about actions not being executable in 0.1. The charts claim should be corrected or
-dropped before the tag, whichever way the block itself is scheduled.
+**The README half is closed, 2026-09-16.** The opening sentence sold Veduta as showing "photos,
+posters, camera frames, charts - not just numbers" three lines above a caveat scrupulous about
+actions not being executable, and ending "everything else on this page is implemented". The word
+is gone from README.md and from the 0.1.0 summary in CHANGELOG.md; the three examples that remain
+are all real block types. No caveat replaced it, because there is nothing half-built to caveat -
+unlike actions, which render and are deliberately disabled, a chart block does not exist at all,
+and a README that describes what ships should not carry a roadmap note.
 
-Priority: **README wording before 0.1**; the block itself 0.2.
+One inconsistency is left standing on purpose, because it is the block's problem rather than the
+README's: `schemas/plugin-manifest.v1.schema.json` still describes signal retention as being "for
+`for:` windows and sparklines". Retention is real and `for:` windows work; the sparkline half of
+that sentence stays wrong until the block lands. Fix it in the same change, not before.
+
+Priority: the block itself 0.2.
 
 ### Markdown is prose-only, with no authoring syntax for structure
 

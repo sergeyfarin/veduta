@@ -3,7 +3,7 @@
 > *veduta* (n.) — a highly detailed, wide-angle painting of a place.
 
 A lightweight, self-hosted dashboard for your home and homelab. It shows **rich content**
-(photos, posters, camera frames, charts — not just numbers), securely queries your
+(photos, posters, camera frames — not just numbers), securely queries your
 services and machines, performs a small set of **explicitly approved actions**, and
 **notifies** you when something needs attention.
 

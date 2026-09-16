@@ -41,7 +41,7 @@ project is pre-1.0:
 ## [0.1.0] — unreleased
 
 First public release. Veduta is a self-hosted dashboard for a home or homelab that shows rich
-content — photos, posters, charts, container and host state — queries services through a
+content — photos, posters, container and host state — queries services through a
 credential boundary the integrations never see past, performs a small set of explicitly approved
 actions, and notifies when something needs attention.
 
