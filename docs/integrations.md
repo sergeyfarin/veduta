@@ -10,7 +10,7 @@ Nothing here is active until you approve it.
 | --- | --- | --- | --- |
 | `docker` | container state | a Docker socket or TCP endpoint | builtin |
 | `http-json` | whatever the card's `view:` declares | an HTTP connection | builtin |
-| [`immich`](../plugins/immich/manifest.yaml) | `recent-assets`, `server-statistics` | an API key | declarative |
+| [`immich`](../plugins/immich/manifest.yaml) | `recent-assets`, `memories`, `server-statistics` | an API key | declarative |
 | [`jellyfin`](../plugins/jellyfin/manifest.yaml) | `recently-added` | an API key | WebAssembly |
 | [`glances`](../plugins/glances/manifest.yaml) | `overview` | a Glances web server | declarative |
 | [`beszel`](../plugins/beszel/manifest.yaml) | `overview` | a Beszel Hub token + `systemId` | declarative |
@@ -37,6 +37,12 @@ permissions with `veduta integration diff <id>`, approve it, then enable the con
 
 A rule's `signal()` names a **card**, not an integration — the examples below assume a card whose
 id matches the integration's, which is the common case but not automatic.
+
+## Immich memories
+
+The declarative `memories` operation shows one memory per year, newest year first,
+with broker-owned thumbnails and item counts. See the
+[Immich example and selection policy](../plugins/immich/README.md).
 
 ## Proxmox VE
 

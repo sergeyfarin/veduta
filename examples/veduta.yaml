@@ -100,6 +100,16 @@ sections:
         span: { columns: 2, rows: 3 }
         tags: [media]
 
+      # Optional: uses the same Immich connection; its API key needs memory.read
+      # and asset.view. Set publicUrl to the browser-facing URL to enable links.
+      # - id: immich-memories
+      #   integration: immich
+      #   operation: memories
+      #   slots: { server: immich }
+      #   params: { limit: 6, publicUrl: "https://photos.example.com" }
+      #   refresh: 1h
+      #   span: { columns: 2, rows: 3 }
+
   - title: Infrastructure
     cards:
       - id: coding-server

@@ -12,8 +12,8 @@ kind: Integration
 metadata:
   id: immich
   name: Immich
-  version: 0.2.0
-  description: Library statistics and recent photos from Immich.
+  version: 0.3.0
+  description: Library statistics, recent photos and on-this-day memories from Immich.
   license: Apache-2.0
   icon: sh:immich
 spec:
@@ -127,3 +127,78 @@ spec:
               - { label: Photos, value: { expr: stats.photos }, format: number }
               - { label: Videos, value: { expr: stats.videos }, format: number }
               - { label: Usage,  value: { expr: stats.usage },  format: bytes }
+
+    # Contract: Immich 3.1.0 MemorySearchDto / MemoryResponseDto. Fixture-tested;
+    # unlike recent-assets, this operation has not yet been validated live.
+    - id: memories
+      name: On this day
+      defaultRefresh: 1h
+      routes:
+        - { slot: server, method: GET, path: /api/memories, queryKeys: [for, type, order], reason: Memories visible on the selected day }
+        - { slot: server, method: GET, path: /api/assets/*/thumbnail, use: asset, reason: Memory thumbnails }
+      params:
+        type: object
+        properties:
+          limit: { type: integer, minimum: 1, maximum: 9, default: 6 }
+          date:
+            type: string
+            default: ""
+            pattern: '^$|^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+            description: Optional YYYY-MM-DD override; otherwise today in UTC.
+          publicUrl:
+            type: string
+            default: ""
+            pattern: '^$|^https?://[^/?#@\s]+(?:/[^?#\s]*)?$'
+            description: Optional browser-facing Immich URL for photo links, without credentials.
+      pipeline:
+        - as: memories
+          request:
+            slot: server
+            method: GET
+            path: /api/memories
+            query:
+              for: { expr: 'params.date != "" ? split(string(date(params.date)), " ")[0] : split(string(now), " ")[0]' }
+              type: on_this_day
+              order: desc
+      output:
+        title: Immich memories
+        blocks:
+          - type: image-grid
+            columns: 3
+            empty: No memories on this day
+            # Select the first nonempty memory per year in upstream order.
+            # Repeat normalization for groupBy because v1 has no local bindings.
+            # The runtime iteration budget bounds this work.
+            items:
+              each:
+                expr: >-
+                  take(sortBy(filter(map(
+                    filter(memories, .type == "on_this_day" && .assets != nil && len(.assets) > 0),
+                    { {memory: #, year: int(.data != nil && .data.year != nil ? .data.year :
+                      (.memoryAt != nil ? split(string(date(.memoryAt)), "-")[0] : 0))} }
+                  ),
+                    .year > 0 && .year < (params.date != "" ? int(split(params.date, "-")[0]) : int(split(string(now), "-")[0])) &&
+                    .memory.id == first(groupBy(map(
+                    filter(memories, .type == "on_this_day" && .assets != nil && len(.assets) > 0),
+                    { {memory: #, year: int(.data != nil && .data.year != nil ? .data.year :
+                      (.memoryAt != nil ? split(string(date(.memoryAt)), "-")[0] : 0))} }
+                  ), .year)[.year]).memory.id
+                  ), .year, "desc"), params.limit)
+              as: entry
+              item:
+                id: { expr: string(entry.year) }
+                title:
+                  expr: >-
+                    string((params.date != "" ? int(split(params.date, "-")[0]) : int(split(string(now), "-")[0])) - entry.year) +
+                    (((params.date != "" ? int(split(params.date, "-")[0]) : int(split(string(now), "-")[0])) - entry.year) == 1 ? " year ago" : " years ago")
+                subtitle: { expr: 'string(len(entry.memory.assets)) + (len(entry.memory.assets) == 1 ? " item" : " items")' }
+                link:
+                  if: { expr: 'params.publicUrl != ""' }
+                  then: { expr: 'trim(params.publicUrl, "/") + "/photos/" + entry.memory.assets[0].id' }
+                image:
+                  ref:
+                    asset:
+                      slot: server
+                      path: { expr: '"/api/assets/" + entry.memory.assets[0].id + "/thumbnail"' }
+                      query: { size: thumbnail }
+                  alt: { expr: '"Memory from " + string(entry.year)' }

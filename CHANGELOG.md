@@ -15,6 +15,10 @@ project is pre-1.0:
 
 ### Added
 
+- Declarative Immich `memories`: date-filtered on-this-day images, one memory per
+  year, item counts and optional browser links. No new WASM module or service is
+  needed. The Immich manifest is now 0.3.0 and requires renewed approval.
+
 - Four first-party declarative integrations, bringing the shipped set to ten:
   **Proxmox VE** (`cluster-overview` — node availability, VM and LXC counts, and core-weighted
   cluster CPU and memory from one read-only `/api2/json/cluster/resources`), **Home Assistant**

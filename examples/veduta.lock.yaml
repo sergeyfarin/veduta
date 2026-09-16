@@ -4,11 +4,11 @@
 version: 1
 integrations:
   immich:
-    manifestSha256: 16d8ae5a59b49c2b3e3a2ed05e0bc83cf34ff490a4f6ff8a12cf4086463f2559
-    version: 0.2.0
+    manifestSha256: 09896e3f8bfe8cb00956263d17539e7d1581876c0fb4240d395acd0c060de6e5
+    version: 0.3.0
     runtime: declarative
-    approvedAt: "2026-09-04T21:40:00Z"
-    approvedBy: sergey
+    approvedAt: "2026-09-16T00:00:00Z"
+    approvedBy: codex
     capabilities: [http, assets]
     effectiveLimits:
       cacheBytesKB: 256
@@ -29,6 +29,7 @@ integrations:
       - { slot: server, method: GET,  path: /api/assets/statistics }
       - { slot: server, method: POST, path: /api/search/metadata, contentType: application/json }
       - { slot: server, method: GET,  path: /api/assets/*/thumbnail, use: asset }
+      - { slot: server, method: GET, path: /api/memories, queryKeys: [for, type, order] }
       # Not approved: GET /api/server/statistics. The manifest requests it for the
       # server-statistics operation, which needs an ADMIN api key.
     limits: { httpRequests: 2, timeoutMs: 5000 }

@@ -11,7 +11,7 @@
   },
   "manifests": {
     "glances": "07f8c9a7807c24de29a42314dd8dd501b5ec6de6434e655f1f7376f278852271",
-    "immich": "16d8ae5a59b49c2b3e3a2ed05e0bc83cf34ff490a4f6ff8a12cf4086463f2559",
+    "immich": "09896e3f8bfe8cb00956263d17539e7d1581876c0fb4240d395acd0c060de6e5",
     "jellyfin": "6905adcde36433ec1526e10b15a052abf826dfd63ccab807ed5d29fd4538292d"
   },
   "must_differ": [

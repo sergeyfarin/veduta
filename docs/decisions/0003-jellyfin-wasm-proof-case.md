@@ -38,3 +38,10 @@ or runtime benefit. Validate it against the existing golden and scenarios,
 explicitly decide whether PascalCase tolerance is preserved, and retain a real
 WASM integration workload for runtime and hardware-budget coverage. No migration
 or new proof-case project is scheduled by this decision.
+
+## Scope clarification: declarative first
+
+The Immich memories operation is implemented declaratively. Do not create a WASM
+example solely to exercise WASM. Further WASM development and identifying a use
+case that needs it are deferred until after 0.1; neither is a release requirement.
+The existing Jellyfin implementation and its regression coverage remain in place.

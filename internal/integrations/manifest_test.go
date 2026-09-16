@@ -56,9 +56,9 @@ func TestLoadManifest_ImmichAggregatesRoutesAcrossOperations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadManifest: %v", err)
 	}
-	// Two operations: recent-assets (3 routes) and server-statistics (1 route).
-	if len(m.Routes) != 4 {
-		t.Fatalf("routes = %d, want 4 (aggregated across both operations): %+v", len(m.Routes), m.Routes)
+	// Three operations share the thumbnail route: 3 + 1 + 2 - 1 = 5 unique routes.
+	if len(m.Routes) != 5 {
+		t.Fatalf("routes = %d, want 5 (aggregated across all operations): %+v", len(m.Routes), m.Routes)
 	}
 }
 
