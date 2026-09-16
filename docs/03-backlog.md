@@ -31,6 +31,8 @@ priority (which milestone should absorb it, or "before X" for a hard blocker).
 | [Go plugin SDK needs a WASI-free toolchain](#go-plugin-sdk-requires-a-maintained-wasi-free-toolchain) | Plugins | Low |
 | [The lock file is written 0600, but is meant to be committed](#veduta-lock-yaml-is-written-0600-by-a-uid-the-operator-is-not) | Deployment | Low |
 | [ARM runtime performance has no measured evidence](#arm-runtime-performance-has-no-measured-evidence) | Plugins | **Decide before 0.1** |
+| [No visualisation block, but the README promises charts](#native-visualisation-blocks-do-not-exist-and-the-readme-promises-one) | Frontend | **README before 0.1**, block 0.2 |
+| [Markdown has no authoring syntax for structure](#markdown-is-prose-only-with-no-authoring-syntax-for-structure) | Frontend | Deferred |
 
 ---
 
@@ -356,3 +358,56 @@ deliberately, in one of two ways:
 
 What should not happen is the third option, which is shipping 0.1 with the plan still saying
 "acceptance outstanding" and nobody having chosen. Priority: settle before tagging 0.1.
+
+### Native visualisation blocks do not exist, and the README promises one
+
+Found 2026-09-16 while assessing an external design recommendation to embed Mermaid and Vega-Lite
+as card content. The assessment's incidental finding matters more than its subject: the Widget
+Document has no `chart`, `sparkline` or `gauge` block. `chart` is in fact the string the renderer
+tests use as their example of an *unknown* block type
+([BlockRenderer.test.ts](../web/src/lib/blocks/BlockRenderer.test.ts), `UnknownBlock.test.ts`).
+
+The data for one is already there and already declared. J1 retains bounded numeric history for
+declared signals, and `schemas/plugin-manifest.v1.schema.json`'s own description of that retention
+says it is "for `for:` windows and sparklines" - so the schema has been promising a renderer that
+was never built.
+
+A native block is the shape that fits: points in, an SVG element tree out, drawn by a Svelte
+component like every other block. No library, no injection sink, no new threat model. Mermaid and
+Vega-Lite are the shape that does not - both render by constructing DOM or SVG themselves and
+inserting it, which needs either `{@html}` (failed in CI by
+[no_html_directive_test.go](../internal/contracts/no_html_directive_test.go)) or the sandboxed
+iframe block already considered and rejected under
+[should there be a frontend plugin surface at all?](#open-question-should-there-be-a-frontend-plugin-surface-at-all).
+Recording that here so the comparison is not re-derived the next time someone asks about Mermaid.
+
+**The README half is a hard pre-0.1 item.** README.md's opening sentence sells Veduta as showing
+"photos, posters, camera frames, charts - not just numbers". Three lines below it the page is
+scrupulous about actions not being executable in 0.1. The charts claim should be corrected or
+dropped before the tag, whichever way the block itself is scheduled.
+
+Priority: **README wording before 0.1**; the block itself 0.2.
+
+### Markdown is prose-only, with no authoring syntax for structure
+
+Found 2026-09-16, same assessment. `blockText`'s markdown kind supports emphasis, inline code,
+links and lists inside a 2 KB cap ([markdown.ts](../web/src/lib/markdown.ts)), which is the right
+subset for prose and nothing more. There is no way for a human writing `veduta.yaml` to express
+structure - two metrics side by side, a labelled group, a callout - without a card type existing
+for it already.
+
+The generic directive convention (`:::name`, as used by MyST and remark-directive) is the obvious
+candidate if this is ever picked up: it is an existing convention rather than a Veduta dialect, a
+directive parses to a named node with options rather than to markup, and unknown directives can
+degrade to the same labelled placeholder unknown block types already get. It would compile into
+the existing block tree, adding an authoring surface rather than a rendering one.
+
+Two things to be clear about before any of it is built. Veduta's renderer is closed by D2, so a
+directive can only ever name a block the core already implements - the directive layer does not
+widen what can reach the DOM, and must not be allowed to. And the client-side binding/expression
+layer such proposals usually come with (`$server.cpu`) is not wanted: the scheduler resolves values
+server-side before a document is published, so a second expression evaluator in TypeScript would
+add a sandbox to maintain for a problem `expr` already solves in Go, in the better place.
+
+Deferred with no work planned. The trigger to revisit is a concrete authoring request that the
+current card types cannot express, not the general appeal of the idea.
