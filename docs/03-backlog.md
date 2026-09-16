@@ -30,7 +30,7 @@ priority (which milestone should absorb it, or "before X" for a hard blocker).
 | [Approve flow can't grant a limit above its default](#the-documented-approve-flow-has-no-way-to-grant-a-limit-above-its-documented-default) | Docs | Low |
 | [Go plugin SDK needs a WASI-free toolchain](#go-plugin-sdk-requires-a-maintained-wasi-free-toolchain) | Plugins | Low |
 | [The lock file is written 0600, but is meant to be committed](#veduta-lock-yaml-is-written-0600-by-a-uid-the-operator-is-not) | Deployment | Low |
-| [ARM runtime performance has no measured evidence](#arm-runtime-performance-has-no-measured-evidence) | Plugins | Deferred past 0.1 |
+| [ARM runtime performance is measured on arm64 only](#arm-runtime-performance-is-measured-on-arm64-only) | Plugins | armv7 deferred |
 | [No native visualisation block for retained history](#no-native-visualisation-block-for-retained-history) | Frontend | 0.2 |
 | [Markdown has no authoring syntax for structure](#markdown-is-prose-only-with-no-authoring-syntax-for-structure) | Frontend | Deferred |
 
@@ -331,41 +331,47 @@ runtime user is a defensible answer to that. But `0600` restricts reading as wel
 Priority: low, and a decision rather than a fix - settle it the next time the approval flow is
 touched. Documented as a consequence in `docs/docker.md` in the meantime.
 
-### ARM runtime performance has no measured evidence
+### ARM runtime performance is measured on arm64 only
 
-G1 is marked **DONE (sandbox; ARM performance acceptance deferred past 0.1)** in
-[docs/02-implementation-plan.md](02-implementation-plan.md), and that half is still unmeasured.
-The sandbox conformance suite is real and runs in CI - no filesystem, no env, no sockets, no
-native HTTP, deadline kill, memory trap, output cap, corrupted module rejected before compile.
-None of it measures speed or memory. The ARM scheduler test drives synthetic callbacks, so it
-exercises scheduling on ARM rather than WASM on ARM: it never compiles a real module, and it never
-runs Jellyfin's.
+G1's sandbox half was always evidenced: the conformance suite is real and runs in CI - no
+filesystem, no env, no sockets, no native HTTP, deadline kill, memory trap, output cap, corrupted
+module rejected before compile. None of it measures speed or memory, and the ARM scheduler test
+drives synthetic callbacks, so it exercised scheduling on ARM rather than WASM on ARM: it never
+compiled a real module and never ran Jellyfin's.
 
-What has no number attached, on ARM hardware: cold compilation of a real plugin, warm invocation,
-and resident memory per instance. Those are precisely the figures S1a's budgets were written
-against, and precisely the ones that decide whether a Pi-class host is a supported target or an
-aspiration.
+The three figures S1a was written to produce - cold compilation of a real plugin, warm invocation,
+resident memory per instance - therefore had no number attached on ARM hardware, and they are the
+ones that decide whether a Pi-class host is a supported target or an aspiration.
 
-**Decided 2026-09-16: taken out of the 0.1 gate and deferred, for want of hardware.** No
-ARM board is available to measure against, and the alternatives - buying one, or accepting qemu
-numbers that inflate compile time and would need their own invented threshold - are not worth
-holding a tag for. 0.1 therefore ships with the WASM runtime's ARM cost unmeasured, deliberately
-and on the record here, rather than by nobody choosing.
+**arm64 is now measured in CI, 2026-09-16.** The deferral earlier the same day assumed this
+needed a board nobody has. It did not: L3's load gate was already running on GitHub's native
+four-core ARM64 runner, and that job now runs
+[`TestPluginRuntimePiClassBudget`](../internal/integrations/wasm/budget_test.go) beside it. The
+test loads `plugins/jellyfin/jellyfin.wasm` - the committed module, the fixtures the golden test
+pins, the limits a real approval grants - and measures cold compilation, compilation from a warm
+cache, warm invocation over 24 calls, and resident growth per additional loaded instance, read
+from `/proc` rather than from Go's heap statistics, since wazero's machine code is mapped and not
+on the heap. It asserts S1b's own kill criteria: 50 ms warm invocation, 20 MB resident per
+instance, plus a five-second ceiling on cold compilation that S1b never set but a container start
+deserves. `-v` is deliberate - the job log carries the numbers, not just the verdict. Because the
+release workflow's gate requires a green CI run for the exact tagged commit, these budgets are
+release-gating without any further wiring.
 
-Nothing user-facing is being over-claimed by that: the README, `docs/getting-started.md` and
-`docs/docker.md` promise multi-arch *images*, never Pi-class *performance*, so no release-note
-correction is owed. The constraint this entry now carries is forward-looking - **do not start
-describing Pi-class hosts as a supported target for WASM integrations until the numbers exist.**
-Declarative integrations are unaffected; they never enter the WASM runtime.
+The arm64 numbers arrive with the first run of that job; on an x86 development machine the same
+test reports roughly 470 ms cold, 21 ms from cache, a 3.3 ms warm median and 0.9 MiB per instance,
+which is an order of magnitude of headroom rather than a squeak past. **Until that job has run
+green on this commit, the acceptance is instrumented rather than established.**
 
-When it is picked back up, the cheapest route is already half-built: L3's load gate runs the real
-50-card workload on GitHub's native four-core ARM64 runner under a five-second Pi-class budget, so
-native ARM CI hardware is in the pipeline today. Extending that job with S1a's three figures -
-cold compilation of a real plugin, warm invocation, resident memory per instance - would settle
-arm64 without owning a board. It would not settle armv7, which has no native runner. Resolving it
-means recording those numbers in the G1 row and dropping the qualifier; the S1b kill criteria
-(>50 ms warm invocation, >20 MB RSS per instance) stay the thresholds to judge them against.
-Priority: after 0.1, and before any claim of Pi-class support.
+**What is still open is armv7 only.** GitHub has no 32-bit ARM runner, so the images published for
+`linux/arm/v7` carry a WASM runtime whose cost on that architecture is unmeasured - and 32-bit is
+where it is most likely to differ, since wazero's compiler and the guest's address space both
+change shape there. qemu would measure the emulator. Resolving it needs real hardware, or dropping
+armv7 to a build target that is published without a performance claim. Priority: after 0.1, and
+before describing armv7 Pi-class hosts as a supported target for WASM integrations. Declarative
+integrations are unaffected on every architecture; they never enter the WASM runtime.
+
+Nothing user-facing over-claimed this in the meantime: the README, `docs/getting-started.md` and
+`docs/docker.md` promise multi-arch *images*, never Pi-class *performance*.
 
 ### No native visualisation block for retained history
 

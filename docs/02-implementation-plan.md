@@ -51,6 +51,11 @@ inform is merged. Each ends with a decision recorded in `docs/01-architecture.md
 
 ### S1a — wazero feasibility smoke test · 0.5 d · **early, does not block the demo**
 
+*Outcome: answered for arm64 by a permanent CI gate rather than by a spike on a board - see
+[03-backlog.md](03-backlog.md#arm-runtime-performance-is-measured-on-arm64-only). A gate that runs
+on every push is worth more than a one-off measurement anyway, because it is the regression that
+would go unnoticed, not the first number.*
+
 Two hours of code, answering only: does wazero compile and run a trivial module on linux/amd64,
 linux/arm64 and armv7? What are cold-compile and warm-invoke times and RSS on a Pi-class board?
 How large is a hello-world module built with Rust, Go 1.24 `go:wasmexport`, TinyGo, and the Extism
@@ -1326,15 +1331,16 @@ without a reload.
 
 ### Phase G — WASM integrations and vertical slice #2 (4 d)
 
-**G1 · WASM runtime** · 1.5 d · deps: S1, D2 · **DONE (sandbox; ARM performance acceptance deferred past 0.1)**
+**G1 · WASM runtime** · 1.5 d · deps: S1, D2 · **DONE (sandbox; arm64 budgets gated in CI, armv7 unmeasured)**
 Creates: `internal/integrations/wasm/` (Extism/wazero host, compilation cache, sha256 verification,
 memory/deadline/output limits, instance lifecycle).
 Tests: **the conformance suite from S1, promoted to CI** — no filesystem, no env, no sockets, no
 native HTTP, deadline kill, memory trap, output cap, and a corrupted module rejected before compile.
 Implementation and scope: [S1 / G1 sandbox decision](spikes/s1-wasm-sandbox.md).
-S1a's hardware budgets - cold compile, warm invocation and RSS on ARM - were deliberately taken out
-of the 0.1 gate on 2026-09-16 for want of a board to run them on; the decision and the route back
-to it are recorded in [03-backlog.md](03-backlog.md#arm-runtime-performance-has-no-measured-evidence).
+S1a's hardware budgets - cold compile, warm invocation and resident memory - are gated on native
+arm64 by `TestPluginRuntimePiClassBudget` in the `arm-budgets` CI job, against S1b's kill criteria.
+armv7 has no native runner and stays unmeasured; see
+[03-backlog.md](03-backlog.md#arm-runtime-performance-is-measured-on-arm64-only).
 
 **G2 · Host functions** · 0.5 d · deps: G1 · **DONE**
 Bind `veduta_http`, `veduta_cache_get/put`, `veduta_asset_ref`, `veduta_log` to the broker; encode
@@ -1650,6 +1656,7 @@ month is to write twenty declarative manifests against a manifest schema that th
 | E2E | Playwright against `--fixtures` mode | every PR |
 | Visual regression | pinned browser/fonts/clock, 3 baselines | every PR, human-approvable diffs |
 | Load | 50 cards / 8 connections on an ARM target | before each release |
+| Hardware budgets | cold compile, warm invoke and resident memory per instance for a real WASM plugin, on native arm64 | every PR, and release-gating via the tag workflow's CI check |
 
 Two rules worth committing to early: **(1)** every integration ships with recorded fixtures and a
 golden document, so nothing requires a running Immich to test; **(2)** every security control gets a

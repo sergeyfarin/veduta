@@ -60,12 +60,14 @@ not justify rewriting the host; `docs/decisions/0001-backend-language.md` record
 review.
 
 Remaining phase boundaries: Jellyfin and application runtime selection/lifecycle wiring belong to
-the G4 vertical slice. This decision does **not** claim the original S1a hardware
-acceptance: ARM cold/warm timings, Pi RSS measurements and guest toolchain size
-comparisons still require the target hardware. Cross-compilation alone cannot
-establish the <50 ms warm-call / <20 MiB RSS criteria. That acceptance was deferred
-past 0.1 on 2026-09-16, no board being available to run it on; see
-[03-backlog.md](../03-backlog.md#arm-runtime-performance-has-no-measured-evidence).
+the G4 vertical slice. The original S1a hardware acceptance - ARM cold/warm timings and RSS
+measurements, which cross-compilation alone cannot establish - is now a standing CI gate on native
+arm64 rather than a spike deliverable: `TestPluginRuntimePiClassBudget` measures cold compilation,
+compilation from a warm cache, warm invocation and resident memory per instance against the real
+Jellyfin module, and fails on the <50 ms warm-call / <20 MiB RSS criteria above. armv7 remains
+unmeasured for want of a native 32-bit runner, as does the guest toolchain size comparison, which
+was a Rust-versus-Go question G3 settled on other grounds. See
+[03-backlog.md](../03-backlog.md#arm-runtime-performance-is-measured-on-arm64-only).
 
 Validation for this implementation: `go vet ./...` and `go test -race ./...`
 passed, as did golangci-lint for the changed WASM and manifest-loader packages.

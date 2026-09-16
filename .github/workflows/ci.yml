@@ -37,8 +37,8 @@ jobs:
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
       - run: test -z "$(gofmt -l cmd hack internal web)"
 
-  arm-load:
-    name: 50-card load gate (native ARM64)
+  arm-budgets:
+    name: Pi-class budgets (native ARM64)
     runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v5
@@ -47,7 +47,15 @@ jobs:
           go-version: '1.27'
       # Four execution threads, real SQLite persistence, 50 cards and eight logical connection
       # revisions exercise the Raspberry Pi 4 class release workload on native ARM64.
-      - run: go test ./internal/scheduler -run=^TestFiftyCardPiClassLoadBudget$ -count=1 -v
+      - name: 50-card load gate
+        run: go test ./internal/scheduler -run=^TestFiftyCardPiClassLoadBudget$ -count=1 -v
+      # S1a's hardware acceptance for the WASM runtime: cold compilation of the real Jellyfin
+      # module, warm invocation and resident memory per instance, judged against S1b's kill
+      # criteria. Cross-compilation cannot establish these, which is why they waited for a native
+      # runner rather than a build matrix. -v is load-bearing: the numbers in this job's log are
+      # the evidence, not merely the pass. The module is committed, so no Rust toolchain is needed.
+      - name: WASM runtime budgets
+        run: go test ./internal/integrations/wasm -run=^TestPluginRuntimePiClassBudget$ -count=1 -v
 
   lint:
     name: golangci-lint

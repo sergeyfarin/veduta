@@ -45,4 +45,4 @@ Logs use structured secret scrubbing, but service payloads can still contain pri
 - Run with a dedicated user, a writable private data directory, and read-only application/config mounts where practical.
 - Keep the binary, web assets, integrations, and lock file from one reviewed release together.
 - Back up configuration, the lock file, and SQLite data before upgrades; test restore procedures.
-- Keep CI's fuzz, import-boundary, secret-response, vulnerability, and native ARM load gates enabled.
+- Keep CI's fuzz, import-boundary, secret-response, vulnerability, and native ARM load and plugin-runtime budget gates enabled.

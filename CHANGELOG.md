@@ -24,6 +24,14 @@ project is pre-1.0:
   and **Dockhand** (`overview` — container, stack and image totals summed across every environment
   it manages). Every route in all four is a `GET`, so none can act on the system it watches.
   Documented in the new [docs/integrations.md](docs/integrations.md).
+- A Pi-class budget gate for the WASM plugin runtime, running on CI's native four-core ARM64
+  runner beside the existing 50-card load gate. It measures cold compilation of the real committed
+  Jellyfin module, compilation from a warm cache, warm invocation over 24 calls, and resident
+  memory per loaded instance read from `/proc`, then asserts the kill criteria the sandbox spike
+  set before any of it was built: 50 ms per warm invocation, 20 MB resident per instance. These
+  figures were the one piece of the WASM runtime's acceptance that cross-compilation could not
+  supply. 32-bit `linux/arm/v7` stays unmeasured; GitHub has no native runner for it.
+
 - `veduta import homepage` now maps Homepage's `homeassistant` and `proxmox` widgets onto real
   integrations instead of importing them as link-only cards. Home Assistant's Homepage key is its
   bearer token and carries across; a Proxmox token is two Homepage fields joined into one
