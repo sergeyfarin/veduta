@@ -16,6 +16,7 @@ priority (which milestone should absorb it, or "before X" for a hard blocker).
 
 | Open item | Area | Priority |
 | --- | --- | --- |
+| [Does WASM add enough value to justify further development?](#does-wasm-add-enough-value-to-justify-further-development) | Integrations | Parked; review after 0.1 |
 | [Should there be a frontend plugin surface at all?](#open-question-should-there-be-a-frontend-plugin-surface-at-all) | Frontend | Open decision |
 | [The approval API has no client](#the-approval-api-has-no-client) | Frontend | Open decision |
 | [Appearance options are deferred until asked for](#appearance-options-are-deferred-until-asked-for) | Frontend | On demand |
@@ -27,13 +28,49 @@ priority (which milestone should absorb it, or "before X" for a hard blocker).
 | [A pipeline path cannot carry a card parameter](#a-pipeline-path-cannot-carry-a-card-parameter) | Manifest DSL | 0.2 |
 | [`CacheEntries` can't represent an explicit zero](#manifestloadlimitscacheentries-cant-represent-an-explicit-zero) | Integrations | When declarative caching lands |
 | [Approve flow can't grant a limit above its default](#the-documented-approve-flow-has-no-way-to-grant-a-limit-above-its-documented-default) | Docs | Low |
-| [Go plugin SDK needs a WASI-free toolchain](#go-plugin-sdk-requires-a-maintained-wasi-free-toolchain) | Plugins | Low |
+| [Go plugin SDK needs a WASI-free toolchain](#go-plugin-sdk-requires-a-maintained-wasi-free-toolchain) | Plugins | Parked; subject to WASM review |
 | [The lock file is written 0600, but is meant to be committed](#veduta-lock-yaml-is-written-0600-by-a-uid-the-operator-is-not) | Deployment | Low |
 | [ARM runtime performance is measured on arm64 only](#arm-runtime-performance-is-measured-on-arm64-only) | Plugins | armv7 deferred |
 | [No native visualisation block for retained history](#no-native-visualisation-block-for-retained-history) | Frontend | 0.2 |
 | [Markdown has no authoring syntax for structure](#markdown-is-prose-only-with-no-authoring-syntax-for-structure) | Frontend | Deferred |
 
 ---
+
+### Does WASM add enough value to justify further development?
+
+**Parked, 2026-09-16. Requirements under review.** The runtime and Rust SDK exist,
+but that alone does not establish a product need for further WASM development.
+Jellyfin can be expressed declaratively, and Immich memories now uses that approach. No new WASM
+integration, replacement proof case, SDK expansion or runtime feature is scheduled
+for 0.1 or automatically committed to 0.2. Keep existing functionality and its
+security/regression coverage maintained while this question is open.
+
+Reopen only around a concrete user need. Compare a declarative implementation,
+an upstream service that already does the work, and a WASM implementation.
+Record the additional behavior WASM enables, its build/maintenance and resource
+costs, and any broker or permission changes. Continuing to defer or reducing
+WASM's role are valid outcomes. A parser's compatibility with the WASI-free
+sandbox must be demonstrated before treating it as an implementation choice.
+
+Candidates discussed, **not scheduled**:
+
+- Provider-independent ICS agenda: accept compatible calendar subscriptions
+  rather than couple the feature to Nextcloud. Recurrence, exceptions and
+  timezone handling could justify WASM; the existing list block can show an
+  agenda. Provider-specific authenticated APIs are a separate scope.
+- GitHub releases/activity: prefer declarative JSON. Installed-version and
+  deployment-update knowledge should come from services such as Dockhand.
+- Rain forecasts: prefer declarative JSON when available. A text-feed parser
+  could justify a small plugin; probability and intensity remain distinct.
+  Forecast visualization is a core rendering concern, independent of WASM.
+- Energy monitoring: use existing Home Assistant sensor data or an upstream
+  JSON API first. Direct Prometheus exposition parsing is a possible WASM use
+  case; long-term energy accounting remains upstream.
+
+The 0.1 decision to retain the existing Jellyfin implementation is unchanged;
+it is not evidence that future integrations need WASM. See
+[decision 0003](decisions/0003-jellyfin-wasm-proof-case.md).
+Priority: parked until a requirements review after 0.1, not a release blocker.
 
 ### A pipeline path cannot carry a card parameter
 
@@ -281,8 +318,9 @@ to cold-validate on the development host, and imported 17 WASI functions. That
 conflicts with S1's strict no-WASI sandbox and the size/latency goals for
 Pi-class hosts. Enabling WASI only for this toolchain would widen the sandbox,
 while owning a custom PDK would create an ongoing compiler/ABI maintenance
-burden. G3 therefore ships Rust as the supported guest language. Priority: low,
-revisit when an official or maintained Go PDK can emit `wasm32-unknown-unknown`
+burden. G3 therefore ships Rust as the supported guest language. Priority: parked
+under the [WASM requirements review](#does-wasm-add-enough-value-to-justify-further-development).
+Only revisit if that review establishes a need and an official or maintained Go PDK can emit `wasm32-unknown-unknown`
 with no forbidden imports and passes the G1 conformance suite plus S1a ARM
 budgets. The Go backend is a separate decision and remains in place; see
 `docs/decisions/0001-backend-language.md`.
@@ -380,7 +418,21 @@ README's: `schemas/plugin-manifest.v1.schema.json` still describes signal retent
 `for:` windows and sparklines". Retention is real and `for:` windows work; the sparkline half of
 that sentence stays wrong until the block lands. Fix it in the same change, not before.
 
-Priority: the block itself 0.2.
+**Planning clarification, 2026-09-16:** prioritize a bounded native time-series
+block in 0.2, independently of the WASM review. It should render timestamped points
+supplied by an integration (including future rain forecasts and upstream historical
+energy data), with a separate core binding for retained numeric signal history.
+Limit series/point counts, carry units and timestamps, and show missing data as
+gaps. Integrations do not gain direct database access.
+
+Veduta remains a dashboard with bounded local trends. Long-term storage, durable
+aggregation and energy accounting belong upstream; a chart does not require
+turning Veduta into a general time-series database. Prefer authoritative upstream
+kWh totals over reconstructing them from intermittent dashboard power samples.
+A calendar agenda can use the existing list block; a month-grid renderer is not
+a prerequisite for assessing calendar integration.
+
+Priority: the block itself 0.2; candidate integrations are not committed by it.
 
 ### Markdown is prose-only, with no authoring syntax for structure
 

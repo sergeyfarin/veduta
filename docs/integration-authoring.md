@@ -12,6 +12,12 @@ Three rungs, in order. Start at the lowest one that fits — **most integrations
 
 All three use the same capability broker, credential boundary, limits, output validation, and approval flow. Moving up a rung buys expressiveness, not authority: a WASM plugin can do nothing a manifest could not ask for.
 
+Further first-party WASM work is currently parked while its requirements and
+value are reviewed. The supported SDK and existing plugin remain available;
+prefer declarative integrations for new work. See the
+[requirements review](03-backlog.md#does-wasm-add-enough-value-to-justify-further-development)
+before proposing a new WASM example.
+
 ## Manifest structure
 
 Start with a first-party example under [`plugins/`](../plugins/). A manifest contains:

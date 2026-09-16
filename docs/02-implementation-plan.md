@@ -1331,6 +1331,20 @@ without a reload.
 
 ### Phase G — WASM integrations and vertical slice #2 (4 d)
 
+**Planning update, 2026-09-16: further WASM work is parked; requirements are under
+review for demonstrated user value.** G1–G4 below record completed work, not a
+commitment to expand the runtime or find another proof case. Preserve the existing
+implementation, fixes and security/regression checks through 0.1. No new WASM
+example or feature is a release requirement. Revisit after 0.1 only with a concrete
+need and a comparison against declarative integration and existing upstream
+services; there is no automatic 0.2 commitment. See the
+[requirements review](03-backlog.md#does-wasm-add-enough-value-to-justify-further-development).
+
+For 0.2, prioritize the independent
+[native time-series rendering work](03-backlog.md#no-native-visualisation-block-for-retained-history)
+for bounded supplied series and retained signals. This supports rain and energy
+views without making WASM or a general time-series database prerequisites.
+
 **G1 · WASM runtime** · 1.5 d · deps: S1, D2 · **DONE (sandbox; arm64 budgets gated in CI, armv7 unmeasured)**
 Creates: `internal/integrations/wasm/` (Extism/wazero host, compilation cache, sha256 verification,
 memory/deadline/output limits, instance lifecycle).

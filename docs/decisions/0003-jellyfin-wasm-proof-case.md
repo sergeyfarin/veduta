@@ -1,6 +1,7 @@
 # Jellyfin remains the WASM proof case for 0.1
 
-Status: accepted, 2026-09-16. Revisit after 0.1 if the conditions below are met.
+Status: accepted for retaining Jellyfin in 0.1, 2026-09-16. Further WASM
+development is parked; its product requirements and value are under review.
 
 ## Decision
 
@@ -42,6 +43,15 @@ or new proof-case project is scheduled by this decision.
 ## Scope clarification: declarative first
 
 The Immich memories operation is implemented declaratively. Do not create a WASM
-example solely to exercise WASM. Further WASM development and identifying a use
-case that needs it are deferred until after 0.1; neither is a release requirement.
-The existing Jellyfin implementation and its regression coverage remain in place.
+example solely to exercise WASM. Further WASM development is parked while we
+review whether it adds enough user value to justify its complexity and cost.
+No replacement proof case or new WASM feature is required for 0.1 or automatically
+scheduled for 0.2. The existing Jellyfin implementation and its security/regression
+coverage remain in place.
+
+A review after 0.1 must start with a concrete need, compare declarative and upstream
+alternatives, and account for maintenance, resource and permission costs. Keeping
+WASM parked or reducing its role are valid outcomes. Candidate integrations and
+review criteria are recorded in the
+[open requirements review](../03-backlog.md#does-wasm-add-enough-value-to-justify-further-development).
+Visualization work is independent of this decision.

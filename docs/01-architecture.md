@@ -551,6 +551,12 @@ then run unmodified against the WASM version, which is how you prove the swap is
 
 ### WASM specifics
 
+**Roadmap status (2026-09-16): further WASM development is parked.** This section
+describes the implemented architecture; its existence does not establish a need
+for new WASM features. Product requirements and value are
+[under review](03-backlog.md#does-wasm-add-enough-value-to-justify-further-development)
+after 0.1. Existing security boundaries and regression checks remain in force.
+
 - Host: **wazero** via **Extism**, cgo-free. `PluginRuntime` isolates the choice.
   See the [G1 sandbox decision](spikes/s1-wasm-sandbox.md) for the implemented ABI and conformance coverage.
 - `allowed_hosts: []` (empty = deny all — `null` means allow all and must never be used).
@@ -569,7 +575,7 @@ veduta_cache_get(key)   -> value | null  // namespaced per plugin instance
 veduta_cache_put(json)                    // {key, value, ttlSeconds}
 veduta_asset_ref(json)  -> token          // {slot, path, transform?}
 veduta_log(json)                          // {level, msg, fields}
-veduta_emit(json)                          // {type, severity, fields}  (0.2)
+veduta_emit(json)                          // {type, severity, fields}  (parked; subject to WASM review)
 ```
 
 G2 host calls return one envelope: `{"ok":true,"value":...}` on success, or
