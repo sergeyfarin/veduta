@@ -370,7 +370,11 @@ release-gating without any further wiring.
 The arm64 numbers arrive with the first run of that job; on an x86 development machine the same
 test reports roughly 470 ms cold, 21 ms from cache, a 3.3 ms warm median and 0.9 MiB per instance,
 which is an order of magnitude of headroom rather than a squeak past. **Until that job has run
-green on this commit, the acceptance is instrumented rather than established.**
+green on this commit, the acceptance is instrumented rather than established** - and as of
+2026-09-16 it has not, because every CI job on this repository is aborting in six seconds on a
+GitHub billing block ("recent account payments have failed or your spending limit needs to be
+increased"), which predates this gate and affects the whole workflow. The last green run, and the
+last time the ARM runner actually served this repository, was 2026-09-14.
 
 **What is still open is armv7 only.** GitHub has no 32-bit ARM runner, so the images published for
 `linux/arm/v7` carry a WASM runtime whose cost on that architecture is unmeasured - and 32-bit is
