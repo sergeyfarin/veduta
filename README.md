@@ -20,6 +20,19 @@ credentials and applies the approved capability and route limits.
 
 *A test fixture, not a released product. The image is maintained by the visual-regression suite.*
 
+## Why Veduta?
+
+Existing self-hosted dashboards already do an excellent job of providing links, service widgets,
+monitoring views, and visual customisation. They are also established products, while Veduta is
+not. Veduta exists to explore a narrower extension contract: an integration returns typed content
+from a fixed rendering vocabulary, cannot render arbitrary code in the dashboard, and reaches an
+upstream service only through capabilities and routes approved by the operator.
+
+That trade-off aims to make rich, third-party integrations easier to reason about, at the cost of
+less freedom than arbitrary templates or frontend components. See
+[Why Veduta, and how it differs](docs/why-veduta.md) for the rationale, a comparison with Homepage,
+Glance, Homarr, and Dashy, and the important maturity caveat.
+
 ## What is here today
 
 The repository contains a working development implementation of the dashboard, configuration
@@ -37,6 +50,7 @@ Detailed engineering progress and remaining work live outside this README:
 - [Open gaps and decisions](docs/03-backlog.md)
 - [Architecture and security boundaries](docs/01-architecture.md)
 - [Design research and product scope](docs/00-review-and-prior-art.md)
+- [Product rationale and dashboard comparison](docs/why-veduta.md)
 - [Theming and visual-customisation decision](docs/decisions/0002-theming-and-visual-customisation.md)
 
 ## Development preview

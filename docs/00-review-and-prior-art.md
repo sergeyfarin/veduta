@@ -3,6 +3,10 @@
 Purpose of this document: make sure Veduta is not rebuilding something that already exists,
 and stress-test the original design before any code is written.
 
+For the shorter, public-facing rationale and a comparison checked against current upstream
+documentation, see [why-veduta.md](why-veduta.md). This document preserves the more detailed design
+research and historical decisions.
+
 ---
 
 ## 1. The competitive map (2026)
