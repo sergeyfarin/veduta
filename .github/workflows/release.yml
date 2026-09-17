@@ -196,11 +196,16 @@ jobs:
         id: meta
         with:
           images: ghcr.io/${{ github.repository }}
-          # :latest only for a real, non-prerelease tag - a dispatch run must never move it.
+          # :latest names the newest STABLE release, and nothing else may move it - not a dispatch
+          # run, not a prerelease tag, and not a pre-1.0 tag. The last of those is the point worth
+          # stating: semver says 0.x carries no stability promise at all, so a 0.x build has not
+          # earned the tag people get by typing `docker pull ghcr.io/…/veduta` with no tag at all,
+          # which is the single most discoverable artefact this workflow produces. Until v1.0.0,
+          # :latest simply does not exist, and every install has to name the version it wanted.
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest,enable=${{ github.event_name == 'push' && !contains(github.ref_name, '-') }}
+            type=raw,value=latest,enable=${{ github.event_name == 'push' && !contains(github.ref_name, '-') && !startsWith(github.ref_name, 'v0.') }}
             type=raw,value=dispatch-{{sha}},enable=${{ github.event_name == 'workflow_dispatch' }}
 
       - uses: docker/build-push-action@v6
@@ -236,8 +241,16 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
+          # Marked a pre-release on GitHub for the same two reasons :latest is withheld above, so
+          # the two can never disagree: an explicit prerelease identifier (v1.2.3-rc.1), or any
+          # pre-1.0 tag. The second is how a 0.x release says "alpha" without spending the version
+          # number on the word - the number stays clean, and GitHub still declines to show it as
+          # the project's current release.
           prerelease=""
-          case "$GITHUB_REF_NAME" in *-*) prerelease="--prerelease";; esac
+          case "$GITHUB_REF_NAME" in
+            *-*)  prerelease="--prerelease" ;;
+            v0.*) prerelease="--prerelease" ;;
+          esac
           gh release create "$GITHUB_REF_NAME" dist/* \
             --title "$GITHUB_REF_NAME" \
             --notes "See [CHANGELOG.md](https://github.com/${GITHUB_REPOSITORY}/blob/${GITHUB_REF_NAME}/CHANGELOG.md).

@@ -35,6 +35,7 @@ priority (which milestone should absorb it, or "before X" for a hard blocker).
 | [No native visualisation block for retained history](#no-native-visualisation-block-for-retained-history) | Frontend | 0.2 |
 | [Markdown has no authoring syntax for structure](#markdown-is-prose-only-with-no-authoring-syntax-for-structure) | Frontend | Deferred |
 | [Release artefacts disagree about the `v` prefix](#release-artefacts-disagree-about-the-v-prefix) | Packaging | Low; not before the alpha |
+| [Release workflow's Docker actions target Node 20](#the-release-workflows-docker-actions-still-target-node-20) | Packaging | Low; recheck before each tag |
 
 ---
 
@@ -505,16 +506,16 @@ which also records why the binding layer such proposals arrive with is not wante
 
 ### Release artefacts disagree about the `v` prefix
 
-Noticed 2026-09-17 while confirming that `release.yml` would treat an `-alpha.1` tag as a
-prerelease. It does, and nothing here affects that - this is cosmetic, and recorded only so it is
+Noticed 2026-09-17 while confirming how `release.yml` distinguishes a stable release from one
+that is not. Nothing here affects that distinction - this is cosmetic, and recorded only so it is
 not mistaken for a packaging fault the first time someone compares a download with an image.
 
 On a tag push the workflow sets `version="${GITHUB_REF_NAME}"`, so the tag is used whole, `v` and
 all. That string reaches `internal/version.Version` through `-ldflags` and names the archives, so
-`veduta version` reports `v0.1.0-alpha.1` and the download is
-`veduta-v0.1.0-alpha.1-linux-amd64.tar.gz`. The image tag comes from `docker/metadata-action`'s
+`veduta version` reports `v0.1.0` and the download is
+`veduta-v0.1.0-linux-amd64.tar.gz`. The image tag comes from `docker/metadata-action`'s
 `type=semver` instead, which strips the prefix, so the same build publishes
-`ghcr.io/…:0.1.0-alpha.1`. The release notes are already correct about this - they interpolate
+`ghcr.io/…:0.1.0`. The release notes are already correct about this - they interpolate
 `${GITHUB_REF_NAME#v}` for the image line specifically - which is itself the evidence that the
 inconsistency was worked around rather than resolved.
 
@@ -526,3 +527,18 @@ releases rather than during one.
 
 Priority: low, and deliberately not before the first alpha - changing artefact names while cutting
 the release that first establishes them is the wrong moment.
+
+### The release workflow's Docker actions still target Node 20
+
+Surfaced as an annotation on the 2026-09-17 dry run, not by anything failing:
+`docker/build-push-action@v6`, `docker/metadata-action@v5` and `docker/setup-buildx-action@v3` all
+declare Node 20, which GitHub has deprecated and is currently force-running on Node 24. The run was
+green and the artefacts were correct.
+
+It is recorded because of *where* it is. This is the release path, so the failure mode is not a red
+CI run on a pull request someone is already looking at - it is a tag push that does not produce a
+release, discovered at the moment of publishing. The fix is a version bump of three actions once
+upstream ships Node 24 releases, and the cost of being early is nil.
+
+Priority: low, but check it before each tag rather than only when it breaks. Not a blocker for the
+first release - the forced Node 24 run is GitHub's own compatibility path, and it works today.

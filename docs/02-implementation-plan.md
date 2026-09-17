@@ -1623,43 +1623,53 @@ and never occupying the tags that a stable release would.
    README, the changelog and the backlog.
 
 2. **Run the complete checks from a clean checkout, and exercise the archive and container paths.**
-   **Outstanding, and the only build work left.** Two things, in order: `mise run check` from a
-   fresh clone of the commit to be tagged, proving the gate passes without anything this working
-   tree happens to carry; and a `workflow_dispatch` run of `release.yml` with `dry_run: true` on
-   that same commit, which builds all four archives, verifies each against
-   `hack/stage-plugins.sh --list`, runs the shipped binary to confirm it reports the version it
-   claims, digests every shipped manifest, validates every shipped module, and builds all three
-   Linux image platforms - publishing none of it. The dry run was last exercised at L4; it has not
-   been run against the current commit.
+   **Done, 2026-09-17, against `6065a47`.** `mise run check` from a fresh clone passed with nothing
+   cached, proving the gate does not depend on anything a working tree happens to carry. The
+   `workflow_dispatch` dry run of `release.yml` then passed on the same commit: the CI gate
+   resolved, all four archives built and verified against `hack/stage-plugins.sh --list`, the
+   shipped binary ran and reported the version it claimed, every shipped manifest digested and
+   every shipped module validated, and all three Linux image platforms built - publishing none of
+   it, with the release job correctly skipped because it is `push`-only.
 
 3. **Triage the open backlog into alpha blockers and post-alpha work.**
    **Done, 2026-09-17: no open item in [docs/03-backlog.md](03-backlog.md) blocks the alpha.**
    The three that could plausibly have:
    - *Action execution is not implemented.* Not a blocker **because** the controls render disabled
      and every document now says so. It would become one the moment anything claimed otherwise.
-   - *The approval API has no client.* Not a blocker for an alpha whose operator has shell access;
-     `veduta integration approve` is the supported path and is the one the security model is most
-     defensible at. The decision of whether 0.1 proper ships a read-only integrations view stays
-     open, and is not needed here.
+   - *The approval API has no client.* Not a blocker, and not what the entry's title suggests to a
+     reader who has not opened it: the **CLI** client is complete and is the supported path -
+     `veduta integration list | diff | approve` - and what is missing is a *browser* client for the
+     three REST endpoints D2b built. An operator with a shell is unaffected. The decision of
+     whether 0.1 ships a read-only integrations view stays open and is not needed here.
    - *ARM runtime performance.* Resolved for arm64 on 2026-09-17 with an order of magnitude of
      headroom, and release-gated by the workflow's CI check. 32-bit `linux/arm/v7` images ship
      unmeasured, because GitHub has no native runner for them; that is a disclosure for the release
      notes, not a blocker.
 
-4. **Tag `v0.1.0-alpha.1`.** The version carries a prerelease identifier deliberately, and
-   `release.yml` already treats it correctly on every axis that decides how loud a release is -
-   verified against the workflow as written, with no changes needed:
-   - The GitHub release is created with `--prerelease`, from the `*-*` case on the tag name.
-   - `:latest` is **not** moved: its `type=raw` entry is gated on `!contains(github.ref_name, '-')`.
-   - `0.1` is not created either - `docker/metadata-action` skips the `{{major}}.{{minor}}` pattern
-     for prerelease versions - so the only image tag published is `ghcr.io/…:0.1.0-alpha.1`.
-   - The gate job still requires a green CI run for that exact commit, so step 2's dry run does not
-     substitute for CI having passed on the tagged commit.
+4. **Tag `v0.1.0`.** The version number is kept clean and the word "alpha" stays a description
+   rather than part of it. What makes the release quiet is the tag being **pre-1.0**, not a
+   prerelease identifier spelled into the string, and `release.yml` now encodes that directly:
 
-   **Tagging `v0.1.0` instead would do the opposite of all of this**: no prerelease flag, `:latest`
-   moved to it, and a `0.1` tag created. The distinction lives entirely in the tag string, which is
-   why `CHANGELOG.md`'s section is titled `0.1.0-alpha.1` rather than `0.1.0` - the heading is what
-   the release notes link to, and it should not invite the tag that makes the release loud.
+   - **`:latest` is not published at all before v1.0.0.** Its `type=raw` entry requires the tag to
+     have no prerelease identifier *and* not to start with `v0.`. This matters more than the rest
+     combined - `docker pull ghcr.io/sergeyfarin/veduta` with no tag is the most discoverable thing
+     a registry offers, and a 0.x build has not earned it.
+   - **The GitHub release is marked a pre-release**, from the same two conditions, so the two can
+     never disagree. This is how a 0.x release says "alpha" without spending the version number on
+     the word.
+   - **`0.1.0` and `0.1` image tags are published**, which is correct: both name a specific series
+     an operator asked for by name, rather than a floating "newest" pointer.
+   - **The gate job still requires a green CI run for the exact tagged commit**, so step 2's dry run
+     does not substitute for CI having passed on it.
+
+   The rule is permanent and not an alpha special case: pre-1.0 and prerelease-tagged builds are
+   both "not stable", and `:latest` points only at stable. 0.2.0 and 0.3.0 inherit it unchanged; the
+   first tag that moves `:latest` is v1.0.0.
+
+   `v0.0.1` was considered and rejected. It would undersell an implementation whose phases are
+   complete and tested, and 0.0.x is the one range semver gives no convention for at all - not even
+   the 0.x "minor bumps may break" reading - so it communicates less, not more caution. Every
+   planning document, the changelog and the milestone table already say 0.1.0.
 
    Then: push the tag, and let the workflow publish the archives, checksums, GHCR image, provenance,
    SBOM and GitHub release.
