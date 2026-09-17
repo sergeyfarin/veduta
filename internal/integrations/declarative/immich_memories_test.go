@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"net/url"
 	"path/filepath"
 	"reflect"
@@ -30,7 +31,7 @@ type memoriesBroker struct {
 
 func (b *memoriesBroker) HTTP(_ context.Context, _ capabilities.Grant, r capabilities.HTTPRequest) (capabilities.HTTPResponse, error) {
 	b.t.Helper()
-	if r.Method != "GET" || r.Path != "/api/memories" || r.Slot != "server" {
+	if r.Method != http.MethodGet || r.Path != "/api/memories" || r.Slot != "server" {
 		b.t.Fatalf("unexpected request: %#v", r)
 	}
 	b.query = r.Query
