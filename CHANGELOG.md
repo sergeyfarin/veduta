@@ -11,56 +11,16 @@ project is pre-1.0:
 > pinned in `veduta.lock.yaml`, so an incompatible plugin fails closed rather than misbehaving;
 > expect to rebuild and re-approve third-party plugins when upgrading.
 
-## Unreleased
+## 0.1.0 — 2026-09-17
 
-### Added
-
-- Declarative Immich `memories`: date-filtered on-this-day images, one memory per
-  year, item counts and optional browser links. No new WASM module or service is
-  needed. The Immich manifest is now 0.3.0 and requires renewed approval.
-
-- Four first-party declarative integrations, bringing the shipped set to ten:
-  **Proxmox VE** (`cluster-overview` — node availability, VM and LXC counts, and core-weighted
-  cluster CPU and memory from one read-only `/api2/json/cluster/resources`), **Home Assistant**
-  (`overview` — entity, light, switch, person and unavailable-entity counts; and `sensor` — one
-  entity, with a numeric signal emitted only when the entity carries a unit and is actually
-  reporting), **Arcane** (`containers` — status counts and a container page in a single request),
-  and **Dockhand** (`overview` — container, stack and image totals summed across every environment
-  it manages). Every route in all four is a `GET`, so none can act on the system it watches.
-  Documented in the new [docs/integrations.md](docs/integrations.md).
-- A Pi-class budget gate for the WASM plugin runtime, running on CI's native four-core ARM64
-  runner beside the existing 50-card load gate. It measures cold compilation of the real committed
-  Jellyfin module, compilation from a warm cache, warm invocation over 24 calls, and resident
-  memory per loaded instance read from `/proc`, then asserts the kill criteria the sandbox spike
-  set before any of it was built: 50 ms per warm invocation, 20 MB resident per instance. These
-  figures were the one piece of the WASM runtime's acceptance that cross-compilation could not
-  supply. First measured on 2026-09-17: 244 ms to compile the module from cold, 12 ms from a warm
-  cache, a 1.765 ms warm-invocation median and 1.0 MiB resident per added instance — 20 to 28 times
-  inside the criteria, so a Pi-class arm64 host runs an integration for about two milliseconds and
-  a megabyte. 32-bit `linux/arm/v7` stays unmeasured; GitHub has no native runner for it.
-
-- `veduta import homepage` now maps Homepage's `homeassistant` and `proxmox` widgets onto real
-  integrations instead of importing them as link-only cards. Home Assistant's Homepage key is its
-  bearer token and carries across; a Proxmox token is two Homepage fields joined into one
-  non-standard header, so the importer writes the card and the URL, deliberately leaves the
-  connection with no auth rather than guessing, and prints the header to add.
-
-### Fixed
-
-- `plugins/beszel/manifest.yaml` was never schema-validated by the contract suite, which named
-  each manifest individually and had not been updated when Beszel was added. The suite now finds
-  every `plugins/*/manifest.yaml`, and a new check asserts each one is also listed in
-  `hack/stage-plugins.sh` — a manifest missing from that allowlist ships in no release archive and
-  no container image, and nothing previously noticed.
-
-## 0.1.0 — planned
-
-Planned first public release, and an alpha in every sense but the version string: pre-1.0 means no
+First public release, and an alpha in every sense but the version string: pre-1.0 means no
 stability promise, the release is marked a pre-release on GitHub, and `latest` is not published at
-all until there is a 1.0 to point it at. Installing means naming the version you wanted. Veduta is a self-hosted dashboard for a home or homelab that shows rich
-content — photos, posters, container and host state — queries services through a
-credential boundary the integrations never see past, and notifies when something needs attention.
-Action controls are present but remain disabled; execution is not implemented in this alpha.
+all until there is a 1.0 to point it at — installing means naming the version you wanted.
+
+Veduta is a self-hosted dashboard for a home or homelab that shows rich content — photos, posters,
+container and host state — queries services through a credential boundary the integrations never
+see past, and notifies when something needs attention. Action controls are present but remain
+disabled; execution is not implemented in this release.
 
 ### Added
 
@@ -121,6 +81,16 @@ Action controls are present but remain disabled; execution is not implemented in
 **Shipped integrations**
 - Immich and Glances and Beszel (declarative), Jellyfin (WebAssembly), Docker via a read-only
   socket proxy, and a generic HTTP/JSON card for anything without a manifest.
+- **Proxmox VE** (`cluster-overview` — node availability, VM and LXC counts, and core-weighted
+  cluster CPU and memory from one read-only `/api2/json/cluster/resources`), **Home Assistant**
+  (`overview` — entity, light, switch, person and unavailable-entity counts; and `sensor` — one
+  entity, with a numeric signal emitted only when the entity carries a unit and is actually
+  reporting), **Arcane** (`containers` — status counts and a container page in a single request),
+  and **Dockhand** (`overview` — container, stack and image totals summed across every environment
+  it manages), bringing the shipped set to ten. Every route in all four is a `GET`, so none can act
+  on the system it watches.
+- Declarative Immich `memories`: date-filtered on-this-day images, one memory per year, item counts
+  and optional browser links. No new WebAssembly module or service is needed.
 
 **Operations**
 - SQLite persistence with forward-only migrations for card state, scheduling, signal history,
@@ -135,6 +105,11 @@ Action controls are present but remain disabled; execution is not implemented in
   configured.
 - `veduta import homepage` parses an existing Homepage configuration, maps services and bookmarks,
   creates connections and integrations disabled for review, and applies a comment-preserving edit.
+  Homepage's `homeassistant` and `proxmox` widgets map onto real integrations rather than link-only
+  cards. Home Assistant's Homepage key is its bearer token and carries across; a Proxmox token is
+  two Homepage fields joined into one non-standard header, so the importer writes the card and the
+  URL, deliberately leaves the connection with no auth rather than guessing, and prints the header
+  to add.
 - `veduta health` probes a running instance and exits non-zero if it is not serving — the
   container image is distroless, so the binary is the only thing available to run a health check.
 - `veduta auth hash` produces the Argon2id verifier password mode requires, reading the password
@@ -143,6 +118,14 @@ Action controls are present but remain disabled; execution is not implemented in
   parameters the server would then refuse at start-up.
 
 **Release**
+- A Pi-class budget gate for the WebAssembly plugin runtime, running on CI's native four-core ARM64
+  runner. It measures cold compilation of the real committed Jellyfin module, compilation from a
+  warm cache, warm invocation over 24 calls, and resident memory per loaded instance read from
+  `/proc`, then asserts the kill criteria the sandbox spike set before any of it was built: 50 ms
+  per warm invocation, 20 MB resident per instance. First measured on 2026-09-17: 244 ms cold,
+  12 ms warm, a 1.765 ms warm-invocation median and 1.0 MiB resident per added instance — 20 to 28
+  times inside the criteria. 32-bit `linux/arm/v7` stays unmeasured; GitHub has no native runner
+  for it.
 - Multi-architecture container images on GHCR for `linux/amd64`, `linux/arm64` and `linux/arm/v7`,
   built on a distroless base with no shell and running as a non-root user.
 - `compose.yaml`: a complete deployment rather than a fragment to adapt. The password hash arrives
@@ -161,6 +144,11 @@ Action controls are present but remain disabled; execution is not implemented in
 
 ### Fixed
 
+- `plugins/beszel/manifest.yaml` was never schema-validated by the contract suite, which named each
+  manifest individually and had not been updated when Beszel was added. The suite now finds every
+  `plugins/*/manifest.yaml`, and a new check asserts each one is also listed in
+  `hack/stage-plugins.sh` — a manifest missing from that allowlist ships in no release archive and
+  no container image, and nothing previously noticed.
 - A panic anywhere under a card refresh no longer ends the process. Integration code runs behind a
   barrier that logs the panic and its stack against the card that caused it and fails that card
   with an `internal` error, leaving the rest of the dashboard serving; the scheduler releases the
