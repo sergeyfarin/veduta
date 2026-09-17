@@ -5,8 +5,8 @@
 
 Veduta is not an attempt to replace every self-hosted dashboard. Mature projects already offer
 large widget catalogues, polished configuration experiences, and active communities. They are the
-more appropriate choice for a dashboard needed today: Veduta is pre-alpha and has no supported
-release.
+more appropriate choice for a dashboard needed today: Veduta's first release, `v0.1.0`, is a
+pre-1.0 pre-release with no stability promise, and it cannot yet execute an action.
 
 Veduta is instead testing one product thesis:
 

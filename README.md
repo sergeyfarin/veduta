@@ -11,10 +11,10 @@ to service credentials. Integrations declare the operations they need; Veduta's 
 credentials and applies the approved capability and route limits.
 
 > [!WARNING]
-> **Veduta is pre-alpha and is not ready to install or operate as a real dashboard.** There is no
-> published release yet. The first public alpha is being prepared, and configuration, storage,
-> APIs, packaging, and the plugin ABI may change without a migration path. Please treat the
-> repository as development code, not as a supported deployment.
+> **Veduta is early software, and `v0.1.0` is a pre-release.** Pre-1.0 carries no stability
+> promise: configuration, storage, APIs, packaging, and the plugin ABI may change between releases
+> without a migration path. Action controls render and are permanently disabled — executing them is
+> not implemented. Treat it as something to evaluate, not as a dashboard to depend on.
 
 ![A development snapshot of Veduta's fixture dashboard in the Clean preset](web/tests/visual.spec.ts-snapshots/dashboard-light-chromium-linux.png)
 
@@ -54,12 +54,23 @@ Detailed engineering progress and remaining work live outside this README:
 - [Theming and visual-customisation decision](docs/decisions/0002-theming-and-visual-customisation.md)
 - [Why cards are not extensible with JS, CSS, Mermaid or Adaptive Cards](docs/decisions/0004-card-expressiveness-and-the-presentation-contract.md)
 
-## Development preview
+## Installing and evaluating
 
-There is no installation path for users yet. Contributors and evaluators who accept the pre-alpha
-limitations can build from source and run the fixture dashboard by following the
-[pre-release evaluation guide](docs/getting-started.md). The toolchain and common development tasks
-are documented in [docs/dev-environment.md](docs/dev-environment.md).
+`v0.1.0` is published as a pre-release. `latest` is deliberately not published and will not be
+before 1.0, so an install names the version it wants:
+
+```sh
+docker pull ghcr.io/sergeyfarin/veduta:0.1.0
+```
+
+Archives for `linux/amd64`, `linux/arm64`, `linux/arm/v7` and `darwin/arm64`, each carrying the
+first-party integrations and the licences beside the binary, are attached to the
+[release](https://github.com/sergeyfarin/veduta/releases/tag/v0.1.0) with a `SHA256SUMS` to check
+them against.
+
+The [setup and evaluation guide](docs/getting-started.md) covers configuration, the archive layout
+and the fixture dashboard; the toolchain and common development tasks, for building from source
+instead, are in [docs/dev-environment.md](docs/dev-environment.md).
 
 Useful references:
 

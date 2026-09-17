@@ -1,14 +1,30 @@
-# Pre-release development and evaluation
+# Setup and evaluation
 
 > [!WARNING]
-> Veduta is pre-alpha. No supported release or installation path exists yet, and the first public
-> alpha is still being prepared. The instructions below are for contributors and evaluators using
-> a source checkout; do not rely on them for a production dashboard. Configuration, storage,
-> packaging, and extension interfaces may change without a migration path.
+> `v0.1.0` is a pre-release. Pre-1.0 carries no stability promise: configuration, storage,
+> packaging, and extension interfaces may change between releases without a migration path. Action
+> controls render and are permanently disabled. Do not rely on this as a production dashboard.
 
-Veduta runs as one Go binary with an embedded web application. Go 1.27, Node 24, and pnpm 12 are pinned in [`mise.toml`](../mise.toml).
+Veduta runs as one Go binary with an embedded web application, and ships three ways.
 
-Install the toolchain and build the binary from a source checkout:
+**Container image.** `latest` is deliberately not published before 1.0, so name the version:
+
+```sh
+docker pull ghcr.io/sergeyfarin/veduta:0.1.0
+```
+
+[`compose.yaml`](../compose.yaml) in the repository is a complete deployment rather than a fragment
+to adapt — read [docs/docker.md](docker.md) before running it.
+
+**Release archive.** `linux/amd64`, `linux/arm64`, `linux/arm/v7` and `darwin/arm64` are attached to
+each [release](https://github.com/sergeyfarin/veduta/releases), with a `SHA256SUMS` to verify a
+download against:
+
+```sh
+sha256sum --check --ignore-missing SHA256SUMS
+```
+
+**From source.** Go 1.27, Node 24, and pnpm 12 are pinned in [`mise.toml`](../mise.toml):
 
 ```sh
 mise install
@@ -16,10 +32,9 @@ pnpm install
 pnpm build
 ```
 
-## Planned release archive layout
+## Release archive layout
 
-No release archive has been published. The current packaging work produces the following proposed,
-relocatable layout for release testing:
+An archive unpacks to a single relocatable directory:
 
 ```
 veduta-<version>-<target>/
@@ -33,7 +48,7 @@ veduta-<version>-<target>/
 │   ├── immich/manifest.yaml
 │   ├── proxmox/manifest.yaml
 │   └── jellyfin/{manifest.yaml,jellyfin.wasm}
-└── LICENSE, LICENSING.md, THIRD-PARTY-NOTICES.md, README.md
+└── LICENSE, LICENSING.md, LICENSE-PLUGIN-EXCEPTION.txt, THIRD-PARTY-NOTICES.md, README.md
 ```
 
 The integrations are files beside the binary, not bytes inside it. That is deliberate: a shipped integration is loaded through the same path as one you write yourself, so it is listed, diffed and approved in `veduta.lock.yaml` on exactly the same terms rather than inheriting the binary's trust. Nothing is active until you approve it.
@@ -46,7 +61,7 @@ integrations:
     source: path:./plugins/immich
 ```
 
-The proposed system layout matches the development container image:
+The system layout matches the container image:
 
 | | |
 | --- | --- |
