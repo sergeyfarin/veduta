@@ -353,9 +353,9 @@ The three figures S1a was written to produce - cold compilation of a real plugin
 resident memory per instance - therefore had no number attached on ARM hardware, and they are the
 ones that decide whether a Pi-class host is a supported target or an aspiration.
 
-**arm64 is now measured in CI, 2026-09-16.** The deferral earlier the same day assumed this
-needed a board nobody has. It did not: L3's load gate was already running on GitHub's native
-four-core ARM64 runner, and that job now runs
+**arm64 is measured, 2026-09-17, and it passes with an order of magnitude of headroom.** The
+deferral of the day before assumed this needed a board nobody has. It did not: L3's load gate was
+already running on GitHub's native four-core ARM64 runner, and that job now runs
 [`TestPluginRuntimePiClassBudget`](../internal/integrations/wasm/budget_test.go) beside it. The
 test loads `plugins/jellyfin/jellyfin.wasm` - the committed module, the fixtures the golden test
 pins, the limits a real approval grants - and measures cold compilation, compilation from a warm
@@ -367,14 +367,30 @@ deserves. `-v` is deliberate - the job log carries the numbers, not just the ver
 release workflow's gate requires a green CI run for the exact tagged commit, these budgets are
 release-gating without any further wiring.
 
-The arm64 numbers arrive with the first run of that job; on an x86 development machine the same
-test reports roughly 470 ms cold, 21 ms from cache, a 3.3 ms warm median and 0.9 MiB per instance,
-which is an order of magnitude of headroom rather than a squeak past. **Until that job has run
-green on this commit, the acceptance is instrumented rather than established** - and as of
-2026-09-16 it has not, because every CI job on this repository is aborting in six seconds on a
-GitHub billing block ("recent account payments have failed or your spending limit needs to be
-increased"), which predates this gate and affects the whole workflow. The last green run, and the
-last time the ARM runner actually served this repository, was 2026-09-14.
+The measured figures, from run
+[35182718050](https://github.com/sergeyfarin/veduta/actions/runs/35182718050) on
+`ubuntu-24.04-arm`, four cores, `GOARCH=arm64`:
+
+| Figure | arm64 | Budget | Headroom |
+| --- | --- | --- | --- |
+| Cold compile, empty cache | 244 ms | 5 s (local ceiling) | 20× |
+| Compile from a warm cache | 12 ms | — | — |
+| Warm invocation, median of 18 | 1.765 ms | 50 ms (S1b) | 28× |
+| Warm invocation, worst of 18 | 1.993 ms | — | — |
+| Resident per added instance | 1.0 MiB | 20 MB (S1b) | 20× |
+| Process peak resident | 46.8 MiB | — | — |
+
+So the kill criteria are not close to being tested, which is the answer a spike hopes for: an
+in-process WASM runtime on a Pi-class arm64 host costs about two milliseconds and a megabyte per
+integration. The arm64 runner is in fact *faster* than the x86 development machine these were
+first taken on (244 ms against 470 ms cold, 1.8 ms against 3.3 ms warm), so a slower board would
+have to be an order of magnitude worse than this runner before anything here came under pressure.
+Cold compilation is worth the persistent cache directory: 244 ms down to 12 ms on a restart.
+
+These numbers reached CI only after the repository went public on 2026-09-17. Every job had
+aborted in six seconds since 2026-09-15 on a GitHub billing block, which is why the gate sat
+instrumented but unverified for a day; the block was account-wide and survived the visibility
+change until the payment state cleared, so it was never a minutes-quota problem.
 
 **What is still open is armv7 only.** GitHub has no 32-bit ARM runner, so the images published for
 `linux/arm/v7` carry a WASM runtime whose cost on that architecture is unmeasured - and 32-bit is

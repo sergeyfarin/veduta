@@ -51,7 +51,8 @@ inform is merged. Each ends with a decision recorded in `docs/01-architecture.md
 
 ### S1a — wazero feasibility smoke test · 0.5 d · **early, does not block the demo**
 
-*Outcome: answered for arm64 by a permanent CI gate rather than by a spike on a board - see
+*Outcome: answered for arm64 on 2026-09-17 by a permanent CI gate rather than by a spike on a
+board, with 20-28x headroom on every criterion - see
 [03-backlog.md](03-backlog.md#arm-runtime-performance-is-measured-on-arm64-only). A gate that runs
 on every push is worth more than a one-off measurement anyway, because it is the regression that
 would go unnoticed, not the first number.*
@@ -1345,15 +1346,16 @@ For 0.2, prioritize the independent
 for bounded supplied series and retained signals. This supports rain and energy
 views without making WASM or a general time-series database prerequisites.
 
-**G1 · WASM runtime** · 1.5 d · deps: S1, D2 · **DONE (sandbox; arm64 budgets gated in CI, armv7 unmeasured)**
+**G1 · WASM runtime** · 1.5 d · deps: S1, D2 · **DONE (arm64 budgets met on hardware; armv7 unmeasured)**
 Creates: `internal/integrations/wasm/` (Extism/wazero host, compilation cache, sha256 verification,
 memory/deadline/output limits, instance lifecycle).
 Tests: **the conformance suite from S1, promoted to CI** — no filesystem, no env, no sockets, no
 native HTTP, deadline kill, memory trap, output cap, and a corrupted module rejected before compile.
 Implementation and scope: [S1 / G1 sandbox decision](spikes/s1-wasm-sandbox.md).
-S1a's hardware budgets - cold compile, warm invocation and resident memory - are gated on native
-arm64 by `TestPluginRuntimePiClassBudget` in the `arm-budgets` CI job, against S1b's kill criteria.
-armv7 has no native runner and stays unmeasured; see
+S1a's hardware acceptance is met on native arm64, measured 2026-09-17 by
+`TestPluginRuntimePiClassBudget` in the `arm-budgets` CI job: 244 ms cold compile, 12 ms from a
+warm cache, a 1.765 ms warm-invocation median and 1.0 MiB resident per added instance, against
+S1b's kill criteria of 50 ms and 20 MB. armv7 has no native runner and stays unmeasured; see
 [03-backlog.md](03-backlog.md#arm-runtime-performance-is-measured-on-arm64-only).
 
 **G2 · Host functions** · 0.5 d · deps: G1 · **DONE**

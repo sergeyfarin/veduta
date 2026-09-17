@@ -34,7 +34,10 @@ project is pre-1.0:
   memory per loaded instance read from `/proc`, then asserts the kill criteria the sandbox spike
   set before any of it was built: 50 ms per warm invocation, 20 MB resident per instance. These
   figures were the one piece of the WASM runtime's acceptance that cross-compilation could not
-  supply. 32-bit `linux/arm/v7` stays unmeasured; GitHub has no native runner for it.
+  supply. First measured on 2026-09-17: 244 ms to compile the module from cold, 12 ms from a warm
+  cache, a 1.765 ms warm-invocation median and 1.0 MiB resident per added instance — 20 to 28 times
+  inside the criteria, so a Pi-class arm64 host runs an integration for about two milliseconds and
+  a megabyte. 32-bit `linux/arm/v7` stays unmeasured; GitHub has no native runner for it.
 
 - `veduta import homepage` now maps Homepage's `homeassistant` and `proxmox` widgets onto real
   integrations instead of importing them as link-only cards. Home Assistant's Homepage key is its
