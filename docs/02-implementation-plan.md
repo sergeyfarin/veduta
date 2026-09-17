@@ -449,7 +449,7 @@ local JPEGs, exercising all 9 block types and all 5 execution states), `internal
 against its card, not just decodes), the `--fixtures` dev flag on `veduta serve`
 (`internal/api/fixtures.go`: `GET /dashboard`, `/cards`, `/cards/{id}`, `/assets/{token}`, gated
 entirely behind `Config.Fixtures` so the surface does not exist at all in a normal binary),
-`web/playwright.config.ts` + `web/tests/visual.spec.ts` (`@playwright/test` pinned to 1.62.1,
+`web/playwright.config.ts` + `web/tests/visual.spec.ts` (`@playwright/test` pinned to 1.62.1 then,
 matching the borrowed engine used for verification since B1), and the checked-in baselines under
 `web/tests/visual.spec.ts-snapshots/`.
 
@@ -496,7 +496,7 @@ few shades off from font hinting alone. This is precisely what C14 means by "one
 environment" - a dev VM's system fonts were never a controlled artefact, and pinning only the
 browser was not enough. The fix has two parts. First, both generating and CI-verifying the
 baselines now use the exact same reproducible environment - the official
-`mcr.microsoft.com/playwright:v1.62.1-noble` image, matching `@playwright/test`'s pinned version
+`mcr.microsoft.com/playwright:v1.63.0-noble` image, matching `@playwright/test`'s pinned version
 - rather than a bare `ubuntu-latest` runner or this dev VM; `.github/workflows/ci.yml`'s `visual`
 job runs inside that image via `container:`. Second, even *that* is not perfectly bit-reproducible
 across separate cold containers: two runs inside the *same* running container were byte-identical,

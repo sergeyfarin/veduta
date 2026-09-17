@@ -138,9 +138,10 @@ jobs:
     # showed a real ~1% pixel difference against baselines generated on a different Ubuntu box,
     # from font rendering alone, with the identical browser build. The baselines under
     # web/tests/visual.spec.ts-snapshots/ were generated and re-verified inside this exact image
-    # (`docker run mcr.microsoft.com/playwright:v1.62.1-noble`) precisely so CI reproduces that,
-    # not some other machine's fonts.
-    container: mcr.microsoft.com/playwright:v1.62.1-noble
+    # (`docker run mcr.microsoft.com/playwright:v1.63.0-noble`) precisely so CI reproduces that,
+    # not some other machine's fonts. TestPlaywrightImageMatchesPackage keeps the tag and the
+    # package version together; they drifted once and CI was the only thing that noticed.
+    container: mcr.microsoft.com/playwright:v1.63.0-noble
     steps:
       - uses: actions/checkout@v5
       - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"

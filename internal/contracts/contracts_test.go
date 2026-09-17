@@ -501,3 +501,42 @@ func TestShippedManifestsAreStagedForRelease(t *testing.T) {
 		}
 	}
 }
+
+// TestPlaywrightImageMatchesPackage keeps CI's Playwright container tag and web/package.json's
+// @playwright/test version identical. The visual baselines are only meaningful inside the image
+// they were generated in, so the workflow pins that image - and a routine dependency sweep bumped
+// the package to 1.63.0 while leaving the image at v1.62.1, which made every visual test fail on a
+// missing browser build (the image ships the browsers its own release expects, and nothing else).
+// Three documents restate the rule in prose; none of them could enforce it.
+func TestPlaywrightImageMatchesPackage(t *testing.T) {
+	root := repoRoot(t)
+	manifest := loadJSON(t, filepath.Join(root, "web", "package.json"))
+	document, ok := manifest.(map[string]any)
+	if !ok {
+		t.Fatal("web/package.json is not an object")
+	}
+	dev, ok := document["devDependencies"].(map[string]any)
+	if !ok {
+		t.Fatal("web/package.json has no devDependencies")
+	}
+	version, ok := dev["@playwright/test"].(string)
+	if !ok || version == "" {
+		t.Fatal("web/package.json does not pin @playwright/test")
+	}
+	// save-exact=true in .npmrc, so a range here is itself the bug: the image can only be pinned
+	// against an exact version.
+	if strings.ContainsAny(version, "^~<>= ") {
+		t.Fatalf("@playwright/test must be an exact version, got %q", version)
+	}
+	workflow, err := os.ReadFile(filepath.Join(root, ".github", "workflows", "ci.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "container: mcr.microsoft.com/playwright:v" + version + "-noble"
+	if !strings.Contains(string(workflow), want) {
+		t.Errorf("ci.yml must run the visual suite in %q\n"+
+			"web/package.json pins @playwright/test %s; regenerate the baselines in the new image "+
+			"if its browser build moves the pixels (docs/dev-environment.md has the command)",
+			want, version)
+	}
+}

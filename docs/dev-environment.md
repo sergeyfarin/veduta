@@ -20,8 +20,9 @@ per-project-server-and-data-dir isolation, the `PLAYWRIGHT_PROJECT` env switch f
 engine locally vs. the full matrix in CI, and building the frontend before the suite runs rather
 than testing whatever was last on disk. Don't re-derive those from scratch; adapt them.
 
-**Update (B5): Veduta now depends on Playwright itself** (`@playwright/test` 1.62.1, pinned to
-match the sibling project's already-cached engine, so nothing new had to download here) —
+**Update (B5): Veduta now depends on Playwright itself** (`@playwright/test` 1.63.0; B5 pinned
+1.62.1 to match the sibling project's already-cached engine, and a later dependency sweep moved
+it) —
 `web/playwright.config.ts` and `web/tests/visual.spec.ts` are the real visual regression suite,
 run with `pnpm --filter veduta-web test:e2e` against `veduta serve --fixtures`. The borrowed,
 sibling-cached engine described above is still the right tool for a one-off ad hoc check outside
@@ -35,7 +36,7 @@ on first push. Do it inside the exact image CI uses instead:
 
 ```bash
 docker run --rm -v "$(pwd)":/work -w /work -e CI=true \
-  mcr.microsoft.com/playwright:v1.62.1-noble bash -c '
+  mcr.microsoft.com/playwright:v1.63.0-noble bash -c '
     git config --global --add safe.directory /work
     curl -sSL https://go.dev/dl/go1.27.0.linux-amd64.tar.gz -o /tmp/go.tgz
     tar -C /usr/local -xzf /tmp/go.tgz
@@ -44,7 +45,10 @@ docker run --rm -v "$(pwd)":/work -w /work -e CI=true \
     cd web && pnpm exec playwright test --update-snapshots'
 ```
 
-Match the image tag to `web/package.json`'s `@playwright/test` version whenever that gets bumped.
+Match the image tag to `web/package.json`'s `@playwright/test` version whenever that gets bumped -
+`TestPlaywrightImageMatchesPackage` in `internal/contracts` fails if they drift, because they did:
+a dependency sweep took the package to 1.63.0 and left CI's image at 1.62.1, and every visual test
+then failed on a missing browser build rather than on anything about the pixels.
 `docker run` writes the new PNGs as your own UID (the bind mount inherits host ownership), but any
 stray files pnpm/corepack creates directly under the repo root (a `.pnpm-store/` cache, if `pnpm
 install` runs there instead of inside `web/`) come out root-owned - remove those the same way,
