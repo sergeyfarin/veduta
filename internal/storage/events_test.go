@@ -5,6 +5,7 @@ package storage_test
 import (
 	"context"
 	"encoding/json"
+	"math"
 	"testing"
 
 	"veduta.dev/veduta/internal/storage"
@@ -45,5 +46,24 @@ func TestAppendEventRejectsInvalidJSON(t *testing.T) {
 	err = store.AppendEvent(context.Background(), storage.Event{Type: "plugin.notice", Severity: "info", Data: json.RawMessage(`{`)})
 	if err == nil {
 		t.Fatal("invalid event JSON was accepted")
+	}
+}
+
+func TestRecentEventsBoundsUntrustedLimit(t *testing.T) {
+	store, err := storage.Open(context.Background(), t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = store.Close() }()
+	if err = store.AppendEvent(context.Background(), storage.Event{Type: "test", Severity: "info"}); err != nil {
+		t.Fatal(err)
+	}
+
+	events, err := store.RecentEvents(context.Background(), math.MaxInt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("events=%d want=1", len(events))
 	}
 }

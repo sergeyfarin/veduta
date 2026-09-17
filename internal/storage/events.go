@@ -22,6 +22,11 @@ type Event struct {
 	Data      json.RawMessage `json:"data,omitempty"`
 }
 
+const (
+	defaultRecentEventsLimit = 100
+	maxRecentEventsLimit     = 200
+)
+
 // AppendEvent stores a bounded structured event.
 func (s *Store) AppendEvent(ctx context.Context, event Event) error {
 	if err := validateEvent(&event); err != nil {
@@ -57,15 +62,18 @@ func appendEventTx(ctx context.Context, tx *sql.Tx, event Event) error {
 
 // RecentEvents returns newest-first events with a server-side maximum.
 func (s *Store) RecentEvents(ctx context.Context, limit int) ([]Event, error) {
-	if limit <= 0 || limit > 200 {
-		limit = 100
+	if limit <= 0 || limit > maxRecentEventsLimit {
+		limit = defaultRecentEventsLimit
 	}
 	rows, err := s.db.QueryContext(ctx, `SELECT id,ts,type,severity,coalesce(source,''),coalesce(card_id,''),coalesce(message,''),coalesce(data,'') FROM events ORDER BY id DESC LIMIT ?`, limit)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = rows.Close() }()
-	out := make([]Event, 0, limit)
+	// Do not use the caller-controlled limit as an allocation size. The query is bounded above,
+	// and at most 200 incremental appends are insignificant compared with accepting a tainted
+	// capacity here (or relying on every future caller to validate it first).
+	out := make([]Event, 0)
 	for rows.Next() {
 		var event Event
 		var data []byte
