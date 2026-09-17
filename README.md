@@ -52,6 +52,7 @@ Detailed engineering progress and remaining work live outside this README:
 - [Design research and product scope](docs/00-review-and-prior-art.md)
 - [Product rationale and dashboard comparison](docs/why-veduta.md)
 - [Theming and visual-customisation decision](docs/decisions/0002-theming-and-visual-customisation.md)
+- [Why cards are not extensible with JS, CSS, Mermaid or Adaptive Cards](docs/decisions/0004-card-expressiveness-and-the-presentation-contract.md)
 
 ## Development preview
 

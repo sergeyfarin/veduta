@@ -34,6 +34,7 @@ priority (which milestone should absorb it, or "before X" for a hard blocker).
 | [ARM runtime performance is measured on arm64 only](#arm-runtime-performance-is-measured-on-arm64-only) | Plugins | armv7 deferred |
 | [No native visualisation block for retained history](#no-native-visualisation-block-for-retained-history) | Frontend | 0.2 |
 | [Markdown has no authoring syntax for structure](#markdown-is-prose-only-with-no-authoring-syntax-for-structure) | Frontend | Deferred |
+| [Release artefacts disagree about the `v` prefix](#release-artefacts-disagree-about-the-v-prefix) | Packaging | Low; not before the alpha |
 
 ---
 
@@ -441,7 +442,11 @@ inserting it, which needs either `{@html}` (failed in CI by
 [no_html_directive_test.go](../internal/contracts/no_html_directive_test.go)) or the sandboxed
 iframe block already considered and rejected under
 [should there be a frontend plugin surface at all?](#open-question-should-there-be-a-frontend-plugin-surface-at-all).
-Recording that here so the comparison is not re-derived the next time someone asks about Mermaid.
+Recording that here so the comparison is not re-derived the next time someone asks about
+Mermaid - and it is now settled in
+[decision 0004](decisions/0004-card-expressiveness-and-the-presentation-contract.md), which
+keeps the Widget Document closed and takes the native block as the one thing worth adopting
+from the proposal that raised this.
 
 **The README half is closed, 2026-09-16.** The opening sentence sold Veduta as showing "photos,
 posters, camera frames, charts - not just numbers" three lines above a caveat scrupulous about
@@ -494,4 +499,30 @@ server-side before a document is published, so a second expression evaluator in 
 add a sandbox to maintain for a problem `expr` already solves in Go, in the better place.
 
 Deferred with no work planned. The trigger to revisit is a concrete authoring request that the
-current card types cannot express, not the general appeal of the idea.
+current card types cannot express, not the general appeal of the idea - recorded as a revisit
+condition on [decision 0004](decisions/0004-card-expressiveness-and-the-presentation-contract.md),
+which also records why the binding layer such proposals arrive with is not wanted.
+
+### Release artefacts disagree about the `v` prefix
+
+Noticed 2026-09-17 while confirming that `release.yml` would treat an `-alpha.1` tag as a
+prerelease. It does, and nothing here affects that - this is cosmetic, and recorded only so it is
+not mistaken for a packaging fault the first time someone compares a download with an image.
+
+On a tag push the workflow sets `version="${GITHUB_REF_NAME}"`, so the tag is used whole, `v` and
+all. That string reaches `internal/version.Version` through `-ldflags` and names the archives, so
+`veduta version` reports `v0.1.0-alpha.1` and the download is
+`veduta-v0.1.0-alpha.1-linux-amd64.tar.gz`. The image tag comes from `docker/metadata-action`'s
+`type=semver` instead, which strips the prefix, so the same build publishes
+`ghcr.io/…:0.1.0-alpha.1`. The release notes are already correct about this - they interpolate
+`${GITHUB_REF_NAME#v}` for the image line specifically - which is itself the evidence that the
+inconsistency was worked around rather than resolved.
+
+Either convention is defensible; carrying both is what makes a checksum file and a registry
+listing look like they came from different builds. Stripping the prefix once at the "Resolve
+version" step is the smaller change, and would make `veduta version` agree with the image tag and
+with the changelog heading. It also touches every archive name, so it wants doing between
+releases rather than during one.
+
+Priority: low, and deliberately not before the first alpha - changing artefact names while cutting
+the release that first establishes them is the wrong moment.

@@ -53,9 +53,12 @@ project is pre-1.0:
   `hack/stage-plugins.sh` — a manifest missing from that allowlist ships in no release archive and
   no container image, and nothing previously noticed.
 
-## 0.1.0 — planned alpha
+## 0.1.0-alpha.1 — planned
 
-Planned first public alpha. Veduta is a self-hosted dashboard for a home or homelab that shows rich
+Planned first public alpha, and deliberately a prerelease: the tag carries an `-alpha.1`
+identifier, so the GitHub release is marked pre-release and the container image publishes only as
+`ghcr.io/sergeyfarin/veduta:0.1.0-alpha.1` — `latest` and `0.1` are left untouched for a release
+that earns them. Veduta is a self-hosted dashboard for a home or homelab that shows rich
 content — photos, posters, container and host state — queries services through a
 credential boundary the integrations never see past, and notifies when something needs attention.
 Action controls are present but remain disabled; execution is not implemented in this alpha.

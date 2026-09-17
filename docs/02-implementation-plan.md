@@ -1610,13 +1610,59 @@ public alpha review is complete.
 
 Before the first alpha:
 
-1. Reconcile the public documentation and release metadata with the explicitly pre-alpha status.
-2. Run the complete checks from a clean checkout and exercise the proposed archive and container
-   paths on the supported targets.
-3. Triage the open backlog and classify any alpha blockers rather than implying that all remaining
-   items are post-release work.
-4. Choose the alpha version and tag only after that review. The tag-triggered workflow will then
-   publish the GHCR image, archives, checksums, provenance, SBOM, and GitHub release.
+The intent is a **quiet alpha**: published so it can be installed and run for real, deliberately
+not announced or advertised, and shaped so that nothing about it claims more maturity than it has.
+"Quiet" cannot mean private now that the repository is public - it means prereleased, unadvertised,
+and never occupying the tags that a stable release would.
+
+1. **Reconcile the public documentation and release metadata with the pre-alpha status.**
+   **Done, 2026-09-17.** The README leads with a pre-alpha warning and no longer claims charts or
+   executable actions; `docs/why-veduta.md` states the maturity caveat against the established
+   alternatives; the example config and fixtures name roles and placeholder hosts rather than a
+   real LAN; a security policy is published; action blocks are documented as display-only in the
+   README, the changelog and the backlog.
+
+2. **Run the complete checks from a clean checkout, and exercise the archive and container paths.**
+   **Outstanding, and the only build work left.** Two things, in order: `mise run check` from a
+   fresh clone of the commit to be tagged, proving the gate passes without anything this working
+   tree happens to carry; and a `workflow_dispatch` run of `release.yml` with `dry_run: true` on
+   that same commit, which builds all four archives, verifies each against
+   `hack/stage-plugins.sh --list`, runs the shipped binary to confirm it reports the version it
+   claims, digests every shipped manifest, validates every shipped module, and builds all three
+   Linux image platforms - publishing none of it. The dry run was last exercised at L4; it has not
+   been run against the current commit.
+
+3. **Triage the open backlog into alpha blockers and post-alpha work.**
+   **Done, 2026-09-17: no open item in [docs/03-backlog.md](03-backlog.md) blocks the alpha.**
+   The three that could plausibly have:
+   - *Action execution is not implemented.* Not a blocker **because** the controls render disabled
+     and every document now says so. It would become one the moment anything claimed otherwise.
+   - *The approval API has no client.* Not a blocker for an alpha whose operator has shell access;
+     `veduta integration approve` is the supported path and is the one the security model is most
+     defensible at. The decision of whether 0.1 proper ships a read-only integrations view stays
+     open, and is not needed here.
+   - *ARM runtime performance.* Resolved for arm64 on 2026-09-17 with an order of magnitude of
+     headroom, and release-gated by the workflow's CI check. 32-bit `linux/arm/v7` images ship
+     unmeasured, because GitHub has no native runner for them; that is a disclosure for the release
+     notes, not a blocker.
+
+4. **Tag `v0.1.0-alpha.1`.** The version carries a prerelease identifier deliberately, and
+   `release.yml` already treats it correctly on every axis that decides how loud a release is -
+   verified against the workflow as written, with no changes needed:
+   - The GitHub release is created with `--prerelease`, from the `*-*` case on the tag name.
+   - `:latest` is **not** moved: its `type=raw` entry is gated on `!contains(github.ref_name, '-')`.
+   - `0.1` is not created either - `docker/metadata-action` skips the `{{major}}.{{minor}}` pattern
+     for prerelease versions - so the only image tag published is `ghcr.io/…:0.1.0-alpha.1`.
+   - The gate job still requires a green CI run for that exact commit, so step 2's dry run does not
+     substitute for CI having passed on the tagged commit.
+
+   **Tagging `v0.1.0` instead would do the opposite of all of this**: no prerelease flag, `:latest`
+   moved to it, and a `0.1` tag created. The distinction lives entirely in the tag string, which is
+   why `CHANGELOG.md`'s section is titled `0.1.0-alpha.1` rather than `0.1.0` - the heading is what
+   the release notes link to, and it should not invite the tag that makes the release loud.
+
+   Then: push the tag, and let the workflow publish the archives, checksums, GHCR image, provenance,
+   SBOM and GitHub release.
 
 ---
 
