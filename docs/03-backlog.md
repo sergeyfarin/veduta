@@ -36,6 +36,7 @@ priority (which milestone should absorb it, or "before X" for a hard blocker).
 | [Markdown has no authoring syntax for structure](#markdown-is-prose-only-with-no-authoring-syntax-for-structure) | Frontend | Deferred |
 | [Release artefacts disagree about the `v` prefix](#release-artefacts-disagree-about-the-v-prefix) | Packaging | Low; not before the alpha |
 | [Release workflow's Docker actions target Node 20](#the-release-workflows-docker-actions-still-target-node-20) | Packaging | Low; recheck before each tag |
+| [Release assets uploaded all-or-nothing with the release](#the-release-job-created-its-assets-and-its-release-in-one-all-or-nothing-call) | Packaging | Retry fixed; check low |
 
 ---
 
@@ -542,3 +543,33 @@ upstream ships Node 24 releases, and the cost of being early is nil.
 
 Priority: low, but check it before each tag rather than only when it breaks. Not a blocker for the
 first release - the forced Node 24 run is GitHub's own compatibility path, and it works today.
+
+### The release job created its assets and its release in one all-or-nothing call
+
+Found by it happening, while cutting v0.1.0 on 2026-09-17. `gh release create "$TAG" dist/*` uploads
+the assets as part of creating the release, and `uploads.github.com` returned HTTP 500 twice in a
+row - once on `veduta-v0.1.0-darwin-arm64.tar.gz`, once on `SHA256SUMS` after a rerun. Each failure
+took the whole step down, and `gh` removed the release it had just created, so the end state both
+times was a pushed tag and a correctly published container image with no GitHub release and no
+downloads.
+
+That state is worse than a plain failure. The tag is not re-cuttable without deleting it, the
+images are already published under it, and the recovery is improvised by hand at the one moment
+nobody wants to improvise: downloading the run's artifact, verifying the checksums locally, creating
+the release, and uploading each asset separately. It worked, and it should never have been
+necessary.
+
+**Fixed in the same change that recorded this.** The release is now created empty - which makes it
+durable - and each asset is uploaded afterwards in its own retried loop, five attempts with a
+growing pause and `--clobber` so an attempt that landed before reporting failure replaces its own
+asset rather than colliding with it. A transient upload error is now a retry instead of a rollback.
+
+Two things this does not fix, left deliberately. A genuinely sustained outage still fails the job,
+which is correct - it should - but it now fails with a release present and some assets attached, so
+the recovery is `gh release upload` rather than reconstructing everything. And nothing verifies
+after the fact that the published asset list matches what the build produced; the archive contents
+are checked thoroughly inside the binaries job, but "did all five files actually arrive" is
+currently proven by reading the release page.
+
+Priority: the retry is done. The post-upload completeness check is low, and worth folding into
+whatever next touches this job.

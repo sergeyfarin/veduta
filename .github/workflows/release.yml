@@ -260,11 +260,26 @@ jobs:
             *-*)  prerelease="--prerelease" ;;
             v0.*) prerelease="--prerelease" ;;
           esac
-          gh release create "$GITHUB_REF_NAME" dist/* \
+          # The release is created EMPTY and the assets are uploaded afterwards, with retries,
+          # because `gh release create` with assets is all-or-nothing against an upload endpoint
+          # that is not reliable. Cutting v0.1.0 hit HTTP 500 from uploads.github.com twice in a
+          # row on different assets; each time gh deleted the release it had just made, leaving a
+          # pushed tag and published images with no release attached - a state that needs manual
+          # recovery at exactly the moment nobody wants to improvise. Creating the release first
+          # makes it durable, and an asset that fails is then a retry rather than a rollback.
+          latest_note="\`latest\` is deliberately not published: this is a pre-1.0 release, so an install has to name the version it wants."
+          case "$GITHUB_REF_NAME" in
+            v0.*|*-*) ;;
+            *) latest_note="" ;;
+          esac
+
+          gh release create "$GITHUB_REF_NAME" \
             --title "$GITHUB_REF_NAME" \
             --notes "See [CHANGELOG.md](https://github.com/${GITHUB_REPOSITORY}/blob/${GITHUB_REF_NAME}/CHANGELOG.md).
 
           Container image: \`ghcr.io/${GITHUB_REPOSITORY}:${GITHUB_REF_NAME#v}\`
+
+          ${latest_note}
 
           Verify a download against \`SHA256SUMS\`:
 
@@ -275,3 +290,20 @@ jobs:
           **The plugin ABI is experimental and will change between releases.** Third-party WASM
           plugins must be rebuilt and re-approved on upgrade." \
             $prerelease
+
+          # Five attempts with a growing pause. --clobber so a retry that actually landed before
+          # reporting failure replaces its own asset instead of erroring on the duplicate.
+          for asset in dist/*; do
+            for attempt in 1 2 3 4 5; do
+              if gh release upload "$GITHUB_REF_NAME" "$asset" --clobber; then
+                echo "uploaded $(basename "$asset")"
+                break
+              fi
+              if [ "$attempt" = 5 ]; then
+                echo "::error::failed to upload $(basename "$asset") after 5 attempts"
+                exit 1
+              fi
+              echo "::warning::upload of $(basename "$asset") failed, attempt ${attempt}; retrying"
+              sleep $(( attempt * 5 ))
+            done
+          done
