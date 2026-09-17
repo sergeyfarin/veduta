@@ -196,6 +196,15 @@ jobs:
         id: meta
         with:
           images: ghcr.io/${{ github.repository }}
+          # latest=false disables this action's OWN automatic :latest, which it adds for any
+          # non-prerelease semver tag independently of the tags: list below. Without this line the
+          # explicit type=raw entry is not the only thing that can publish :latest, and the two
+          # disagree for exactly the tags that matter: v0.1.0 is valid, non-prerelease semver, so
+          # the automatic rule fired and moved :latest to a 0.x release that the raw entry had
+          # deliberately withheld it from. Found by reading the registry after v0.1.0, not by
+          # reading the workflow - the old hyphenated-tag scheme had both mechanisms agreeing by
+          # coincidence, which is why it never showed. :latest now has exactly one source.
+          flavor: latest=false
           # :latest names the newest STABLE release, and nothing else may move it - not a dispatch
           # run, not a prerelease tag, and not a pre-1.0 tag. The last of those is the point worth
           # stating: semver says 0.x carries no stability promise at all, so a 0.x build has not
