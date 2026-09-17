@@ -8,7 +8,7 @@ integrations:
     version: 0.3.0
     runtime: declarative
     approvedAt: "2026-09-16T00:00:00Z"
-    approvedBy: codex
+    approvedBy: admin
     capabilities: [http, assets]
     effectiveLimits:
       cacheBytesKB: 256
@@ -40,7 +40,7 @@ integrations:
     version: 1.0.0
     runtime: wasm
     approvedAt: "2026-09-09T20:09:58Z"
-    approvedBy: sergey
+    approvedBy: admin
     capabilities: [http, assets]
     effectiveLimits:
       cacheBytesKB: 256
@@ -69,7 +69,7 @@ integrations:
     version: 0.1.0
     runtime: declarative
     approvedAt: "2026-09-09T00:19:38Z"
-    approvedBy: codex
+    approvedBy: admin
     capabilities: [http]
     effectiveLimits:
       cacheBytesKB: 256

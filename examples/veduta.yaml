@@ -11,7 +11,7 @@ auth:
   #   trustedProxies: [192.168.1.0/24]   # exactly the proxy's range, never the whole LAN
   #   userHeader: Remote-User
   admin:
-    username: sergey
+    username: admin
     passwordHash: ${secret:VEDUTA_ADMIN_HASH}
 
 dashboard:
