@@ -8,7 +8,7 @@ server:
 auth:
   mode: password                     # password | forward | none
   # forward:
-  #   trustedProxies: [10.81.0.0/16]
+  #   trustedProxies: [192.168.1.0/24]   # exactly the proxy's range, never the whole LAN
   #   userHeader: Remote-User
   admin:
     username: sergey
@@ -57,7 +57,7 @@ connections:
 
   coding-server:
     kind: http                       # Glances running on the host — no SSH, no keys held here
-    baseUrl: http://10.81.1.12:61208
+    baseUrl: http://glances.lan:61208
 
   docker-local:
     kind: docker
