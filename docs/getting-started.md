@@ -1,6 +1,12 @@
-# Getting started
+# Pre-release development and evaluation
 
-Veduta runs as one Go binary with an embedded web application. Go 1.27, Node 24, and pnpm 11 are pinned in [`mise.toml`](../mise.toml).
+> [!WARNING]
+> Veduta is pre-alpha. No supported release or installation path exists yet, and the first public
+> alpha is still being prepared. The instructions below are for contributors and evaluators using
+> a source checkout; do not rely on them for a production dashboard. Configuration, storage,
+> packaging, and extension interfaces may change without a migration path.
+
+Veduta runs as one Go binary with an embedded web application. Go 1.27, Node 24, and pnpm 12 are pinned in [`mise.toml`](../mise.toml).
 
 Install the toolchain and build the binary from a source checkout:
 
@@ -10,9 +16,10 @@ pnpm install
 pnpm build
 ```
 
-## Installing from a release archive
+## Planned release archive layout
 
-Each archive is relocatable: unpack it anywhere and run it from there.
+No release archive has been published. The current packaging work produces the following proposed,
+relocatable layout for release testing:
 
 ```
 veduta-<version>-<target>/
@@ -39,7 +46,7 @@ integrations:
     source: path:./plugins/immich
 ```
 
-For a system installation, the recommended layout matches the container image:
+The proposed system layout matches the development container image:
 
 | | |
 | --- | --- |

@@ -1575,8 +1575,10 @@ Live S2 validation cleared 2026-09-09: Immich confirmed, E3 cold-latency AC met,
 manifest/plugin rewritten to Approach A (single sorted `GET /Items`, module rebuilt and
 re-approved) after the live pass showed `/Users/Me` is unusable with an API key.
 
-**DONE 2026-09-10, except cutting the tag** — every deliverable is built and verified; pushing
-`v0.1.0` is deliberately left to a human, since publishing is a decision rather than a build step.
+**IMPLEMENTATION COMPLETE; ALPHA RELEASE PREPARATION IN PROGRESS.** The packaging deliverables
+below have been built and exercised during development, but that is not the same as a supported
+release. Veduta remains pre-alpha and should not be presented as ready to install until the first
+public alpha review is complete.
 
 - **Generated `THIRD-PARTY-NOTICES.md`.** Built from what is actually shipped, not from what the
   manifests declare — that distinction was not cosmetic: `web/package.json` lists only
@@ -1606,8 +1608,15 @@ re-approved) after the live pass showed `/Users/Me` is unusable with an API key.
   `TRADEMARK.md` is permissive about naming and explicit that Simple Icons' CC0 waives copyright
   but not trademark.
 
-To release: push a `v0.1.0` tag. The workflow publishes the GHCR image (with provenance and SBOM),
-uploads the archives and `SHA256SUMS`, and creates the GitHub release.
+Before the first alpha:
+
+1. Reconcile the public documentation and release metadata with the explicitly pre-alpha status.
+2. Run the complete checks from a clean checkout and exercise the proposed archive and container
+   paths on the supported targets.
+3. Triage the open backlog and classify any alpha blockers rather than implying that all remaining
+   items are post-release work.
+4. Choose the alpha version and tag only after that review. The tag-triggered workflow will then
+   publish the GHCR image, archives, checksums, provenance, SBOM, and GitHub release.
 
 ---
 

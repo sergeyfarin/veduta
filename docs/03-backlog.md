@@ -19,6 +19,7 @@ priority (which milestone should absorb it, or "before X" for a hard blocker).
 | [Does WASM add enough value to justify further development?](#does-wasm-add-enough-value-to-justify-further-development) | Integrations | Parked; review after 0.1 |
 | [Should there be a frontend plugin surface at all?](#open-question-should-there-be-a-frontend-plugin-surface-at-all) | Frontend | Open decision |
 | [The approval API has no client](#the-approval-api-has-no-client) | Frontend | Open decision |
+| [Action execution is not implemented](#action-execution-is-not-implemented) | Product/security | Design before implementation |
 | [Appearance options are deferred until asked for](#appearance-options-are-deferred-until-asked-for) | Frontend | On demand |
 | [The visual baseline's per-pixel threshold hides whole-area changes](#the-visual-baselines-per-pixel-threshold-hides-whole-area-changes) | Frontend | Low-medium |
 | [Asset format coverage is narrower than the allowlist](#asset-format-coverage-is-narrower-than-the-architectures-final-allowlist) | Assets | 0.2 transform milestone |
@@ -158,6 +159,23 @@ Priority: open decision. The question is whether 0.1 ships a read-only integrati
 makes the state visible, leaves approval at the CLI where the security model is most defensible),
 the full approve flow, or nothing - and whether a settings entry point in the header is wanted at
 all before there is more than one thing behind it.
+
+### Action execution is not implemented
+
+The Widget Document can describe action controls, but the frontend intentionally renders every
+one disabled. There is no end-to-end action endpoint or execution flow. Earlier README and
+changelog language described Veduta as performing approved actions, which turned a product
+direction into a claim about current behaviour.
+
+Do not enable the controls by wiring them directly to an integration operation. The design must
+first specify authentication and authorisation at execution time, approval binding, replay and
+cross-site request protections, user confirmation for consequential operations, bounded request
+inputs, failure reporting, and a persistent audit trail. It must also define which actions belong
+in a home dashboard at all.
+
+Priority: design before implementation; not part of the first alpha unless it is separately
+scoped, reviewed, and release-gated. Until then, documentation must describe action blocks as
+display-only.
 
 ### Appearance options are deferred until asked for
 

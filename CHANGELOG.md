@@ -11,7 +11,7 @@ project is pre-1.0:
 > pinned in `veduta.lock.yaml`, so an incompatible plugin fails closed rather than misbehaving;
 > expect to rebuild and re-approve third-party plugins when upgrading.
 
-## [Unreleased]
+## Unreleased
 
 ### Added
 
@@ -53,12 +53,12 @@ project is pre-1.0:
   `hack/stage-plugins.sh` — a manifest missing from that allowlist ships in no release archive and
   no container image, and nothing previously noticed.
 
-## [0.1.0] — unreleased
+## 0.1.0 — planned alpha
 
-First public release. Veduta is a self-hosted dashboard for a home or homelab that shows rich
+Planned first public alpha. Veduta is a self-hosted dashboard for a home or homelab that shows rich
 content — photos, posters, container and host state — queries services through a
-credential boundary the integrations never see past, performs a small set of explicitly approved
-actions, and notifies when something needs attention.
+credential boundary the integrations never see past, and notifies when something needs attention.
+Action controls are present but remain disabled; execution is not implemented in this alpha.
 
 ### Added
 
@@ -182,6 +182,3 @@ actions, and notifies when something needs attention.
   landed. Nothing in that open list is a known defect in a shipped path: the two that were - a
   Widget Document check that existed but was never called, and a live-update slot that leaked when
   a slow stream was dropped - are fixed in this release.
-
-[Unreleased]: https://github.com/sergeyfarin/veduta/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/sergeyfarin/veduta/releases/tag/v0.1.0
