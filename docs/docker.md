@@ -3,10 +3,15 @@
 Two unrelated things share this page: **running Veduta as a container**, and **reading container
 state from a Docker host** as a dashboard card.
 
+The [README quick start](../README.md#quick-start) is the short version — three steps, and a
+compose file you can copy out of it. This page explains what those steps chose and how to extend
+them. [`compose.yaml`](../compose.yaml) in the repository root is that same deployment plus the
+Docker socket proxy described at the bottom of this page.
+
 ## Running Veduta
 
 Images are published to GitHub Container Registry for `linux/amd64`, `linux/arm64` and
-`linux/arm/v7`:
+`linux/arm/v7`. `latest` is deliberately not published before 1.0, so name the version:
 
 ```sh
 docker pull ghcr.io/sergeyfarin/veduta:0.1.0
@@ -14,48 +19,6 @@ docker pull ghcr.io/sergeyfarin/veduta:0.1.0
 
 The image is [distroless](https://github.com/GoogleContainerTools/distroless): no shell, no
 package manager, and the binary is the only executable in it. It runs as uid `65532` (`nonroot`).
-
-[`compose.yaml`](../compose.yaml) in the repository root is a complete deployment rather than a
-fragment to adapt. It is the file this page describes, and the one the project tests, so the
-sections below explain its choices instead of restating them.
-
-```sh
-mkdir -p config secrets
-docker run --rm -i ghcr.io/sergeyfarin/veduta:0.1.0 auth hash > secrets/admin-hash
-#   ...type the password, then press Ctrl-D
-$EDITOR config/veduta.yaml      # the two settings below are both mandatory
-docker compose up -d
-```
-
-Add `--profile docker` to that last command to bring up the socket proxy as well; see
-[Docker connection](#docker-connection).
-
-### Producing the password hash
-
-`auth.admin.passwordHash` is an Argon2id PHC string, never a password. `veduta auth hash` reads the
-password from stdin — never from an argument, which would put it in shell history and in every
-other user's `ps` — and writes the verifier to stdout:
-
-```sh
-docker run --rm -i ghcr.io/sergeyfarin/veduta:0.1.0 auth hash > secrets/admin-hash
-```
-
-Terminal input is echoed. To keep the password off the screen, or to script it:
-
-```sh
-read -rs -p 'Password: ' pw && printf %s "$pw" | \
-  docker run --rm -i ghcr.io/sergeyfarin/veduta:0.1.0 auth hash > secrets/admin-hash
-```
-
-The cost defaults to RFC 9106's second recommended configuration — 64 MiB, three passes, four
-lanes — and `--memory`, `--iterations` and `--parallelism` adjust it within the range the login
-path is willing to verify. Verification reads the cost from the hash itself, so raising it later
-re-costs new passwords without invalidating the one you have.
-
-`compose.yaml` passes that file as a Docker secret, which Compose mounts at
-`/run/secrets/VEDUTA_ADMIN_HASH`; Veduta resolves `${secret:NAME}` from `/run/secrets` before it
-looks at the environment. Prefer this to an environment variable: `docker inspect` reveals a
-container's environment to anyone who can reach the daemon.
 
 ### Two settings the container will not start without
 
@@ -69,28 +32,88 @@ server:
   dataDir: /data
 ```
 
-**Configure authentication.** Veduta *refuses to start* on a non-loopback address until it is,
-and a container binding `0.0.0.0` is squarely that case. This is deliberate: from Phase D onward
-the dashboard holds real service credentials, so a misconfiguration that would have exposed them
-fails loudly instead of quietly working.
+**Configure authentication.** Veduta *refuses to start* on a non-loopback address until it is, and
+a container binding `0.0.0.0` is squarely that case. This is deliberate: from Phase D onward the
+dashboard holds real service credentials, so a misconfiguration that would have exposed them fails
+loudly instead of quietly working.
 
-```yaml
-auth:
-  mode: password
-  admin:
-    username: admin
-    passwordHash: ${secret:VEDUTA_ADMIN_HASH}
-```
+Worth being precise about what that check sees, because it surprises people running containers:
+it inspects the address **Veduta binds**, not the one Docker publishes. It cannot see past the
+container boundary, so it fires even when `ports:` publishes to `127.0.0.1` and nothing off-host
+can reach the service. On a single-user homelab that is the check being conservative rather than
+detecting a real exposure — but as soon as you publish the port to your LAN, it is describing a
+genuine one.
 
 `--i-know-what-im-doing` overrides the refusal. Behind a trusted reverse proxy that terminates
 authentication, prefer `auth.mode: forward` over the override — see the
 [security model](security.md).
 
+### Producing the password hash
+
+`auth.admin.passwordHash` is an Argon2id PHC string, never a password. `veduta auth hash` reads the
+password from stdin — never from an argument, which would put it in shell history and in every
+other user's `ps` — and writes the verifier to stdout and nothing else:
+
+```sh
+docker run --rm -i ghcr.io/sergeyfarin/veduta:0.1.0 auth hash
+```
+
+Terminal input is echoed. To keep the password off the screen, or to script it:
+
+```sh
+read -rs -p 'Password: ' pw && printf %s "$pw" | \
+  docker run --rm -i ghcr.io/sergeyfarin/veduta:0.1.0 auth hash
+```
+
+The cost defaults to RFC 9106's second recommended configuration — 64 MiB, three passes, four
+lanes — and `--memory`, `--iterations` and `--parallelism` adjust it within the range the login
+path is willing to verify. Verification reads the cost from the hash itself, so raising it later
+re-costs new passwords without invalidating the one you have.
+
+The quick start pastes that string straight into `veduta.yaml`. It is a verifier, not a password:
+someone who reads it cannot log in with it, only attack it offline at 64 MiB per guess. The file
+still deserves the permissions you would give any config holding a hash.
+
+### Keeping credentials out of the config file
+
+Real service credentials are a different matter, and `${secret:NAME}` exists for them — an Immich
+API key in plaintext *is* usable by anyone who reads the file. Veduta resolves `${secret:NAME}`
+from `/run/secrets` first and the environment second, which is exactly where Compose mounts a
+Docker secret:
+
+```yaml
+services:
+  veduta:
+    secrets:
+      - IMMICH_KEY
+
+secrets:
+  IMMICH_KEY:
+    file: ./secrets/immich-key
+```
+
+```yaml
+connections:
+  immich:
+    kind: http
+    baseUrl: http://immich:2283
+    auth: { type: header, name: x-api-key, value: "${secret:IMMICH_KEY}" }
+```
+
+One entry per `${secret:NAME}` the configuration uses — each needs its own file and its own line
+in both blocks, or the server refuses to load the configuration and names the reference it could
+not resolve. Prefer a secret file to an environment variable: `docker inspect` reveals a
+container's environment to anyone who can reach the daemon.
+
+The admin hash can move here too, as `${secret:VEDUTA_ADMIN_HASH}`, once you are already
+maintaining secret files for credentials.
+
 ### The two mounts
 
 **`/data` must be writable by uid 65532.** The image ships a `/data` directory already owned by
 that uid, so Docker seeds a named volume mounted there with the same ownership and nothing is
-required of you. A bind mount takes the host directory's ownership instead, and must be prepared:
+required of you — this is why the quick start uses a named volume. A bind mount takes the host
+directory's ownership instead, and must be prepared:
 
 ```sh
 mkdir -p ./data && sudo chown -R 65532:65532 ./data
@@ -100,12 +123,13 @@ mkdir -p ./data && sudo chown -R 65532:65532 ./data
 report the resulting failure as `unable to open database file (out of memory)` — which says nothing
 about permissions. That is why it is in the image.)
 
-**`/config` must be writable too, by uid 65532.** Approving an integration writes
+**`/config` is writable too, and needs preparing only if you approve integrations from the
+dashboard.** A first run with no integrations never touches it. Approving one writes
 `veduta.lock.yaml` into that directory — from `veduta integration approve` and from the
 dashboard's approve button alike — and the write is atomic, so it also creates a temporary file
-beside the target. Dropping `:ro` is not enough: a bind mount keeps the host directory's
-ownership, which is yours, not the container's. Grant the group instead of transferring the
-directory, so that you keep editing `veduta.yaml` without `sudo`:
+beside the target. A bind mount keeps the host directory's ownership, which is yours, not the
+container's. Grant the group rather than transferring the directory, so that you keep editing
+`veduta.yaml` without `sudo`:
 
 ```sh
 sudo chown -R :65532 ./config && sudo chmod -R g+w ./config
@@ -118,12 +142,14 @@ Without it the server starts and serves normally, and only approval fails, with
 `veduta.lock.yaml` itself is written mode `0600` owned by uid 65532, so reading it back on the
 host — to commit it beside `veduta.yaml`, as you should — takes `sudo`.
 
-### What compose.yaml hardens, and what it leaves to you
+### Hardening, and exposure
 
 The container runs with a read-only root filesystem, all capabilities dropped and
 `no-new-privileges`, on top of the uid and distroless base the image already provides. Nothing
-outside the two mounts is ever written, so none of that costs anything.
+outside the two mounts is ever written — the frontend is embedded in the binary and no temporary
+files are created — so none of that costs anything.
 
+<a id="exposure"></a>
 What it cannot decide for you is exposure. The published port is `127.0.0.1:8099`, the host's
 loopback only: Veduta speaks plain HTTP, and its session cookie carries no `Secure` attribute, so
 a LAN-visible port means session tokens crossing the network in the clear. Put a TLS-terminating

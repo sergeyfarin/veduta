@@ -1,69 +1,31 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
-# A working Veduta deployment. Copy this file, create ./config/veduta.yaml and the password-hash
-# secret below, and `docker compose up -d`. docs/docker.md explains every choice made here.
-#
-# The Docker socket proxy is behind a profile, so it starts only when you ask for it:
+# A working Veduta deployment. The README's quick start is these services with the proxy removed;
+# docs/docker.md explains every choice made here and how to extend it.
 #
 #   docker compose up -d                      Veduta alone
-#   docker compose --profile docker up -d     Veduta plus the read-only socket proxy
+#   docker compose --profile docker up -d     Veduta plus the read-only Docker socket proxy
 
 name: veduta
 
 services:
   veduta:
     image: ghcr.io/sergeyfarin/veduta:0.1.0
-    # To run an unreleased build from a source checkout, comment out `image:` above and use:
-    # build: .
+    # To run an unreleased build from a source checkout, replace `image:` with `build: .`
     restart: unless-stopped
-
     ports:
-      # Published to the host's loopback only. Veduta speaks plain HTTP and its session cookie
-      # carries no Secure attribute, so anything beyond this host belongs behind a reverse proxy
-      # that terminates TLS. For a throwaway test on a trusted LAN, "8099:8099" reaches it
-      # directly - that is a deliberate downgrade, not the default.
+      # Loopback only, because Veduta speaks plain HTTP. See docs/docker.md#exposure.
       - "127.0.0.1:8099:8099"
-
     volumes:
-      # veduta.yaml, conf.d/ and veduta.lock.yaml. Deliberately NOT read-only, and the host
-      # directory must be writable by uid 65532: approving an integration writes
-      # veduta.lock.yaml here - from the CLI and from the dashboard's approve endpoint alike -
-      # atomically, so it creates a temporary file in the directory too. Before the first run:
-      #
-      #   sudo chown -R :65532 ./config && sudo chmod -R g+w ./config
-      #
-      # which leaves you owning the files you edit while letting the container write the lock.
-      # Mount it :ro only if you approve integrations elsewhere and copy the lock file in; the
-      # dashboard's approve button will then fail.
       - ./config:/config
-      # The SQLite database and the asset and icon caches. A named volume inherits its ownership
-      # from the image's own /data, which is uid 65532; a bind mount does not, and must be
-      # chowned to 65532:65532 first.
       - veduta-data:/data
-
-    secrets:
-      # One entry per ${secret:NAME} the configuration uses - a connection's API key needs its
-      # own file and its own line here and under the top-level `secrets:` below, or the server
-      # refuses to load the configuration and names the reference it could not resolve.
-      #
-      # Resolves ${secret:VEDUTA_ADMIN_HASH} in veduta.yaml. Compose mounts it at
-      # /run/secrets/VEDUTA_ADMIN_HASH, which Veduta reads before it looks at the environment.
-      # Preferred over an environment variable: `docker inspect` shows the environment of a
-      # container to anyone who can reach the daemon, and the value is a password verifier.
-      - VEDUTA_ADMIN_HASH
-
-    # Nothing outside /data and /config is ever written: the frontend is embedded in the binary
-    # and no temporary files are created, verified by running with this set.
     read_only: true
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
-    # The image already runs as uid 65532 and declares its own HEALTHCHECK - the binary probes
-    # itself, since a distroless image has no curl to do it.
 
   docker-socket-proxy:
-    # Reading container state means reaching the Docker Engine API, and the socket is effectively
-    # root on this host. This proxy exposes a GET-only subset of it. Veduta does not depend_on it:
-    # if it is absent the Docker card degrades to a warning rather than stalling the dashboard.
+    # A GET-only subset of the Docker Engine API, for the Docker card. Mounting the raw socket
+    # into Veduta instead would be equivalent to giving it root on this host.
     image: ghcr.io/tecnativa/docker-socket-proxy:0.3.0
     profiles: [docker]
     restart: unless-stopped
@@ -73,17 +35,9 @@ services:
       POST: 0          # no container may be started, stopped or created through this proxy
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
-    # Not published to the host: only the compose network needs it, and a Docker API reachable
-    # from the LAN would undo the point of the proxy.
+    # Deliberately not published to the host: only the compose network needs to reach it.
     expose:
       - "2375"
-
-secrets:
-  VEDUTA_ADMIN_HASH:
-    # Create it with the binary, which never takes the password as an argument:
-    #   docker run --rm -i ghcr.io/sergeyfarin/veduta:0.1.0 auth hash > ./secrets/admin-hash
-    # then paste the password and press Ctrl-D. Keep the file out of version control.
-    file: ./secrets/admin-hash
 
 volumes:
   veduta-data:

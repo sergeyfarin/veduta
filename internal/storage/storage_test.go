@@ -222,3 +222,34 @@ func TestCorruptDatabaseReportsClearError(t *testing.T) {
 		t.Fatal("corrupt database opened successfully")
 	}
 }
+
+// TestRelativeDataDirOpens guards the file: DSN against url.URL rendering a relative path as an
+// authority: "data/veduta.db" once became "file://data/veduta.db", which SQLite rejected as
+// `invalid uri authority: data` - an error naming neither server.dataDir nor the directory.
+func TestRelativeDataDirOpens(t *testing.T) {
+	ctx := context.Background()
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.Chdir(t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chdir(wd); err != nil {
+			t.Fatal(err)
+		}
+	})
+	for _, dir := range []string{"./data", "data", "nested/data"} {
+		t.Run(dir, func(t *testing.T) {
+			s, err := storage.Open(ctx, dir)
+			if err != nil {
+				t.Fatalf("relative dataDir %q: %v", dir, err)
+			}
+			defer s.Close()
+			if _, err = s.Setting(ctx, "asset_hmac_key", 32); err != nil {
+				t.Fatalf("write through relative dataDir %q: %v", dir, err)
+			}
+		})
+	}
+}

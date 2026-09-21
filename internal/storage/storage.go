@@ -43,7 +43,14 @@ func Open(ctx context.Context, dataDir string) (*Store, error) {
 	if err := os.MkdirAll(dataDir, 0o700); err != nil {
 		return nil, fmt.Errorf("create data directory: %w", err)
 	}
-	path := filepath.Join(dataDir, "veduta.db")
+	// The DSN below is a file: URL, and url.URL renders a relative path as an authority rather
+	// than a path - "data/veduta.db" becomes "file://data/veduta.db", which SQLite rejects with
+	// "invalid uri authority: data", naming neither the setting nor the directory. Absolute
+	// paths have no authority to mistake, so resolve before building the URL.
+	path, err := filepath.Abs(filepath.Join(dataDir, "veduta.db"))
+	if err != nil {
+		return nil, fmt.Errorf("resolve data directory: %w", err)
+	}
 	query := url.Values{}
 	for _, pragma := range []string{"journal_mode(WAL)", "busy_timeout(5000)", "foreign_keys(ON)", "synchronous(NORMAL)"} {
 		query.Add("_pragma", pragma)

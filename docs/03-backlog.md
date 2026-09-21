@@ -573,3 +573,30 @@ currently proven by reading the release page.
 
 Priority: the retry is done. The post-upload completeness check is low, and worth folding into
 whatever next touches this job.
+
+### A relative `server.dataDir` produced a SQLite error naming neither the setting nor the path
+
+Found while validating the README quick start against a real run, 2026-09-21.
+`storage.Open` built its DSN as `(&url.URL{Scheme: "file", Path: path}).String()`, and `url.URL`
+renders a path with no leading slash as an *authority* rather than a path: `data/veduta.db` became
+`file://data/veduta.db`. SQLite then refused it with
+
+```
+open storage: sqlite PRAGMA journal_mode=WAL: SQL logic error: invalid uri authority: data (1)
+```
+
+which names neither `server.dataDir` nor the directory, and reads like database corruption rather
+than a path that needed one more slash. Every relative value failed the same way, including
+`Open`'s own `dataDir = "data"` fallback for the empty string, so the documented default was
+unreachable. `docs/getting-started.md` recommended `dataDir: ./data`, a configuration that could
+not start; the container images were unaffected because `/data` and `/var/lib/veduta` are both
+absolute, which is why this survived the packaging work.
+
+**Fixed in the same change that recorded this.** `Open` resolves with `filepath.Abs` before
+building the URL, since an absolute path has no authority to mistake, and
+`TestRelativeDataDirOpens` covers `./data`, `data` and `nested/data` against a working write.
+
+The wider gap is unaddressed: the error surfaced from SQLite rather than from Veduta, because
+nothing validates `dataDir` at config-load time, where a bad value could be reported with its
+field name and its path. A `--check-config` that opened the data directory would have caught it.
+Priority: low on its own, worth folding into whatever next touches configuration validation.

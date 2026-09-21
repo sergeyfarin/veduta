@@ -54,33 +54,106 @@ Detailed engineering progress and remaining work live outside this README:
 - [Theming and visual-customisation decision](docs/decisions/0002-theming-and-visual-customisation.md)
 - [Why cards are not extensible with JS, CSS, Mermaid or Adaptive Cards](docs/decisions/0004-card-expressiveness-and-the-presentation-contract.md)
 
-## Installing and evaluating
+## Quick start
 
-`v0.1.0` is published as a pre-release. `latest` is deliberately not published and will not be
-before 1.0, so an install names the version it wants:
+`latest` is deliberately not published before 1.0, so a deployment names the version it wants.
+Three steps, and the only prerequisite is Docker:
+
+**1. Generate a password hash.** Veduta stores an Argon2id verifier, never a password. The command
+reads the password from stdin — never from an argument, which would leave it in your shell history
+— so type it and press Ctrl-D:
 
 ```sh
-docker pull ghcr.io/sergeyfarin/veduta:0.1.0
+mkdir -p config && docker run --rm -i ghcr.io/sergeyfarin/veduta:0.1.0 auth hash
 ```
+
+**2. Write `config/veduta.yaml`,** pasting that hash in. Both settings shown are mandatory: the
+container must bind its own interface, and Veduta refuses to start on a non-loopback address
+without authentication configured.
+
+```yaml
+version: 1
+server:
+  listen: "0.0.0.0:8099"
+  dataDir: /data
+auth:
+  mode: password
+  admin:
+    username: admin
+    passwordHash: "$argon2id$v=19$m=65536,t=3,p=4$...paste yours here..."
+dashboard:
+  title: Home
+```
+
+**3. Write `compose.yaml` and start it.**
+
+```yaml
+name: veduta
+services:
+  veduta:
+    image: ghcr.io/sergeyfarin/veduta:0.1.0
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8099:8099"
+    volumes:
+      - ./config:/config
+      - veduta-data:/data
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+volumes:
+  veduta-data:
+```
+
+```sh
+docker compose up -d
+```
+
+Veduta is now on <http://127.0.0.1:8099>. The dashboard is empty until you add connections and
+cards — [`examples/veduta.yaml`](examples/veduta.yaml) is a worked configuration to borrow from,
+and the [setup guide](docs/getting-started.md) walks through connecting a real service.
+
+Two things that quick start decided for you, both covered in the [Docker notes](docs/docker.md):
+
+- **The port is published to loopback only.** Veduta speaks plain HTTP and its session cookie
+  carries no `Secure` attribute, so reaching it from elsewhere on your network means putting a
+  TLS-terminating reverse proxy in front. Changing it to `8099:8099` for a throwaway test on a
+  trusted LAN is a deliberate downgrade, not a default.
+- **The hash sits in `veduta.yaml`.** That is fine for a verifier, but real service credentials
+  should not follow it there — `${secret:NAME}` reads them from Docker secrets instead, which
+  [docs/docker.md](docs/docker.md#keeping-credentials-out-of-the-config-file) shows how to add.
+
+To see the dashboard before configuring anything, the checked-in fixture showcase needs no
+configuration file at all. It holds no credentials, so the override below is safe here and
+nowhere else — the container has to bind `0.0.0.0` to be reachable from the host, and that is
+exactly the bind Veduta refuses without authentication:
+
+```sh
+docker run --rm -p 127.0.0.1:8099:8099 ghcr.io/sergeyfarin/veduta:0.1.0 \
+  serve --fixtures --listen 0.0.0.0:8099 --i-know-what-im-doing
+```
+
+### Other ways to install
+
+[`compose.yaml`](compose.yaml) in this repository is the quick start's file plus a read-only Docker
+socket proxy, behind a profile, for the Docker card.
 
 Archives for `linux/amd64`, `linux/arm64`, `linux/arm/v7` and `darwin/arm64`, each carrying the
 first-party integrations and the licences beside the binary, are attached to the
 [release](https://github.com/sergeyfarin/veduta/releases/tag/v0.1.0) with a `SHA256SUMS` to check
-them against.
-
-The [setup and evaluation guide](docs/getting-started.md) covers configuration, the archive layout
-and the fixture dashboard; the toolchain and common development tasks, for building from source
-instead, are in [docs/dev-environment.md](docs/dev-environment.md).
+them against. The toolchain for building from source is in
+[docs/dev-environment.md](docs/dev-environment.md).
 
 Useful references:
 
 | Document | Purpose |
 | --- | --- |
+| [Setup and evaluation](docs/getting-started.md) | Configuration, archive layout and the fixture dashboard |
 | [Configuration reference](docs/configuration.md) | Generated reference for the current, unstable configuration schema |
 | [Integrations](docs/integrations.md) | Current first-party integration coverage and requirements |
 | [Integration authoring](docs/integration-authoring.md) | Experimental declarative and Rust/WASM extension interfaces |
 | [Security model](docs/security.md) | Trust boundaries, deployment assumptions, and operator checklist |
-| [Docker notes](docs/docker.md) | Development-stage container layout and security guidance |
+| [Docker notes](docs/docker.md) | Container layout, hardening and the Docker connection |
 | [Migration notes](docs/migration.md) | Current import and upgrade design; not a compatibility guarantee |
 | [Contributing](CONTRIBUTING.md) | Contribution and verification requirements |
 

@@ -13,8 +13,9 @@ Veduta runs as one Go binary with an embedded web application, and ships three w
 docker pull ghcr.io/sergeyfarin/veduta:0.1.0
 ```
 
-[`compose.yaml`](../compose.yaml) in the repository is a complete deployment rather than a fragment
-to adapt — read [docs/docker.md](docker.md) before running it.
+The [README quick start](../README.md#quick-start) is three steps and a compose file you can copy.
+[`compose.yaml`](../compose.yaml) in the repository is that deployment plus a read-only Docker
+socket proxy; [docs/docker.md](docker.md) explains what both chose.
 
 **Release archive.** `linux/amd64`, `linux/arm64`, `linux/arm/v7` and `darwin/arm64` are attached to
 each [release](https://github.com/sergeyfarin/veduta/releases), with a `SHA256SUMS` to verify a
@@ -110,13 +111,19 @@ Validate and start it:
 ./veduta serve --config veduta.yaml
 ```
 
-`auth.mode: none` is restricted to loopback. Use password or forward authentication before exposing Veduta through a network or reverse proxy. Password mode requires an Argon2id PHC string in `auth.admin.passwordHash`; store it as a secret reference rather than plaintext:
+`auth.mode: none` is restricted to loopback. Use password or forward authentication before exposing Veduta through a network or reverse proxy. Password mode requires an Argon2id PHC string in `auth.admin.passwordHash`, which may be written literally — it is a verifier, not a password, and cannot be used to log in:
 
 ```yaml
 auth:
   mode: password
   admin:
     username: admin
+    passwordHash: "$argon2id$v=19$m=65536,t=3,p=4$..."
+```
+
+Service credentials are the opposite case: an API key in plaintext is usable by whoever reads it, so keep those behind `${secret:NAME}`. The same reference works for the hash once you are maintaining secret files anyway:
+
+```yaml
     passwordHash: ${secret:VEDUTA_PASSWORD_HASH}
 ```
 
