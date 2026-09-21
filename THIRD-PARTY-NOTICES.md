@@ -16,7 +16,7 @@ construction.
 
 | Package | Version | Licence |
 | --- | --- | --- |
-| `svelte` | 5.57.0 | MIT |
+| `svelte` | 5.57.1 | MIT |
 
 ## WebAssembly plugins
 
