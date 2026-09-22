@@ -132,7 +132,7 @@ func writeConfig(configPath, listen, dataDir, title, username, hash string) erro
 	dir := filepath.Dir(configPath)
 	tmp, err := os.CreateTemp(dir, ".veduta.yaml.*.tmp")
 	if err != nil {
-		return fmt.Errorf("creating a temporary file in %s: %w (is the directory writable by this user?)", dir, err)
+		return fmt.Errorf("creating a temporary file in %s: %w%s", dir, err, diagnoseUID(dir))
 	}
 	tmpName := tmp.Name()
 	defer func() { _ = os.Remove(tmpName) }()
@@ -153,14 +153,38 @@ func writeConfig(configPath, listen, dataDir, title, username, hash string) erro
 	return nil
 }
 
-// fixOwnership is the one thing that cannot be done from inside the hardened container, and the
-// reason compose runs `init` as root in a one-shot service: a bind-mounted ./config belongs to
-// the operator on the host, and uid 65532 cannot write into it. Rather than transfer the
-// directory - which would take `sudo` to edit veduta.yaml afterwards - it leaves the owner alone
-// and grants the group, so the operator keeps editing and the container can write its lock file.
+// diagnoseUID turns "permission denied" into the one sentence that resolves it. A uid mismatch
+// between the host directory and the container process is the overwhelmingly likely cause, and
+// the two numbers involved are the whole diagnosis - but neither appears in the kernel's error,
+// so a reader is left guessing at exactly the moment the answer is cheapest to print.
+func diagnoseUID(dir string) string {
+	info, err := os.Stat(dir)
+	if err != nil {
+		return ""
+	}
+	owner, ok := ownerUID(info)
+	if !ok {
+		return ""
+	}
+	euid := os.Geteuid()
+	if owner == euid {
+		return ""
+	}
+	return fmt.Sprintf("\n  %s is owned by uid %d, but this process runs as uid %d."+
+		"\n  In Docker, set the container to your own uid - VEDUTA_UID and VEDUTA_GID in .env:"+
+		"\n      printf 'VEDUTA_UID=%%s\\nVEDUTA_GID=%%s\\n' \"$(id -u)\" \"$(id -g)\" > .env"+
+		"\n  See docs/docker.md for the alternatives.", dir, owner, euid)
+}
+
+// fixOwnership is the escape hatch for hosts where the operator cannot choose the uid the
+// container runs as - a NAS appliance that starts containers for you, or a ./config Docker
+// created as root because it did not exist. The default deployment does not use it: matching the
+// container to the operator's own uid solves the same problem without a privileged container,
+// which is what Docker's security guidance asks for and what compose.yaml does.
 //
-// A directory the container uid can already write is left untouched, which is the named-volume
-// case: the image ships /config owned by 65532, so there is nothing to fix.
+// When it is used, it grants uid 65532 the group rather than transferring the directory - which
+// would take `sudo` to edit veduta.yaml afterwards - so the operator keeps editing and the
+// container can still write its lock file.
 func fixOwnership(stderr io.Writer, dir string) error {
 	if os.Geteuid() != 0 {
 		// Not an error: outside a container `init` runs as whoever owns the directory, and

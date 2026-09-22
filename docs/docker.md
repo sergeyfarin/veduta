@@ -52,33 +52,69 @@ genuine one.
 authentication, prefer `auth.mode: forward` over the override — see the
 [security model](security.md).
 
-### Why the init service runs as root
+### Why the container runs as your uid
 
-It is the only part of the deployment that does, it exits immediately, and the server never does.
+Nothing in the deployment runs as root. The compose file sets `user:` on both services from
+`VEDUTA_UID`/`VEDUTA_GID` in `.env`, so the container is you.
 
-A bind-mounted `./config` belongs to you on the host, and uid 65532 cannot write into it — so
-`init` could not write the configuration it exists to write, and approving an integration later
-could not write `veduta.lock.yaml`. `--fix-permissions` resolves that from the one position that
-can: it grants uid 65532 the *group* on the directory and leaves your ownership alone, then hands
-the file it writes back to you with that same group. Both sides end up able to use it, and you
-keep editing `veduta.yaml` without `sudo`.
+This is the part of Docker that has no clean built-in answer. Bind mounts carry host ownership
+through untranslated — a file owned by uid 1000 on the host is owned by uid 1000 inside the
+container, whatever the container calls that user — and the image's own uid is 65532, which owns
+nothing on your host. Docker offers no remapping for this: there is no equivalent of podman's
+`:U` mount flag or Kubernetes' `fsGroup`. The options are therefore only ever:
 
+| | |
+| --- | --- |
+| **Match the uid** (what this deployment does) | No root, no `chown`, files stay yours. Needs to know your uid. |
+| `chown -R :65532` the directories yourself | No root container, but a manual step, repeated for every new mount, and `sudo` to undo. |
+| A privileged container that fixes ownership at startup | No setup for the operator, at the cost of a container running as root. Common in self-hosted images — Homepage's entrypoint starts as root and drops via `su-exec` — but it is the option Docker's own [security guidance](https://docs.docker.com/engine/security/) argues against, so it is not the default here. |
+| A named volume | Inherits the image's ownership, so it needs nothing at all — but you cannot easily edit a configuration file inside one. |
+
+Matching the uid is the only one of those that costs the operator nothing *and* keeps every
+container unprivileged, which is why it is the default.
+
+### When you cannot choose the uid
+
+Some hosts do not let you: a NAS appliance UI that starts containers for you, or a `./config`
+that is already owned by root because Docker created it when it did not exist. Two ways out, in
+order of preference.
+
+**Prepare the directories once, and drop `user:`.** The server then runs as the image's own uid,
+which is what it does when nothing overrides it:
+
+```sh
+mkdir -p config data
+sudo chown -R :65532 config && sudo chmod -R g+w config
+sudo chown -R 65532:65532 data
 ```
-drwxrwx--- 2 you 65532  config/
--rw-r----- 1 you 65532  config/veduta.yaml
+
+Granting the group rather than transferring `config` is deliberate: you keep editing
+`veduta.yaml` without `sudo`, and uid 65532 can still write `veduta.lock.yaml` beside it.
+
+**Or let `init` do it, once, as root.** `veduta init --fix-permissions` grants uid 65532 the
+group on the configuration directory and hands the file it writes back to the directory's owner.
+It is the privileged option from the table above, so it is documented rather than default — use
+it when the alternatives are closed to you:
+
+```yaml
+  veduta-init:
+    image: ghcr.io/sergeyfarin/veduta:0.1.0
+    user: "0:0"
+    command: ["init", "--fix-permissions"]
+    volumes:
+      - ./config:/config
+    restart: "no"
 ```
 
-Two ways to avoid the root container entirely, if you would rather:
+The server service keeps its own `user:`, `read_only`, `cap_drop` and `no-new-privileges`
+regardless; only this one-shot container is privileged, and it exits before the server starts.
 
-- **Mount a named volume at `/config`.** The image ships `/config` owned by 65532, so a named
-  volume mounted there inherits that ownership and `init` runs perfectly well as `nonroot`. Drop
-  `user:` and `--fix-permissions`. The cost is that editing `veduta.yaml` by hand becomes awkward,
-  which is the usual reason to prefer the bind mount.
-- **Prepare the directory yourself**, once, and drop the init service's `user:` line:
+### Named volumes, if you prefer them
 
-  ```sh
-  mkdir -p config && sudo chown -R :65532 config && sudo chmod -R g+w config
-  ```
+The image ships both `/config` and `/data` owned by uid 65532, so a named volume mounted at
+either one inherits that ownership and needs no preparation and no `user:` line. `/data` is a
+good candidate. `/config` is a worse one only because editing `veduta.yaml` inside a named volume
+is awkward — which is the whole reason the default binds it.
 
 ### Choosing or changing the password
 
@@ -149,29 +185,27 @@ maintaining secret files for credentials.
 
 ### The two mounts
 
-**`/data` must be writable by uid 65532.** The image ships a `/data` directory already owned by
-that uid, so Docker seeds a named volume mounted there with the same ownership and nothing is
-required of you — this is why the quick start uses a named volume. A bind mount takes the host
-directory's ownership instead, and must be prepared:
+Both must be writable by whatever uid the container runs as — your own, in the default
+deployment, which is what makes them need no preparation beyond `mkdir`.
 
-```sh
-mkdir -p ./data && sudo chown -R 65532:65532 ./data
-```
-
-(Without the directory in the image, a named volume would be created `root:root` and SQLite would
-report the resulting failure as `unable to open database file (out of memory)` — which says nothing
-about permissions. That is why it is in the image.)
-
-**`/config` must be writable by uid 65532 as well**, and `veduta init --fix-permissions` is what
-arranges that — see above. It matters beyond the first run: approving an integration writes
-`veduta.lock.yaml` into that directory, from `veduta integration approve` and from the dashboard's
-approve button alike, and the write is atomic, so it also creates a temporary file beside the
-target. Without the group grant the server starts and serves normally and only approval fails,
-with `creating temp file: permission denied` — a poor place to discover a mount option. Mount
+**`/data`** holds the SQLite database and the asset and icon caches. **`/config`** holds
+`veduta.yaml`, `conf.d/` and `veduta.lock.yaml`. `/config` has to stay writable beyond the first
+run: approving an integration writes `veduta.lock.yaml` into that directory, from
+`veduta integration approve` and from the dashboard's approve button alike, and the write is
+atomic, so it also creates a temporary file beside the target. If the directory is not writable
+the server starts and serves normally and only approval fails, with
+`creating temp file: permission denied` — a poor place to discover a mount option. Mount
 `/config` `:ro` only if you approve integrations elsewhere and copy the resulting lock file in.
 
-`veduta.lock.yaml` itself is written mode `0600` owned by uid 65532, so reading it back on the
-host — to commit it beside `veduta.yaml`, as you should — takes `sudo`.
+Both directories exist in the image owned by uid 65532, so a named volume mounted at either one
+inherits that ownership and works with no `user:` line at all. That is the only reason they are
+in the image: without `/data` there, Docker would create the volume `root:root` and SQLite would
+report the failure as `unable to open database file (out of memory)` — which says nothing about
+permissions.
+
+`veduta.lock.yaml` is written mode `0600`, owned by the uid that wrote it. When that uid is not
+yours — because you dropped `user:` and let the server run as 65532 — reading it back on the host
+to commit it beside `veduta.yaml`, as you should, takes `sudo`.
 
 ### Hardening, and exposure
 

@@ -64,14 +64,17 @@ name: veduta
 services:
   veduta-init:
     image: ghcr.io/sergeyfarin/veduta:0.1.0
-    user: "0:0"
-    command: ["init", "--fix-permissions"]
+    user: "${VEDUTA_UID:-1000}:${VEDUTA_GID:-1000}"
+    command: ["init"]
     volumes:
       - ./config:/config
     restart: "no"
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
 
   veduta:
     image: ghcr.io/sergeyfarin/veduta:0.1.0
+    user: "${VEDUTA_UID:-1000}:${VEDUTA_GID:-1000}"
     restart: unless-stopped
     depends_on:
       veduta-init:
@@ -80,23 +83,19 @@ services:
       - "127.0.0.1:8099:8099"
     volumes:
       - ./config:/config
-      - veduta-data:/data
+      - ./data:/data
     read_only: true
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
-
-volumes:
-  veduta-data:
 ```
 
-Then start it and read the password it generated:
+Then:
 
 ```sh
-mkdir -p config && docker compose up -d && docker compose logs veduta-init
+mkdir -p config data
+printf 'VEDUTA_UID=%s\nVEDUTA_GID=%s\n' "$(id -u)" "$(id -g)" > .env
+docker compose up -d && docker compose logs veduta-init
 ```
-
-(`mkdir` first so the directory is yours: Docker creates a missing bind-mount source as `root`,
-and then editing `veduta.yaml` would take `sudo`.)
 
 ```
   Veduta is configured. Sign in as "admin" with this password:
@@ -106,17 +105,19 @@ and then editing `veduta.yaml` would take `sudo`.)
   It is shown once and stored only as a hash. Save it now.
 ```
 
-Veduta is on <http://127.0.0.1:8099>. That is the whole installation.
+Veduta is on <http://127.0.0.1:8099>. That is the whole installation. Nothing in it runs as root,
+and no `chown` is needed: the `.env` file makes the container run as you, so the bind-mounted
+`config/` and `data/` stay yours to read, edit and back up.
 
 The `veduta-init` service writes `config/veduta.yaml` on the first run and does nothing on every
 run after it, so your edits are never overwritten. To choose the password instead of having one
 generated, set `VEDUTA_ADMIN_PASSWORD` on that service — it is hashed on the first run and the
 plaintext is never written to disk.
 
-The dashboard is empty until you add connections and cards. `config/veduta.yaml` belongs to you
-and Veduta reloads it when it changes, so edit it in place;
-[`examples/veduta.yaml`](examples/veduta.yaml) is a worked configuration to borrow from, and the
-[setup guide](docs/getting-started.md) walks through connecting a real service.
+The dashboard is empty until you add connections and cards. Veduta reloads `config/veduta.yaml`
+when it changes, so edit it in place; [`examples/veduta.yaml`](examples/veduta.yaml) is a worked
+configuration to borrow from, and the [setup guide](docs/getting-started.md) walks through
+connecting a real service.
 
 Two things the quick start decided for you, both covered in the [Docker notes](docs/docker.md):
 
@@ -124,11 +125,11 @@ Two things the quick start decided for you, both covered in the [Docker notes](d
   carries no `Secure` attribute, so reaching it from elsewhere on your network means putting a
   TLS-terminating reverse proxy in front. Changing it to `8099:8099` for a throwaway test on a
   trusted LAN is a deliberate downgrade, not a default.
-- **`veduta-init` runs as root, once, and the server never does.** It is the only way to hand a
-  bind-mounted `./config` to both sides: it grants uid 65532 the *group* rather than taking the
-  directory, so the container can write `veduta.lock.yaml` and you keep editing `veduta.yaml`
-  without `sudo`. Mount a named volume at `/config` instead and you can drop the init service's
-  `user:` and `--fix-permissions` entirely.
+- **The container runs as your uid rather than the image's.** Docker passes bind-mount ownership
+  through untranslated, so a container writing to `./config` as some other uid cannot, and the
+  usual fixes are a `chown` you have to remember or a privileged container that does it for you.
+  Matching the uid avoids both. If you cannot choose the uid on your host,
+  [docs/docker.md](docs/docker.md#when-you-cannot-choose-the-uid) has the alternatives.
 
 To see the dashboard before configuring anything, the checked-in fixture showcase needs no
 configuration file at all. It holds no credentials, so the override below is safe here and

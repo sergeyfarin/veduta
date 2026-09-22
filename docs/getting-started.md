@@ -13,9 +13,10 @@ Veduta runs as one Go binary with an embedded web application, and ships three w
 docker pull ghcr.io/sergeyfarin/veduta:0.1.0
 ```
 
-The [README quick start](../README.md#quick-start) is three steps and a compose file you can copy.
-[`compose.yaml`](../compose.yaml) in the repository is that deployment plus a read-only Docker
-socket proxy; [docs/docker.md](docker.md) explains what both chose.
+The [README quick start](../README.md#quick-start) is a compose file you can copy and
+`docker compose up -d`, which writes a configuration and generates an administrator password on
+the first run. [`compose.yaml`](../compose.yaml) in the repository is that deployment plus a
+read-only Docker socket proxy; [docs/docker.md](docker.md) explains what both chose.
 
 **Release archive.** `linux/amd64`, `linux/arm64`, `linux/arm/v7` and `darwin/arm64` are attached to
 each [release](https://github.com/sergeyfarin/veduta/releases), with a `SHA256SUMS` to verify a
