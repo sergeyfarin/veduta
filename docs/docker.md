@@ -3,10 +3,10 @@
 Two unrelated things share this page: **running Veduta as a container**, and **reading container
 state from a Docker host** as a dashboard card.
 
-The [README quick start](../README.md#quick-start) is the short version — three steps, and a
-compose file you can copy out of it. This page explains what those steps chose and how to extend
-them. [`compose.yaml`](../compose.yaml) in the repository root is that same deployment plus the
-Docker socket proxy described at the bottom of this page.
+The [README quick start](../README.md#quick-start) is the short version — one compose file, and
+`docker compose up -d`. This page explains what it chose and how to extend it.
+[`compose.yaml`](../compose.yaml) in the repository root is that same deployment plus the Docker
+socket proxy described at the bottom of this page.
 
 ## Running Veduta
 
@@ -20,25 +20,29 @@ docker pull ghcr.io/sergeyfarin/veduta:0.1.0
 The image is [distroless](https://github.com/GoogleContainerTools/distroless): no shell, no
 package manager, and the binary is the only executable in it. It runs as uid `65532` (`nonroot`).
 
-### Two settings the container will not start without
+### What `veduta init` does, and why it is a separate service
 
-**Bind the container's own interface.** The default listen address is `127.0.0.1:8099`, which
-inside a container is reachable only from inside that container. Set it in the mounted config —
-the config stays authoritative, so the image does not override it:
+`veduta init` writes `/config/veduta.yaml` if there is not one, with an administrator password it
+generates and hashes, and prints that password once. It then does nothing on every subsequent run,
+so it is safe to leave in the compose file — it will not overwrite a configuration you have since
+edited. There is no shell in the image to do this instead: the binary carries the command, which
+is also why it works identically outside a container.
+
+It exists because two settings are mandatory and neither has a usable default in a container:
 
 ```yaml
 server:
-  listen: "0.0.0.0:8099"
+  listen: "0.0.0.0:8099"   # 127.0.0.1 inside a container is reachable only from inside it
   dataDir: /data
+auth:
+  mode: password           # Veduta refuses a non-loopback bind without authentication
+  admin:
+    username: admin
+    passwordHash: "$argon2id$..."
 ```
 
-**Configure authentication.** Veduta *refuses to start* on a non-loopback address until it is, and
-a container binding `0.0.0.0` is squarely that case. This is deliberate: from Phase D onward the
-dashboard holds real service credentials, so a misconfiguration that would have exposed them fails
-loudly instead of quietly working.
-
-Worth being precise about what that check sees, because it surprises people running containers:
-it inspects the address **Veduta binds**, not the one Docker publishes. It cannot see past the
+Worth being precise about that refusal, because it surprises people running containers: it
+inspects the address **Veduta binds**, not the one Docker publishes. It cannot see past the
 container boundary, so it fires even when `ports:` publishes to `127.0.0.1` and nothing off-host
 can reach the service. On a single-user homelab that is the check being conservative rather than
 detecting a real exposure — but as soon as you publish the port to your LAN, it is describing a
@@ -48,11 +52,45 @@ genuine one.
 authentication, prefer `auth.mode: forward` over the override — see the
 [security model](security.md).
 
-### Producing the password hash
+### Why the init service runs as root
 
-`auth.admin.passwordHash` is an Argon2id PHC string, never a password. `veduta auth hash` reads the
-password from stdin — never from an argument, which would put it in shell history and in every
-other user's `ps` — and writes the verifier to stdout and nothing else:
+It is the only part of the deployment that does, it exits immediately, and the server never does.
+
+A bind-mounted `./config` belongs to you on the host, and uid 65532 cannot write into it — so
+`init` could not write the configuration it exists to write, and approving an integration later
+could not write `veduta.lock.yaml`. `--fix-permissions` resolves that from the one position that
+can: it grants uid 65532 the *group* on the directory and leaves your ownership alone, then hands
+the file it writes back to you with that same group. Both sides end up able to use it, and you
+keep editing `veduta.yaml` without `sudo`.
+
+```
+drwxrwx--- 2 you 65532  config/
+-rw-r----- 1 you 65532  config/veduta.yaml
+```
+
+Two ways to avoid the root container entirely, if you would rather:
+
+- **Mount a named volume at `/config`.** The image ships `/config` owned by 65532, so a named
+  volume mounted there inherits that ownership and `init` runs perfectly well as `nonroot`. Drop
+  `user:` and `--fix-permissions`. The cost is that editing `veduta.yaml` by hand becomes awkward,
+  which is the usual reason to prefer the bind mount.
+- **Prepare the directory yourself**, once, and drop the init service's `user:` line:
+
+  ```sh
+  mkdir -p config && sudo chown -R :65532 config && sudo chmod -R g+w config
+  ```
+
+### Choosing or changing the password
+
+`init` generates one. To choose it instead, set `VEDUTA_ADMIN_PASSWORD` on the init service: it is
+hashed on the first run and the plaintext is never written to disk. An environment variable is
+visible to anyone who can reach the Docker daemon, so for anything long-lived prefer generating
+one and replacing it afterwards.
+
+To change the password later, replace `auth.admin.passwordHash` in `veduta.yaml` and let the
+server reload. `auth.admin.passwordHash` is an Argon2id PHC string, never a password.
+`veduta auth hash` reads the password from stdin — never from an argument, which would put it in
+shell history and in every other user's `ps` — and writes the verifier to stdout and nothing else:
 
 ```sh
 docker run --rm -i ghcr.io/sergeyfarin/veduta:0.1.0 auth hash
@@ -70,9 +108,10 @@ lanes — and `--memory`, `--iterations` and `--parallelism` adjust it within th
 path is willing to verify. Verification reads the cost from the hash itself, so raising it later
 re-costs new passwords without invalidating the one you have.
 
-The quick start pastes that string straight into `veduta.yaml`. It is a verifier, not a password:
-someone who reads it cannot log in with it, only attack it offline at 64 MiB per guess. The file
-still deserves the permissions you would give any config holding a hash.
+What lands in `veduta.yaml` is a verifier, not a password: someone who reads it cannot log in with
+it, only attack it offline at 64 MiB per guess. `init` writes the file mode `0640` for that
+reason, and service credentials — which *are* usable by whoever reads them — belong somewhere else
+entirely.
 
 ### Keeping credentials out of the config file
 
@@ -123,21 +162,13 @@ mkdir -p ./data && sudo chown -R 65532:65532 ./data
 report the resulting failure as `unable to open database file (out of memory)` — which says nothing
 about permissions. That is why it is in the image.)
 
-**`/config` is writable too, and needs preparing only if you approve integrations from the
-dashboard.** A first run with no integrations never touches it. Approving one writes
-`veduta.lock.yaml` into that directory — from `veduta integration approve` and from the
-dashboard's approve button alike — and the write is atomic, so it also creates a temporary file
-beside the target. A bind mount keeps the host directory's ownership, which is yours, not the
-container's. Grant the group rather than transferring the directory, so that you keep editing
-`veduta.yaml` without `sudo`:
-
-```sh
-sudo chown -R :65532 ./config && sudo chmod -R g+w ./config
-```
-
-Without it the server starts and serves normally, and only approval fails, with
-`creating temp file: permission denied` — a poor place to discover a mount option. Mount `/config`
-`:ro` only if you approve integrations elsewhere and copy the resulting lock file in.
+**`/config` must be writable by uid 65532 as well**, and `veduta init --fix-permissions` is what
+arranges that — see above. It matters beyond the first run: approving an integration writes
+`veduta.lock.yaml` into that directory, from `veduta integration approve` and from the dashboard's
+approve button alike, and the write is atomic, so it also creates a temporary file beside the
+target. Without the group grant the server starts and serves normally and only approval fails,
+with `creating temp file: permission denied` — a poor place to discover a mount option. Mount
+`/config` `:ro` only if you approve integrations elsewhere and copy the resulting lock file in.
 
 `veduta.lock.yaml` itself is written mode `0600` owned by uid 65532, so reading it back on the
 host — to commit it beside `veduta.yaml`, as you should — takes `sudo`.

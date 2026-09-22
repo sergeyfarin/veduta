@@ -5,6 +5,7 @@
 //	veduta serve [--listen host:port]   run the HTTP server
 //	veduta health [--addr url]          probe a running instance; non-zero exit if unhealthy
 //	veduta version [--json]             print build identity
+//	veduta init [--config path]         write a first configuration with a generated password
 //	veduta auth hash                    read a password from stdin, print its Argon2id PHC hash
 //	veduta manifest digest <file>...    print the canonical digest of an integration manifest
 //	veduta integration list             show every declared integration's lock status
@@ -77,6 +78,8 @@ func run(args []string) error {
 		return printVersion(args)
 	case "health":
 		return healthCmd(args)
+	case "init":
+		return initCmd(args)
 	case "auth":
 		return authCmd(args)
 	case "manifest":
@@ -88,7 +91,7 @@ func run(args []string) error {
 	case "import":
 		return importCmd(args)
 	default:
-		return fmt.Errorf("unknown command %q (try: serve, health, version, auth, manifest, integration, plugin, import)", cmd)
+		return fmt.Errorf("unknown command %q (try: serve, init, health, version, auth, manifest, integration, plugin, import)", cmd)
 	}
 }
 

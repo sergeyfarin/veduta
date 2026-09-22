@@ -57,42 +57,25 @@ Detailed engineering progress and remaining work live outside this README:
 ## Quick start
 
 `latest` is deliberately not published before 1.0, so a deployment names the version it wants.
-Three steps, and the only prerequisite is Docker:
-
-**1. Generate a password hash.** Veduta stores an Argon2id verifier, never a password. The command
-reads the password from stdin — never from an argument, which would leave it in your shell history
-— so type it and press Ctrl-D:
-
-```sh
-mkdir -p config && docker run --rm -i ghcr.io/sergeyfarin/veduta:0.1.0 auth hash
-```
-
-**2. Write `config/veduta.yaml`,** pasting that hash in. Both settings shown are mandatory: the
-container must bind its own interface, and Veduta refuses to start on a non-loopback address
-without authentication configured.
-
-```yaml
-version: 1
-server:
-  listen: "0.0.0.0:8099"
-  dataDir: /data
-auth:
-  mode: password
-  admin:
-    username: admin
-    passwordHash: "$argon2id$v=19$m=65536,t=3,p=4$...paste yours here..."
-dashboard:
-  title: Home
-```
-
-**3. Write `compose.yaml` and start it.**
+Save this as `compose.yaml`:
 
 ```yaml
 name: veduta
 services:
+  veduta-init:
+    image: ghcr.io/sergeyfarin/veduta:0.1.0
+    user: "0:0"
+    command: ["init", "--fix-permissions"]
+    volumes:
+      - ./config:/config
+    restart: "no"
+
   veduta:
     image: ghcr.io/sergeyfarin/veduta:0.1.0
     restart: unless-stopped
+    depends_on:
+      veduta-init:
+        condition: service_completed_successfully
     ports:
       - "127.0.0.1:8099:8099"
     volumes:
@@ -101,27 +84,51 @@ services:
     read_only: true
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
+
 volumes:
   veduta-data:
 ```
 
+Then start it and read the password it generated:
+
 ```sh
-docker compose up -d
+mkdir -p config && docker compose up -d && docker compose logs veduta-init
 ```
 
-Veduta is now on <http://127.0.0.1:8099>. The dashboard is empty until you add connections and
-cards — [`examples/veduta.yaml`](examples/veduta.yaml) is a worked configuration to borrow from,
-and the [setup guide](docs/getting-started.md) walks through connecting a real service.
+(`mkdir` first so the directory is yours: Docker creates a missing bind-mount source as `root`,
+and then editing `veduta.yaml` would take `sudo`.)
 
-Two things that quick start decided for you, both covered in the [Docker notes](docs/docker.md):
+```
+  Veduta is configured. Sign in as "admin" with this password:
+
+      7fpmq853u4fe5a6gqq4d
+
+  It is shown once and stored only as a hash. Save it now.
+```
+
+Veduta is on <http://127.0.0.1:8099>. That is the whole installation.
+
+The `veduta-init` service writes `config/veduta.yaml` on the first run and does nothing on every
+run after it, so your edits are never overwritten. To choose the password instead of having one
+generated, set `VEDUTA_ADMIN_PASSWORD` on that service — it is hashed on the first run and the
+plaintext is never written to disk.
+
+The dashboard is empty until you add connections and cards. `config/veduta.yaml` belongs to you
+and Veduta reloads it when it changes, so edit it in place;
+[`examples/veduta.yaml`](examples/veduta.yaml) is a worked configuration to borrow from, and the
+[setup guide](docs/getting-started.md) walks through connecting a real service.
+
+Two things the quick start decided for you, both covered in the [Docker notes](docs/docker.md):
 
 - **The port is published to loopback only.** Veduta speaks plain HTTP and its session cookie
   carries no `Secure` attribute, so reaching it from elsewhere on your network means putting a
   TLS-terminating reverse proxy in front. Changing it to `8099:8099` for a throwaway test on a
   trusted LAN is a deliberate downgrade, not a default.
-- **The hash sits in `veduta.yaml`.** That is fine for a verifier, but real service credentials
-  should not follow it there — `${secret:NAME}` reads them from Docker secrets instead, which
-  [docs/docker.md](docs/docker.md#keeping-credentials-out-of-the-config-file) shows how to add.
+- **`veduta-init` runs as root, once, and the server never does.** It is the only way to hand a
+  bind-mounted `./config` to both sides: it grants uid 65532 the *group* rather than taking the
+  directory, so the container can write `veduta.lock.yaml` and you keep editing `veduta.yaml`
+  without `sudo`. Mount a named volume at `/config` instead and you can drop the init service's
+  `user:` and `--fix-permissions` entirely.
 
 To see the dashboard before configuring anything, the checked-in fixture showcase needs no
 configuration file at all. It holds no credentials, so the override below is safe here and

@@ -36,6 +36,7 @@ var routepathAllowlist = map[string]string{
 	filepath.Join("internal", "api", "integrations.go"):            "local filesystem paths: veduta.lock.yaml's location next to the primary config file",
 	filepath.Join("cmd", "veduta", "integration.go"):               "local filesystem paths: veduta.lock.yaml's location next to the primary config file",
 	filepath.Join("cmd", "veduta", "main.go"):                      "local filesystem path: the WASM compilation cache under the data directory",
+	filepath.Join("cmd", "veduta", "init.go"):                      "local filesystem paths: the veduta.yaml `init` writes and the directory it sits in",
 	filepath.Join("internal", "storage", "storage.go"):             "local filesystem path: the SQLite data directory and database file",
 	filepath.Join("internal", "app", "runtime.go"):                 "local filesystem paths: integration manifest and lock files next to the config",
 	filepath.Join("internal", "app", "assets.go"):                  "local filesystem paths: current integration manifest and lock files used for revocation checks",

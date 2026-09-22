@@ -1,18 +1,44 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
-# A working Veduta deployment. The README's quick start is these services with the proxy removed;
-# docs/docker.md explains every choice made here and how to extend it.
+# A working Veduta deployment. `docker compose up -d` is the whole installation: veduta-init
+# writes ./config/veduta.yaml on the first run with an administrator password it generates, and
+# prints that password once.
 #
 #   docker compose up -d                      Veduta alone
+#   docker compose logs veduta-init           the generated password, after the first run
 #   docker compose --profile docker up -d     Veduta plus the read-only Docker socket proxy
+#
+# docs/docker.md explains every choice made here.
 
 name: veduta
 
 services:
+  # One-shot: writes a configuration if there is not one, then exits. It runs on every `up`, and
+  # does nothing at all once ./config/veduta.yaml exists, so it never overwrites your edits.
+  veduta-init:
+    image: ghcr.io/sergeyfarin/veduta:0.1.0
+    # Root, and only here. A bind-mounted ./config belongs to you on the host, and uid 65532
+    # cannot write into it; --fix-permissions grants that uid the *group* rather than taking the
+    # directory, so the container can write veduta.lock.yaml and you keep editing veduta.yaml
+    # without sudo. The server itself never runs as root - see the `veduta` service below.
+    user: "0:0"
+    command: ["init", "--fix-permissions"]
+    volumes:
+      - ./config:/config
+    restart: "no"
+    # To choose the password instead of having one generated, set it here and read
+    # docs/docker.md on why a secret file is better than an environment variable. It is hashed
+    # on the first run and the plaintext is never written to disk.
+    # environment:
+    #   VEDUTA_ADMIN_PASSWORD: ...
+
   veduta:
     image: ghcr.io/sergeyfarin/veduta:0.1.0
     # To run an unreleased build from a source checkout, replace `image:` with `build: .`
     restart: unless-stopped
+    depends_on:
+      veduta-init:
+        condition: service_completed_successfully
     ports:
       # Loopback only, because Veduta speaks plain HTTP. See docs/docker.md#exposure.
       - "127.0.0.1:8099:8099"
