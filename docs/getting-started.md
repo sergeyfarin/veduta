@@ -1,7 +1,7 @@
 # Setup and evaluation
 
 > [!WARNING]
-> `v0.1.1` is a pre-release. Pre-1.0 carries no stability promise: configuration, storage,
+> `v0.1.2` is a pre-release. Pre-1.0 carries no stability promise: configuration, storage,
 > packaging, and extension interfaces may change between releases without a migration path. Action
 > controls render and are permanently disabled. Do not rely on this as a production dashboard.
 
@@ -10,7 +10,7 @@ Veduta runs as one Go binary with an embedded web application, and ships three w
 **Container image.** `latest` is deliberately not published before 1.0, so name the version:
 
 ```sh
-docker pull ghcr.io/sergeyfarin/veduta:0.1.1
+docker pull ghcr.io/sergeyfarin/veduta:0.1.2
 ```
 
 The [README quick start](../README.md#quick-start) is a compose file you can copy and

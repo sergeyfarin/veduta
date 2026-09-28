@@ -11,7 +11,7 @@ project is pre-1.0:
 > pinned in `veduta.lock.yaml`, so an incompatible plugin fails closed rather than misbehaving;
 > expect to rebuild and re-approve third-party plugins when upgrading.
 
-## Unreleased
+## 0.1.2 — 2026-09-28
 
 ### Added
 
