@@ -37,7 +37,7 @@ priority (which milestone should absorb it, or "before X" for a hard blocker).
 | [Release artefacts disagree about the `v` prefix](#release-artefacts-disagree-about-the-v-prefix) | Packaging | Low; not before the alpha |
 | [Release workflow's Docker actions target Node 20](#the-release-workflows-docker-actions-still-target-node-20) | Packaging | Low; recheck before each tag |
 | [Release assets uploaded all-or-nothing with the release](#the-release-job-created-its-assets-and-its-release-in-one-all-or-nothing-call) | Packaging | Retry fixed; check low |
-| [The quick start names an image that cannot run it](#the-quick-start-names-an-image-that-cannot-run-it) | Packaging | High; before the next announcement |
+| [The quick start names an image that cannot run it](#the-quick-start-names-an-image-that-cannot-run-it) | Packaging | Medium; the guard is still missing |
 
 ---
 
@@ -619,12 +619,12 @@ on `main` pin `ghcr.io/sergeyfarin/veduta:0.1.0`, so they describe a flow the pu
 not implement. The commit that introduced it verified the quick start against a locally built
 image, which is why it passed: nothing checks the documented commands against the *published* tag.
 
-Two separate gaps, and only the first is fixed by cutting a release:
+Two separate gaps, and cutting a release fixed only the first:
 
-- **The docs run ahead of the release.** Until a tag containing `init` exists, the quick start on
-  `main` cannot work for anyone. Cutting `0.1.1` and bumping the three image references in
-  `README.md` and the two in `compose.yaml` closes it. Until then, the honest interim is building
-  from source (`build: .` in place of `image:`).
+- **The docs ran ahead of the release.** Closed 2026-09-28 by `v0.1.1`, with every image reference
+  bumped in the same change; the README's quick start, extracted verbatim and run against the
+  published image, wrote a configuration and served the dashboard. `0.1.0` remains published and
+  still cannot run it.
 - **Nothing keeps them aligned.** A check in the release workflow's dry run - extract the quick
   start's `compose.yaml` from the README, point it at the image just built, and run
   `docker compose up -d` - would fail the release rather than the first reader. The same check
@@ -634,4 +634,5 @@ The failure was also harder to read than it needed to be: an init service that e
 prints its reason only in `docker compose logs`, and the quick start's `&&` skipped that command
 exactly when it mattered. The README now uses `;`, so the logs are printed either way.
 
-Priority: high. This is the first thing a new operator does.
+Priority: medium now. The quick start works, but the next change to it can drift the same way,
+and this is the first thing a new operator does.
