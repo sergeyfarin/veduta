@@ -22,10 +22,9 @@ so and a pointer to where that is written down.
 
 ## Supported versions
 
-No version has been released yet. `0.1.0` is built and verified but the tag is deliberately
-uncut, so **`main` is the only line that receives fixes** — there is nothing older to back-port to.
-Once 0.1.0 is tagged, security fixes land on `main` and in the next patch release, and anything
-warranting an advisory gets one on the Security tab.
+`0.1.1` is the current release, and **`main` is the only line that receives fixes** — pre-1.0, there
+is no older line to back-port to. Security fixes land on `main` and in the next patch release, and
+anything warranting an advisory gets one on the Security tab.
 
 Note the pre-1.0 carve-out in [CHANGELOG.md](CHANGELOG.md): the plugin ABI, host functions and
 manifest schema are not under semantic versioning yet. A security fix is allowed to break them,

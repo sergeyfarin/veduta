@@ -11,6 +11,33 @@ project is pre-1.0:
 > pinned in `veduta.lock.yaml`, so an incompatible plugin fails closed rather than misbehaving;
 > expect to rebuild and re-approve third-party plugins when upgrading.
 
+## 0.1.1 — 2026-09-28
+
+A patch release that makes the quick start work. The README and `compose.yaml` described
+`docker compose up -d` as the whole installation, but that flow landed after 0.1.0 was tagged, so
+the published 0.1.0 image answered `unknown command "init"` and the first install failed. Nothing
+in the server changed.
+
+### Added
+
+- `veduta init` writes a minimal `veduta.yaml` with a generated administrator password, already
+  hashed, and prints the password once. It does nothing when a configuration exists, so it is safe
+  to run on every start. `VEDUTA_ADMIN_PASSWORD` chooses the password instead; the plaintext is
+  never written to disk. `--fix-permissions` is the escape hatch for hosts where the container's
+  uid cannot be chosen.
+- `compose.yaml` and the README quick start run a one-shot `veduta-init` service before the
+  server, so the installation is `docker compose up -d`.
+
+### Changed
+
+- Every container in the quick start runs as the operator's uid and gid, from `VEDUTA_UID` and
+  `VEDUTA_GID` in `.env`, rather than one of them running as root. `./config` and `./data` are bind
+  mounts that stay owned by the operator, so no `chown` and no `sudo` are needed to edit or back
+  them up. A uid mismatch now reports both uids and the `.env` line that fixes it, where the kernel
+  reported only "permission denied".
+- The quick start joins `docker compose up -d` and `docker compose logs veduta-init` with `;`
+  rather than `&&`, so the logs, the only place a failing init explains itself, print either way.
+
 ## 0.1.0 — 2026-09-17
 
 First public release, and an alpha in every sense but the version string: pre-1.0 means no
