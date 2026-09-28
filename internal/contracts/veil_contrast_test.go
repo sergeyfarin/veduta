@@ -164,6 +164,44 @@ func TestVeilFallbackGradientIsInsideTheBackdrop(t *testing.T) {
 	}
 }
 
+// TestVeilBackdropCoversTheViewport guards a bug no contrast test can see. The backdrop is sized
+// and positioned against the root element's own box, so a root exactly as tall as its content
+// paints a short page's image only that far, and an empty or sparse dashboard on a tall screen was
+// left with a flat band below it. Nothing about the colours was wrong, which is why every other
+// test here passed. The root has to be at least the viewport tall; the vh declaration is the
+// fallback for a browser without dvh, and must come first so the dvh one wins where it exists.
+func TestVeilBackdropCoversTheViewport(t *testing.T) {
+	// The selector opens more than one block - palette tokens, then the backdrop - so the one
+	// that paints it is the one that names background-image.
+	css := tokensCSS(t)
+	const selector = `:root[data-appearance="veil"] {`
+	var body string
+	for offset := 0; ; {
+		i := strings.Index(css[offset:], selector)
+		if i < 0 {
+			break
+		}
+		candidate := blockBody(t, css[offset:], selector)
+		if strings.Contains(candidate, "background-image:") {
+			body = candidate
+			break
+		}
+		offset += i + len(selector)
+	}
+	if body == "" {
+		t.Fatal("tokens.css has no veil root block that paints the backdrop")
+	}
+	vh := strings.Index(body, "min-height: 100vh;")
+	dvh := strings.Index(body, "min-height: 100dvh;")
+	if vh < 0 || dvh < 0 {
+		t.Fatal("the veil root has no viewport-height minimum, so a short page leaves the backdrop " +
+			"covering only its own content")
+	}
+	if vh > dvh {
+		t.Error("min-height: 100vh must precede 100dvh, or the fallback overrides the better value")
+	}
+}
+
 // TestVeilConfiguredBackgroundRaisesTheScrim is the structural half of the two-scrim design.
 //
 // Configuring a background must change the image and the scrim over it, and nothing else. An

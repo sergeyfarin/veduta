@@ -38,6 +38,54 @@ const passwordAlphabet = "abcdefghijkmnpqrstuvwxyz23456789"
 // to replace it with something memorable.
 const passwordLength = 20
 
+// starterCards is what a fresh dashboard shows, so the first sign-in is not an empty page. It is
+// weather because that is the one thing worth showing that needs no account, no API key and no
+// other service to be running: Open-Meteo is free and keyless, and the generic http-json card
+// reads it without an integration to install or approve. The coordinates are a placeholder - init
+// cannot know where the operator lives - so the card says whose weather it shows and the comment
+// says how to change it. It is also the one outbound request a default install makes, which is
+// why the comment names the host.
+const starterCards = `
+# Everything Veduta may contact is declared here; nothing else is reachable. This starter
+# connection is the only outbound request a fresh install makes - remove it, and the card that
+# uses it, to make none.
+connections:
+  open-meteo:
+    kind: http
+    baseUrl: https://api.open-meteo.com
+
+integrations:
+  - id: http-json
+    source: builtin
+
+sections:
+  - title: Today
+    cards:
+      # Weather for Berlin, as a placeholder. Set latitude and longitude to yours, and the title
+      # to match. Open-Meteo needs no account or key: https://open-meteo.com
+      - id: weather
+        title: Weather in Berlin
+        span: { columns: 2 }
+        integration: http-json
+        operation: request
+        slots: { server: open-meteo }
+        params:
+          path: /v1/forecast
+          query:
+            latitude: "52.52"
+            longitude: "13.41"
+            current: temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m
+        refresh: 15m
+        view:
+          blocks:
+            - type: metrics
+              items:
+                - { label: Temperature °C, value: "current.temperature_2m", format: number }
+                - { label: Feels like °C, value: "current.apparent_temperature", format: number }
+                - { label: Humidity %, value: "current.relative_humidity_2m", format: number }
+                - { label: Wind km/h, value: "current.wind_speed_10m", format: number }
+`
+
 func initCmd(args []string) error {
 	fs := flag.NewFlagSet("init", flag.ContinueOnError)
 	configPath := fs.String("config", "/config/veduta.yaml", "configuration file to create")
@@ -127,7 +175,7 @@ func writeConfig(configPath, listen, dataDir, title, username, hash string) erro
 	fmt.Fprintf(&b, "    passwordHash: %q\n", hash)
 	b.WriteString("\ndashboard:\n")
 	fmt.Fprintf(&b, "  title: %s\n", title)
-	b.WriteString("\nsections: []\n")
+	b.WriteString(starterCards)
 
 	dir := filepath.Dir(configPath)
 	tmp, err := os.CreateTemp(dir, ".veduta.yaml.*.tmp")

@@ -234,6 +234,13 @@ body {
  * property the contrast tests assume; it also avoids the repaint-per-scroll cost of `fixed` and
  * its silent no-op on iOS Safari. */
 :root[data-appearance="veil"] {
+  /* The backdrop is sized (cover) and positioned against the root element's own box, not the
+   * viewport, so a root as tall as its content paints a short page's image only that far and
+   * leaves the rest of a tall screen as the flat colour beneath it. An empty or sparse dashboard
+   * on a portrait monitor showed exactly that. dvh follows mobile browsers' collapsing toolbars;
+   * the vh line is the fallback for a browser that predates it. */
+  min-height: 100vh;
+  min-height: 100dvh;
   background-image:
     linear-gradient(rgb(var(--v-scrim) / var(--v-scrim-alpha)), rgb(var(--v-scrim) / var(--v-scrim-alpha))),
     var(--v-backdrop-image),

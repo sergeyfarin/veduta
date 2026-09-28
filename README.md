@@ -114,10 +114,16 @@ run after it, so your edits are never overwritten. To choose the password instea
 generated, set `VEDUTA_ADMIN_PASSWORD` on that service — it is hashed on the first run and the
 plaintext is never written to disk.
 
-The dashboard is empty until you add connections and cards. Veduta reloads `config/veduta.yaml`
-when it changes, so edit it in place; [`examples/veduta.yaml`](examples/veduta.yaml) is a worked
-configuration to borrow from, and the [setup guide](docs/getting-started.md) walks through
-connecting a real service.
+The dashboard starts with one card, the weather, so it is not an empty page. It shows Berlin as a
+placeholder: set `latitude` and `longitude` in `config/veduta.yaml` to yours, and the card's title
+to match. It reads [Open-Meteo](https://open-meteo.com), which needs no account or key, and that is
+the one outbound request a fresh install makes; delete the `open-meteo` connection and the card to
+make none.
+
+Veduta reloads `config/veduta.yaml` when it changes, so edit it in place and add your own
+connections and cards. [`examples/veduta.yaml`](examples/veduta.yaml) is a worked configuration to
+borrow from, and the [setup guide](docs/getting-started.md) walks through connecting a real
+service.
 
 Two things the quick start decided for you, both covered in the [Docker notes](docs/docker.md):
 

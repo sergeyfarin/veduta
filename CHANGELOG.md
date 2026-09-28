@@ -11,6 +11,21 @@ project is pre-1.0:
 > pinned in `veduta.lock.yaml`, so an incompatible plugin fails closed rather than misbehaving;
 > expect to rebuild and re-approve third-party plugins when upgrading.
 
+## Unreleased
+
+### Added
+
+- `veduta init` writes a starter weather card, so a fresh install is not an empty page. It reads
+  Open-Meteo through the built-in `http-json` integration, needs no account or key, and shows
+  Berlin until `latitude` and `longitude` are changed. It is the one outbound request a default
+  install makes, and the generated file says so.
+
+### Fixed
+
+- The `veil` backdrop covered only as much of the page as its content was tall, so a short or empty
+  dashboard on a tall screen left a flat band below the image. The page is now at least the height
+  of the viewport.
+
 ## 0.1.1 — 2026-09-28
 
 A patch release that makes the quick start work. The README and `compose.yaml` described

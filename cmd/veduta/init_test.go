@@ -76,6 +76,26 @@ func TestInitWritesALoadableConfigWithAWorkingPassword(t *testing.T) {
 	}
 }
 
+// TestInitStartsWithSomethingOnTheDashboard guards the first impression: a configuration that
+// loads but declares no cards signs the operator in to an empty page, which is what shipped in
+// 0.1.1 and read as a broken install.
+func TestInitStartsWithSomethingOnTheDashboard(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "veduta.yaml")
+	runInitForTest(t, configPath)
+
+	cfg, diags := config.Load(configPath)
+	if diags.HasErrors() {
+		t.Fatalf("does not load:\n%s", diags.String())
+	}
+	cards := 0
+	for _, section := range cfg.Config.Sections {
+		cards += len(section.Cards)
+	}
+	if cards == 0 {
+		t.Fatal("veduta init wrote a dashboard with no cards")
+	}
+}
+
 // TestInitDoesNotPrintTheHashOrStoreThePassword guards the two directions the secret can leak:
 // the plaintext must not reach the file, and the verifier must not be the thing announced.
 func TestInitDoesNotPrintTheHashOrStoreThePassword(t *testing.T) {
