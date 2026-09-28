@@ -94,7 +94,7 @@ Then:
 ```sh
 mkdir -p config data
 printf 'VEDUTA_UID=%s\nVEDUTA_GID=%s\n' "$(id -u)" "$(id -g)" > .env
-docker compose up -d && docker compose logs veduta-init
+docker compose up -d; docker compose logs veduta-init
 ```
 
 ```
