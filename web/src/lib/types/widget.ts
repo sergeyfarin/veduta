@@ -246,7 +246,7 @@ export interface BlockActions {
   }[];
 }
 /**
- * Timestamped numeric series, drawn natively as SVG by the core renderer: no library, no markup from the integration. Bounded (4 series of 288 points) and always paired with a text summary. Retention and long-term aggregation belong upstream; this is a bounded local trend.
+ * Timestamped numeric series, drawn natively as SVG by the core renderer: no library, no markup from the integration. Either supplied (`series`: points the integration read from its upstream) or bound (`history`: the card's own retained signals, whose points the core attaches to the card state - an integration never reads stored history). Exactly one of the two. Bounded (4 lines of 288 points) and always paired with a text summary. Long-term retention and aggregation belong upstream; this is a bounded local trend.
  */
 export interface BlockSeries {
   type: 'series';
@@ -269,7 +269,25 @@ export interface BlockSeries {
    * @minItems 1
    * @maxItems 4
    */
-  series: SeriesLine[];
+  series?: SeriesLine[];
+  /**
+   * Draw this card's retained history for the named signals. Each signal must be declared by the operation as a number with history: true; a document naming any other is refused.
+   */
+  history?: {
+    /**
+     * How far back from now. Limited by the server's retention, 30 days by default.
+     */
+    window?: '1h' | '6h' | '24h' | '7d';
+    /**
+     * @minItems 1
+     * @maxItems 4
+     */
+    lines: {
+      signal: string;
+      label: ShortText;
+      level?: Level;
+    }[];
+  };
 }
 export interface SeriesLine {
   label: ShortText;

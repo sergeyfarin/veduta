@@ -65,4 +65,16 @@ describe('SeriesBlock', () => {
     expect(container.querySelector('img')).toBeNull();
     expect(screen.getByText('<img src=x onerror=alert(1)>')).toBeInTheDocument();
   });
+
+  it('renders a bound block from the history it is handed', () => {
+    render(SeriesBlock, {
+      props: {
+        block: { type: 'series', format: 'percent', history: { lines: [{ signal: 'cpu.percent', label: 'CPU' }] } },
+        history: { 'cpu.percent': [{ t: at(0), v: 0.25 }, { t: at(1), v: 0.5 }] }
+      }
+    });
+    expect(screen.getByRole('img').getAttribute('aria-label')).toBe(
+      'Over 1h. CPU: 50.0% now, between 25.0% and 50.0%'
+    );
+  });
 });

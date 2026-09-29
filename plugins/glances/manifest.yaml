@@ -4,7 +4,7 @@ kind: Integration
 metadata:
   id: glances
   name: Glances
-  version: 0.1.0
+  version: 0.2.0
   description: CPU, memory, filesystem and uptime for a Linux host running Glances.
   license: Apache-2.0
   icon: sh:glances
@@ -58,6 +58,20 @@ spec:
               - { label: CPU,    progress: { expr: cpu.total / 100 }, value: { expr: cpu.total }, format: percent }
               - { label: Memory, progress: { expr: mem.percent / 100 }, value: { expr: mem.percent }, format: percent }
               - { label: Root,   progress: { expr: 'first(filter(fs, .mnt_point == "/")).percent / 100' }, value: { expr: 'first(filter(fs, .mnt_point == "/")).percent' }, format: percent }
+          # Drawn from what the core has retained for this card, not from the response above: the
+          # integration names its own signals and never reads stored history. Glances reports these
+          # as 0-100, hence number with a unit rather than percent, which expects a 0-1 fraction.
+          - type: series
+            title: Last 24 hours
+            format: number
+            unit: "%"
+            min: 0
+            max: 100
+            history:
+              window: 24h
+              lines:
+                - { signal: cpu.percent, label: CPU }
+                - { signal: mem.percent, label: Memory }
           - type: metrics
             items:
               - { label: Uptime, value: { expr: uptime }, format: text }

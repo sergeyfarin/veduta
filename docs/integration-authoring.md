@@ -61,6 +61,46 @@ pipeline:
 
 The parameter must be a string or integer and either required or defaulted. A route covers the placeholder only if that segment is exactly `*`. A value is sent only if it is 1–128 characters from `A-Z a-z 0-9 - . _ ~ : @` and is not `.` or `..`; anything else — a `/`, a `?`, a space, an escape — fails the card rather than being encoded, so a value can never reach a path the route does not name. A `pattern` on the parameter is still worth writing, because it rejects a bad value when the configuration loads rather than when the card runs.
 
+### Charts: the series block
+
+A `series` block draws up to four lines of timestamped numbers, natively as SVG, with a text
+summary for screen readers. It comes in two forms, and a block is exactly one of them.
+
+**Supplied** — the upstream already has the series, such as an hourly forecast or a meter's
+readings, and the integration passes the points on. Timestamps must be full RFC 3339 with seconds
+and a zone (`2026-09-29T10:00:00Z`), real, and strictly increasing; an upstream that sends
+`2026-09-29T10:00` needs `+ ":00Z"` (or its real offset) in the expression, or the document is
+refused. A `null` value is a gap, drawn as one.
+
+```yaml
+- type: series
+  title: Rain, next 24 hours
+  unit: mm/h
+  series:
+    - label: Rain
+      points:
+        each: { expr: 'take(forecast.hourly, 24)' }
+        as: hour
+        item: { t: { expr: hour.time }, v: { expr: hour.precipitation } }
+```
+
+**Bound** — the card's own history. Name signals your operation declares as `type: number,
+history: true`; the core attaches what it has retained for this card, over a window of `1h`, `6h`,
+`24h` or `7d`. The integration never reads stored history, and binding a signal the operation does
+not retain fails the card.
+
+```yaml
+- type: series
+  title: Last 24 hours
+  history:
+    window: 24h
+    lines:
+      - { signal: cpu.percent, label: CPU }
+```
+
+`plugins/glances/manifest.yaml` uses the bound form. A new card's chart is empty until it has run a
+few times, and a period when the card could not refresh shows as a gap.
+
 An upstream field that is sometimes missing needs `{ if: …, then: … }`, which omits the key or list element entirely rather than emitting `null`:
 
 ```yaml

@@ -17,6 +17,19 @@ export interface Source {
   };
 }
 
+/**
+ * Core-owned: the retained points for each signal a series block in the document binds with `history`, downsampled to at most 288 per signal. A null value marks a gap in the record, where no reading was stored for much longer than the card's usual spacing. Absent when the document binds nothing.
+ */
+export interface CardHistory {
+  /**
+   * @maxItems 288
+   */
+  [k: string]: {
+    t: string;
+    v: number | null;
+  }[];
+}
+
 export interface RunError {
   code: 'upstream' | 'auth' | 'timeout' | 'config' | 'denied' | 'invalid' | 'limit' | 'internal';
   message: string;
@@ -39,6 +52,7 @@ export interface CardStatePending {
   cardId: string;
   document?: null;
   execution: ExecutionPending;
+  history?: CardHistory;
 }
 
 export interface ExecutionOk {
@@ -57,6 +71,7 @@ export interface CardStateOk {
   cardId: string;
   document: WidgetDocument;
   execution: ExecutionOk;
+  history?: CardHistory;
 }
 
 export interface ExecutionStale {
@@ -77,6 +92,7 @@ export interface CardStateStale {
   cardId: string;
   document: WidgetDocument;
   execution: ExecutionStale;
+  history?: CardHistory;
 }
 
 export interface ExecutionError {
@@ -97,6 +113,7 @@ export interface CardStateError {
   cardId: string;
   document?: null;
   execution: ExecutionError;
+  history?: CardHistory;
 }
 
 export interface ExecutionDisabled {
@@ -116,6 +133,7 @@ export interface CardStateDisabled {
   cardId: string;
   document?: WidgetDocument | null;
   execution: ExecutionDisabled;
+  history?: CardHistory;
 }
 
 /**

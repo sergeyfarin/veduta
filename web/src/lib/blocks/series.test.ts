@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { describe, it, expect } from 'vitest';
-import { geometry, latest, extent, VIEW_WIDTH, VIEW_HEIGHT } from './series';
+import { geometry, latest, extent, resolveLines, VIEW_WIDTH, VIEW_HEIGHT } from './series';
 import type { BlockSeries } from '../types/widget';
 
 const at = (h: number) => `2026-09-29T${String(h).padStart(2, '0')}:00:00Z`;
@@ -107,3 +107,31 @@ describe('series geometry', () => {
     expect(latest([{ t: at(0), v: null }])).toBeUndefined();
   });
 });
+
+describe('a block bound to retained history', () => {
+  const bound: BlockSeries = {
+    type: 'series',
+    history: { window: '24h', lines: [{ signal: 'cpu.percent', label: 'CPU', level: 'warn' }, { signal: 'mem.percent', label: 'Memory' }] }
+  };
+
+  it('takes its points from the card history, by signal name', () => {
+    const lines = resolveLines(bound, { 'cpu.percent': [{ t: at(0), v: 0.2 }, { t: at(1), v: 0.4 }] });
+    expect(lines.map((l) => [l.label, l.level, l.points.length])).toEqual([
+      ['CPU', 'warn', 2],
+      ['Memory', undefined, 0]
+    ]);
+  });
+
+  // A card that has just started has a document naming its signals and no stored history yet.
+  // That is a normal state, not an error, and it must not borrow another signal's points.
+  it('draws nothing, rather than failing, before any history exists', () => {
+    expect(geometry(bound).hasData).toBe(false);
+    expect(geometry(bound, {}).hasData).toBe(false);
+  });
+
+  it('ignores history it was not asked for', () => {
+    const lines = resolveLines(bound, { 'disk.percent': [{ t: at(0), v: 1 }] });
+    expect(lines.every((l) => l.points.length === 0)).toBe(true);
+  });
+});
+

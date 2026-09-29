@@ -159,6 +159,7 @@ func validateSemantics(doc *Document) []string {
 	if doc.Status != nil {
 		checkTime("status.since", doc.Status.Since)
 	}
+	boundAt := map[string]string{}
 	for i, b := range doc.Blocks {
 		switch v := b.(type) {
 		case BlockStatus:
@@ -174,6 +175,20 @@ func validateSemantics(doc *Document) []string {
 				checkTime(fmt.Sprintf("blocks[%d].items[%d].timestamp", i, j), it.Timestamp)
 			}
 		case BlockSeries:
+			if v.History != nil {
+				window := v.History.Window
+				if window == "" {
+					window = "24h" // the schema's default, so "" and "24h" are the same binding
+				}
+				for _, line := range v.History.Lines {
+					if w, seen := boundAt[line.Signal]; seen && w != window {
+						// The card state carries one point set per signal, so one signal drawn at
+						// two windows would have to be two different answers under one key.
+						problems = append(problems, fmt.Sprintf("blocks[%d]: signal %q is already bound at window %q", i, line.Signal, w))
+					}
+					boundAt[line.Signal] = window
+				}
+			}
 			if v.Min != nil && v.Max != nil && *v.Min >= *v.Max {
 				problems = append(problems, fmt.Sprintf("blocks[%d]: min %g is not below max %g", i, *v.Min, *v.Max))
 			}

@@ -157,6 +157,40 @@
           "nextRunAt"
         ]
       }
+    },
+    "history": {
+      "type": "object",
+      "description": "Core-owned: the retained points for each signal a series block in the document binds with `history`, downsampled to at most 288 per signal. A null value marks a gap in the record, where no reading was stored for much longer than the card's usual spacing. Absent when the document binds nothing.",
+      "maxProperties": 16,
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+){0,4}$",
+        "maxLength": 96
+      },
+      "additionalProperties": {
+        "type": "array",
+        "maxItems": 288,
+        "items": {
+          "type": "object",
+          "required": [
+            "t",
+            "v"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "t": {
+              "type": "string",
+              "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})$"
+            },
+            "v": {
+              "type": [
+                "number",
+                "null"
+              ]
+            }
+          }
+        }
+      }
     }
   },
   "allOf": [

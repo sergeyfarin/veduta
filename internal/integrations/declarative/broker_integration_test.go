@@ -75,7 +75,7 @@ func TestGlances_RealBrokerEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Invoke through the real broker: %v", err)
 	}
-	if resp.Document.Title != "Host" || len(resp.Document.Blocks) != 4 {
+	if resp.Document.Title != "Host" || len(resp.Document.Blocks) != 5 {
 		t.Fatalf("unexpected document: %#v", resp.Document)
 	}
 }

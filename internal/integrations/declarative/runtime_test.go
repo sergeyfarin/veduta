@@ -16,6 +16,7 @@ import (
 	"veduta.dev/veduta/internal/capabilities"
 	"veduta.dev/veduta/internal/integrations"
 	"veduta.dev/veduta/internal/integrations/manifestload"
+	"veduta.dev/veduta/internal/widgets"
 )
 
 type fixtureBroker struct{}
@@ -126,8 +127,14 @@ func TestGlancesGoldenPipeline(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resp.Document.Title != "Host" || len(resp.Document.Blocks) != 4 {
+	if resp.Document.Title != "Host" || len(resp.Document.Blocks) != 5 {
 		t.Fatalf("unexpected document: %#v", resp.Document)
+	}
+	// The chart names the manifest's own retained signals and nothing else; the points are the
+	// core's to attach, so the document carries none.
+	bound := widgets.HistoryBindings(resp.Document)
+	if len(bound) != 2 || bound["cpu.percent"] != 24*time.Hour || bound["mem.percent"] != 24*time.Hour {
+		t.Fatalf("history bindings = %v, want cpu.percent and mem.percent over 24h", bound)
 	}
 }
 

@@ -1,12 +1,14 @@
 <script lang="ts">
   import type { WidgetDocument } from '../types/widget';
+  import type { CardHistory } from '../types/cardstate';
   import { formatValue } from '../format';
-  import { VIEW_HEIGHT, VIEW_WIDTH, extent, geometry, latest } from './series';
+  import { VIEW_HEIGHT, VIEW_WIDTH, extent, geometry, latest, resolveLines } from './series';
 
   type Block = Extract<WidgetDocument['blocks'][number], { type: 'series' }>;
-  let { block }: { block: Block } = $props();
+  let { block, history }: { block: Block; history?: CardHistory } = $props();
 
-  const g = $derived(geometry(block));
+  const lines = $derived(resolveLines(block, history));
+  const g = $derived(geometry(block, history));
   const fmt = (v: number | undefined) => formatValue(v, block.format, block.unit);
 
   // Lines are told apart by dash pattern as well as colour, so the legend still works for a reader
@@ -18,19 +20,21 @@
     warn: 'var(--v-warn)',
     error: 'var(--v-error)'
   };
-  const colour = (i: number) => LEVEL_COLOUR[block.series[i]?.level ?? ''] ?? PALETTE[i];
+  const colour = (i: number) => LEVEL_COLOUR[lines[i]?.level ?? ''] ?? PALETTE[i];
 
   // The text alternative is the chart's content in words, not a description of a picture: what
   // each line reads now, and the range it moved through.
   const summary = $derived.by(() => {
-    const parts = block.series.map((line) => {
+    const parts = lines.map((line) => {
       const now = latest(line.points);
       const range = extent(line.points);
       if (now === undefined || !range) return `${line.label}: no readings`;
       return `${line.label}: ${fmt(now)} now, between ${fmt(range[0])} and ${fmt(range[1])}`;
     });
-    const span = g.spanMs > 0 ? ` over ${formatValue(g.spanMs / 1000, 'duration')}` : '';
-    return `${block.title ? block.title + span + '. ' : span ? span.trim() + '. ' : ''}${parts.join('; ')}`;
+    const span = g.spanMs > 0 ? `over ${formatValue(g.spanMs / 1000, 'duration')}` : '';
+    const lead = [block.title, span].filter(Boolean).join(' ');
+    const heading = lead ? lead[0]!.toUpperCase() + lead.slice(1) + '. ' : '';
+    return heading + parts.join('; ');
   });
 </script>
 
@@ -63,7 +67,7 @@
     <p class="empty">No readings yet</p>
   {/if}
   <figcaption>
-    {#each block.series as line, i (i)}
+    {#each lines as line, i (i)}
       <span class="entry">
         <svg class="swatch" viewBox="0 0 16 4" aria-hidden="true">
           <line x1="0" x2="16" y1="2" y2="2" stroke={colour(i)} stroke-dasharray={DASHES[i]} />

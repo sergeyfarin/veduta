@@ -3,7 +3,10 @@
 package widgets_test
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -77,5 +80,73 @@ func TestSeriesBlock_Rejected(t *testing.T) {
 	}
 	if _, err := widgets.Validate(seriesDoc(`{"type":"series","series":[` + line(points(288)) + `]}`)); err != nil {
 		t.Errorf("288 points, the documented maximum, was refused: %v", err)
+	}
+}
+
+func TestSeriesBlock_HistoryBinding(t *testing.T) {
+	bound := func(window, signal string) string {
+		w := ""
+		if window != "" {
+			w = `"window":"` + window + `",`
+		}
+		return `{"type":"series","history":{` + w + `"lines":[{"signal":"` + signal + `","label":"CPU"}]}}`
+	}
+	for name, blocks := range map[string]string{
+		"bound":                                 bound("24h", "cpu.percent"),
+		"default window":                        bound("", "cpu.percent"),
+		"same signal, same window twice":        bound("1h", "cpu.percent") + "," + bound("1h", "cpu.percent"),
+		"default and explicit 24h are the same": bound("", "cpu.percent") + "," + bound("24h", "cpu.percent"),
+	} {
+		doc, err := widgets.Validate(seriesDoc(blocks))
+		if err != nil {
+			t.Errorf("%s: %v", name, err)
+			continue
+		}
+		if got := widgets.HistoryBindings(doc)["cpu.percent"]; got == 0 {
+			t.Errorf("%s: no binding for cpu.percent", name)
+		}
+	}
+	for name, blocks := range map[string]string{
+		"both series and history": `{"type":"series","series":[{"label":"x","points":[]}],"history":{"lines":[{"signal":"cpu","label":"x"}]}}`,
+		"neither":                 `{"type":"series"}`,
+		"unknown window":          bound("30d", "cpu.percent"),
+		"bad signal name":         bound("1h", "CPU Percent"),
+		"no lines":                `{"type":"series","history":{"lines":[]}}`,
+		"five lines":              `{"type":"series","history":{"lines":[` + strings.TrimSuffix(strings.Repeat(`{"signal":"a","label":"a"},`, 5), ",") + `]}}`,
+		// One signal, two windows: the card state has one point set per signal, so this would be
+		// two different answers under one key.
+		"one signal at two windows": bound("1h", "cpu.percent") + "," + bound("24h", "cpu.percent"),
+	} {
+		if _, err := widgets.Validate(seriesDoc(blocks)); err == nil {
+			t.Errorf("%s: accepted %s", name, blocks)
+		}
+	}
+}
+
+func TestHistoryWindowsMatchSchema(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join(repoRoot(t), "schemas", "widget-document.v1.schema.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var schema struct {
+		Defs map[string]struct {
+			Properties map[string]struct {
+				Properties map[string]struct {
+					Enum []string `json:"enum"`
+				} `json:"properties"`
+			} `json:"properties"`
+		} `json:"$defs"`
+	}
+	if err := json.Unmarshal(raw, &schema); err != nil {
+		t.Fatal(err)
+	}
+	enum := schema.Defs["blockSeries"].Properties["history"].Properties["window"].Enum
+	if len(enum) == 0 || len(enum) != len(widgets.HistoryWindows) {
+		t.Fatalf("schema windows %v, Go windows %v", enum, widgets.HistoryWindows)
+	}
+	for _, w := range enum {
+		if widgets.HistoryWindows[w] == 0 {
+			t.Errorf("schema window %q has no duration in widgets.HistoryWindows", w)
+		}
 	}
 }

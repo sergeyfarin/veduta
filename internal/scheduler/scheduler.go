@@ -6,6 +6,7 @@ package scheduler
 import (
 	"context"
 	"errors"
+	"fmt"
 	"hash/fnv"
 	"sort"
 	"strconv"
@@ -81,6 +82,10 @@ var (
 	// the same reason ErrSecretInDocument's is - a panic value is arbitrary in-process data, and
 	// a dashboard tile is the wrong place to render it.
 	ErrRunPanicked = errors.New("scheduler: the integration failed unexpectedly; see the server log")
+	// ErrUnretainedSignal indicates that a series block bound a signal its operation does not
+	// declare as a retained number. Drawing it would mean an empty chart that never fills, or
+	// another card's data if names collided, so the document is refused instead.
+	ErrUnretainedSignal = errors.New("scheduler: a series block binds a signal this operation does not retain")
 )
 
 // New creates a scheduler backed by store. A nil store disables persistence. Produced documents
@@ -271,6 +276,14 @@ func (m *Manager) refresh(ctx context.Context, d Definition) error {
 		}
 	}
 	if runErr == nil {
+		for signal := range widgets.HistoryBindings(doc) {
+			if _, retained := d.HistorySignals[signal]; !retained {
+				runErr = fmt.Errorf("%w: %q", ErrUnretainedSignal, signal)
+				break
+			}
+		}
+	}
+	if runErr == nil {
 		ttl := d.Refresh
 		if doc.Hints != nil && doc.Hints.TTLSeconds > 0 && time.Duration(doc.Hints.TTLSeconds)*time.Second < ttl {
 			ttl = time.Duration(doc.Hints.TTLSeconds) * time.Second
@@ -278,11 +291,17 @@ func (m *Manager) refresh(ctx context.Context, d Definition) error {
 		if ttl < time.Second {
 			ttl = time.Second
 		}
+		cs := state.OK(id, doc, d.Source, ttl, dur)
+		bound, err := m.boundHistory(ctx, d, doc, cs.Execution.GeneratedAt, history)
+		if err != nil {
+			return err
+		}
+		cs.History = bound
 		m.mu.Lock()
 		m.failures[id] = 0
 		delete(m.openUntil, id)
 		m.mu.Unlock()
-		return m.commitWithHistory(ctx, d, state.OK(id, doc, d.Source, ttl, dur), history)
+		return m.commitWithHistory(ctx, d, cs, history)
 	}
 	m.mu.Lock()
 	m.failures[id]++
@@ -297,12 +316,16 @@ func (m *Manager) refresh(ctx context.Context, d Definition) error {
 		m.openUntil[id] = open
 		m.mu.Unlock()
 		if previous.Document != nil {
-			return m.commit(ctx, d, state.StaleAfterErrorWithOpenCircuit(id, *previous.Document, d.Source, parseTime(previous.Execution.GeneratedAt), time.Now(), failures, open, re))
+			cs := state.StaleAfterErrorWithOpenCircuit(id, *previous.Document, d.Source, parseTime(previous.Execution.GeneratedAt), time.Now(), failures, open, re)
+			cs.History = previous.History // the last good document keeps the history drawn with it
+			return m.commit(ctx, d, cs)
 		}
 		return m.commit(ctx, d, state.ErrorWithOpenCircuit(id, d.Source, re, open))
 	}
 	if previous.Document != nil {
-		return m.commit(ctx, d, state.StaleAfterError(id, *previous.Document, d.Source, parseTime(previous.Execution.GeneratedAt), time.Now(), failures, retry, re))
+		cs := state.StaleAfterError(id, *previous.Document, d.Source, parseTime(previous.Execution.GeneratedAt), time.Now(), failures, retry, re)
+		cs.History = previous.History
+		return m.commit(ctx, d, cs)
 	}
 	cs := state.Error(id, d.Source, re)
 	cs.Execution.ConsecutiveFailures = failures
@@ -316,6 +339,35 @@ func (m *Manager) refresh(ctx context.Context, d Definition) error {
 // the card starts pending rather than serving it again.
 func (m *Manager) documentLeaksSecret(doc *widgets.Document) bool {
 	return m.secrets != nil && doc != nil && m.secrets.ContainsSecretInDocument(*doc)
+}
+
+// boundHistory reads back the retained points for every signal the document's series blocks bind,
+// ending at generatedAt - the time the new sample is about to be written at, so it is appended here
+// rather than read back. Returns nil when nothing is bound or there is no store.
+func (m *Manager) boundHistory(ctx context.Context, d Definition, doc widgets.Document, generatedAt string, current map[string]float64) (map[string][]widgets.SeriesPoint, error) {
+	bindings := widgets.HistoryBindings(doc)
+	if len(bindings) == 0 || m.store == nil {
+		return nil, nil
+	}
+	to, err := time.Parse(time.RFC3339Nano, generatedAt)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string][]widgets.SeriesPoint, len(bindings))
+	for signal, window := range bindings {
+		from := to.Add(-window)
+		samples, err := m.store.SignalHistory(ctx, d.ID, signal, from, to, state.MaxHistoryPoints/2)
+		if err != nil {
+			return nil, fmt.Errorf("scheduler: reading history for %s: %w", signal, err)
+		}
+		if v, ok := current[signal]; ok {
+			samples = append(samples, state.Sample{T: to, V: v})
+		}
+		if points := state.Downsample(samples, from, to); len(points) > 0 {
+			out[signal] = points
+		}
+	}
+	return out, nil
 }
 
 func historicalValues(d Definition, doc widgets.Document) (map[string]float64, error) {
@@ -483,7 +535,7 @@ func classify(err error) state.ErrorCode {
 	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
 		return state.ErrorTimeout
 	}
-	if errors.Is(err, ErrSecretInDocument) {
+	if errors.Is(err, ErrSecretInDocument) || errors.Is(err, ErrUnretainedSignal) {
 		return state.ErrorInvalid
 	}
 	if errors.Is(err, ErrRunPanicked) {

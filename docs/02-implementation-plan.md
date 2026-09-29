@@ -1342,7 +1342,7 @@ services; there is no automatic 0.2 commitment. See the
 [requirements review](03-backlog.md#does-wasm-add-enough-value-to-justify-further-development).
 
 For 0.2, prioritize the independent
-[native time-series rendering work](03-backlog.md#no-native-visualisation-block-for-retained-history)
+[native time-series rendering work](03-backlog-resolved.md#there-was-no-native-visualisation-block-for-retained-history)
 for bounded supplied series and retained signals. This supports rain and energy
 views without making WASM or a general time-series database prerequisites.
 
@@ -1721,19 +1721,24 @@ in a path segment slipped a query or a shorter path past route authorisation in 
 released as 0.1.3; and a `${secret:…}` in a connection header had been sent as literal text. Left
 open: [reading a 404 as absent](03-backlog.md#a-pipeline-step-cannot-read-404-as-absent), since
 Home Assistant's missing-entity case now fails the card with the status.
-**M3 · Native time-series block** · 3 d · deps: none · **IN PROGRESS: M3a (the block) done 2026-09-29; M3b (history binding) next** — the
-[0.2 item the backlog already names](03-backlog.md#no-native-visualisation-block-for-retained-history):
-a bounded block that draws points an integration supplies, plus a separate core binding for
-retained signal history. Points in, an SVG element tree out, drawn by a Svelte component like every
-other block: no library, no injection sink, no new threat model, and the Widget Document stays
-closed ([decision 0004](decisions/0004-card-expressiveness-and-the-presentation-contract.md)).
-AC: series and point counts are capped by the schema; every point carries a timestamp and the
-series a unit; missing data is drawn as a gap, never interpolated; an over-limit or malformed
-document is rejected by the validator and covered by the fuzz corpus; the block has a text
-alternative; a golden document and a visual baseline exist; `schemas/plugin-manifest.v1.schema.json`'s
-"for `for:` windows and sparklines" sentence becomes true in the same change, as the entry asks.
-Integrations gain no direct database access. Rain and energy integrations are candidates this
-unblocks, not commitments.
+**M3 · Native time-series block** · 3 d · deps: none · **DONE, 2026-09-29** — the
+[0.2 item the backlog named](03-backlog-resolved.md#there-was-no-native-visualisation-block-for-retained-history),
+in two parts. **M3a**, the block: `series` carries up to four lines of 288 timestamped points, `null`
+a gap; `internal/widgets` requires real, strictly increasing timestamps and `min` below `max`; the
+secret scanner walks it (and its default case now fails closed, since it had waved an unknown block
+type through); `SeriesBlock.svelte` draws it as SVG from a tested geometry module - no library, the
+renderer still closed - with lines told apart by dash as well as colour and a text summary as its
+accessible name; a Climate showcase card and regenerated baselines. **M3b**, the binding: a block
+binds `history: {window, lines}` to its operation's retained signals, the scheduler refuses any
+other, reads the points back bucketed in SQL, marks long silences as gaps, and attaches them to the
+card state's new core-owned `history` map, which travels over the existing API and stream; a stale
+state keeps its last good set. `plugins/glances` 0.2.0 uses it.
+AC met: counts capped by schema and validator; timestamps and units carried; gaps shown as gaps,
+never interpolated; malformed and over-limit documents rejected and in the fuzz and schema corpora;
+text alternative; visual baseline; the manifest schema's sparkline sentence made true; no database
+access for integrations. **Found on the way:** the visual suite passed four desktop baselines with a
+whole new card on the page, and its footer had rendered `git describe` all along - the build
+version is now pinned and the threshold entry raised to medium.
 **M4 · Read-only integrations page** · 1.5 d · deps: none · **COMMITTED to 0.2, decided 2026-09-29** —
 resolves [the approval API's missing client](03-backlog.md#the-approval-api-has-no-client) at its
 cheapest end. A page over the existing `GET /api/v1/integrations` and `.../approval`: each
@@ -1758,7 +1763,7 @@ all. Action execution stays display-only through 0.2, and its next step is a des
 code. The armv7 WASM measurement waits on real hardware and is disclosed in `docs/docker.md` in
 the meantime.
 
-**Order:** M1 → M2 ⇉ M3 → M4 → M5; M6 is recorded. **0.2 is M2, M3 and M4**, with M5 folded in; `0.1.x` patches continue as needed and inherit the release rules unchanged.
+**Order:** M1 → M2 ⇉ M3 → M4 → M5; M6 is recorded, and the WASM review it deferred to after M3 is now due. **0.2 is M2, M3 and M4**, with M5 folded in; `0.1.x` patches continue as needed and inherit the release rules unchanged.
 
 ---
 

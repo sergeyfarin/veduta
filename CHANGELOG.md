@@ -24,7 +24,10 @@ project is pre-1.0:
   that authenticates with a custom header no longer forces its credential into the config file.
 - A `series` block: up to four timestamped numeric lines, drawn by the dashboard itself as SVG with
   no charting library, where a `null` reading is a gap rather than a line drawn across it. Every
-  chart carries a text summary of what each line reads now and the range it moved through.
+  chart carries a text summary of what each line reads now and the range it moved through. An
+  integration either supplies the points or binds its own retained signals with `history`, in which
+  case Veduta attaches what it has stored for the card (1 hour to 7 days) and the integration
+  never reads stored history. The Glances card now shows CPU and memory over the last 24 hours.
 - Arcane cards take an `environmentId` parameter (default `"0"`, the local Docker host), so a remote
   host or agent can have a card.
 
@@ -34,6 +37,7 @@ project is pre-1.0:
   only when a card ran; it is now refused when the manifest loads, with the placeholder syntax
   above as the replacement. Third-party manifests using one need rewriting (the plugin ABI is
   experimental, as noted at the top of this file).
+- `glances` is now manifest version 0.2.0 (its chart), and needs re-approval like the two below.
 - `arcane` and `homeassistant` are now manifest version 0.2.0 with changed routes, so both need
   re-approval (`veduta integration diff` then `approve`). Home Assistant's `sensor` reads only its
   own entity from `/api/states/<entityId>` instead of every entity; a missing entity now fails the

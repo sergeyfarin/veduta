@@ -8,6 +8,8 @@ import (
 	"encoding/json"
 	"errors"
 	"time"
+
+	"veduta.dev/veduta/internal/state"
 )
 
 // Event is one persistent, user-visible runtime occurrence.
@@ -101,4 +103,41 @@ func (s *Store) PutSignalHistory(ctx context.Context, cardID, timestamp string, 
 		}
 	}
 	return tx.Commit()
+}
+
+// SignalHistory reads one signal's retained readings in [from, to], averaged into at most buckets
+// equal time buckets, each stamped with its latest reading's time. Averaging here rather than in
+// Go keeps the cost of a refresh bounded by the bucket count: a card refreshing every ten seconds
+// retains about sixty thousand readings a week, and every refresh of a card showing its week
+// would otherwise read all of them back. The ts range is compared as text first, which the
+// primary key can serve (every stored timestamp is UTC RFC 3339), and precisely in Go after.
+func (s *Store) SignalHistory(ctx context.Context, cardID, signal string, from, to time.Time, buckets int) ([]state.Sample, error) {
+	if buckets < 1 {
+		buckets = 1
+	}
+	perDay := float64(buckets) / to.Sub(from).Hours() * 24
+	rows, err := s.db.QueryContext(ctx, `SELECT MAX(ts), AVG(value) FROM signal_history
+		WHERE card_id = ? AND signal = ? AND ts >= ? AND ts <= ?
+		GROUP BY CAST((julianday(ts) - julianday(?)) * ? AS INTEGER)
+		ORDER BY MAX(ts)`,
+		cardID, signal, from.UTC().Add(-time.Second).Format(time.RFC3339), to.UTC().Add(time.Second).Format(time.RFC3339Nano),
+		from.UTC().Format(time.RFC3339Nano), perDay)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var out []state.Sample
+	for rows.Next() {
+		var ts string
+		var v float64
+		if err := rows.Scan(&ts, &v); err != nil {
+			return nil, err
+		}
+		t, err := time.Parse(time.RFC3339Nano, ts)
+		if err != nil || t.Before(from) || t.After(to) {
+			continue
+		}
+		out = append(out, state.Sample{T: t, V: v})
+	}
+	return out, rows.Err()
 }

@@ -975,3 +975,81 @@ Existing configurations validate unchanged, since a plain string is a valid `sec
 and a missing secret refusing to build, and fails if resolution is bypassed; the L3 response scan's
 fixture now carries a secret in a connection header too.
 
+### There was no native visualisation block for retained history
+
+Found 2026-09-16 while assessing an external design recommendation to embed Mermaid and Vega-Lite
+as card content. The assessment's incidental finding matters more than its subject: the Widget
+Document has no `chart`, `sparkline` or `gauge` block. `chart` is in fact the string the renderer
+tests use as their example of an *unknown* block type
+([BlockRenderer.test.ts](../web/src/lib/blocks/BlockRenderer.test.ts), `UnknownBlock.test.ts`).
+
+The data for one is already there and already declared. J1 retains bounded numeric history for
+declared signals, and `schemas/plugin-manifest.v1.schema.json`'s own description of that retention
+says it is "for `for:` windows and sparklines" - so the schema has been promising a renderer that
+was never built.
+
+A native block is the shape that fits: points in, an SVG element tree out, drawn by a Svelte
+component like every other block. No library, no injection sink, no new threat model. Mermaid and
+Vega-Lite are the shape that does not - both render by constructing DOM or SVG themselves and
+inserting it, which needs either `{@html}` (failed in CI by
+[no_html_directive_test.go](../internal/contracts/no_html_directive_test.go)) or the sandboxed
+iframe block already considered and rejected under
+[should there be a frontend plugin surface at all?](#open-question-should-there-be-a-frontend-plugin-surface-at-all).
+Recording that here so the comparison is not re-derived the next time someone asks about
+Mermaid - and it is now settled in
+[decision 0004](decisions/0004-card-expressiveness-and-the-presentation-contract.md), which
+keeps the Widget Document closed and takes the native block as the one thing worth adopting
+from the proposal that raised this.
+
+**The README half is closed, 2026-09-16.** The opening sentence sold Veduta as showing "photos,
+posters, camera frames, charts - not just numbers" three lines above a caveat scrupulous about
+actions not being executable, and ending "everything else on this page is implemented". The word
+is gone from README.md and from the 0.1.0 summary in CHANGELOG.md; the three examples that remain
+are all real block types. No caveat replaced it, because there is nothing half-built to caveat -
+unlike actions, which render and are deliberately disabled, a chart block does not exist at all,
+and a README that describes what ships should not carry a roadmap note.
+
+One inconsistency is left standing on purpose, because it is the block's problem rather than the
+README's: `schemas/plugin-manifest.v1.schema.json` still describes signal retention as being "for
+`for:` windows and sparklines". Retention is real and `for:` windows work; the sparkline half of
+that sentence stays wrong until the block lands. Fix it in the same change, not before.
+
+**Planning clarification, 2026-09-16:** prioritize a bounded native time-series
+block in 0.2, independently of the WASM review. It should render timestamped points
+supplied by an integration (including future rain forecasts and upstream historical
+energy data), with a separate core binding for retained numeric signal history.
+Limit series/point counts, carry units and timestamps, and show missing data as
+gaps. Integrations do not gain direct database access.
+
+Veduta remains a dashboard with bounded local trends. Long-term storage, durable
+aggregation and energy accounting belong upstream; a chart does not require
+turning Veduta into a general time-series database. Prefer authoritative upstream
+kWh totals over reconstructing them from intermittent dashboard power samples.
+A calendar agenda can use the existing list block; a month-grid renderer is not
+a prerequisite for assessing calendar integration.
+
+Priority: the block itself 0.2; candidate integrations are not committed by it.
+
+**Progress, 2026-09-29 (Phase M3a): the block exists.** `series` is in the Widget Document schema,
+`internal/widgets` (strictly increasing real timestamps, `min` below `max`), the secret scanner and
+the renderer (`SeriesBlock.svelte` over a tested geometry module - gaps split a line, a lone reading
+is a dot, a fixed range clips to its edge), with a showcase card and regenerated baselines. **Still
+open: the core binding for retained signal history** (M3b), which is also when the manifest schema's
+"for `for:` windows and sparklines" sentence becomes true. This entry closes with that.
+
+**Resolved, 2026-09-29, in Phase M3.** The binding completed it (M3b). A series block either supplies
+its points or binds `history: { window, lines: [{signal, label}] }`; the scheduler checks every bound
+signal is one the operation retains (`ErrUnretainedSignal`, classified `invalid`), reads each back
+from `signal_history` averaged into buckets in SQL - so a refresh costs a bounded number of rows even
+for a card that retains sixty thousand readings a week - and `state.Downsample` marks a silence of
+more than three times the median spacing as a null. The points travel in the card state's new
+core-owned `history` map, over the existing REST and SSE paths, persisted with the state, and a stale
+state keeps its last good set. `BlockRenderer` hands the map to blocks; only a bound series reads it.
+`plugins/glances` 0.2.0 draws CPU and memory over 24 hours, and the manifest schema's sentence about
+sparklines now describes something that exists. Mutation-checked: the gap rule, the unretained-signal
+refusal and the stale carry-over each fail their test when removed.
+
+Not built, deliberately: no showcase card uses the bound form, because the fixture server has no
+scheduler to attach history; the renderer's bound path is covered by component tests instead. The
+WASM requirements review was waiting on this block, and is now due.
+

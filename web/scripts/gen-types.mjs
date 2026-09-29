@@ -96,6 +96,13 @@ async function generateCardState() {
     ...commonOptions,
     bannerComment: ''
   });
+  // Core-owned and independent of the execution state: an ok card carries the points its document
+  // binds, and a stale one keeps its last good set alongside its last good document.
+  if (!schema.properties.history) throw new Error('card-state.v1.schema.json has no history property');
+  const historyTS = await compile(schema.properties.history, 'CardHistory', {
+    ...commonOptions,
+    bannerComment: ''
+  });
   const errorTS = await compile(
     { ...execBase.error, type: 'object' }, // strip the schema's ["object","null"] - null is handled by the union, not this sub-type
     'RunError',
@@ -165,6 +172,7 @@ export interface CardState${name.slice('Execution'.length)} {
   cardId: string;
   document${docRequired ? '' : '?'}: ${docType};
   execution: ${name};
+  history?: CardHistory;
 }
 `;
   });
@@ -189,6 +197,7 @@ export interface CardState${name.slice('Execution'.length)} {
 import type { WidgetDocument } from './widget';
 
 ${sourceTS}
+${historyTS}
 ${errorTS}
 ${branches.join('\n')}
 /**

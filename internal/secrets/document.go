@@ -131,6 +131,13 @@ func (r *Registry) blockLeaks(b widgets.Block) bool {
 				return true
 			}
 		}
+		if v.History != nil {
+			for _, line := range v.History.Lines {
+				if r.containsAny(line.Label) {
+					return true
+				}
+			}
+		}
 		return false
 	default:
 		// Fail closed. This used to return false, so a block type added to widgets without a case

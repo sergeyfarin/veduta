@@ -205,7 +205,7 @@
               {#if cs?.document?.blocks?.length}
                 <div class="blocks">
                   {#each cs.document.blocks as block, i (i)}
-                    <BlockRenderer {block} />
+                    <BlockRenderer {block} history={cs.history} />
                   {/each}
                 </div>
               {:else if cs && isPending(cs)}

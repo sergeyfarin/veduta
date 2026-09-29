@@ -114,6 +114,9 @@ type CardState struct {
 	CardID    string            `json:"cardId"`
 	Document  *widgets.Document `json:"document"`
 	Execution Execution         `json:"execution"`
+	// History is core-owned: the retained points for each signal the document's series blocks
+	// bind, downsampled to at most MaxHistoryPoints. Nil when nothing is bound. See history.go.
+	History map[string][]widgets.SeriesPoint `json:"history,omitempty"`
 }
 
 // nowRFC3339 is the one place "the current time" is formatted for the wire, so every constructor
@@ -293,5 +296,5 @@ func (c CardState) Validate() error {
 	if e.CircuitOpenUntil != "" && e.NextRunAt == "" {
 		return fmt.Errorf("circuitOpenUntil requires nextRunAt")
 	}
-	return nil
+	return validateHistory(c.History)
 }

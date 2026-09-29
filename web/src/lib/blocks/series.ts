@@ -3,7 +3,8 @@
 // Geometry for the series block, kept apart from the component so the rules that decide what a
 // chart says - where a gap is, what the axis spans, which values are clipped - are tested as plain
 // functions rather than read back out of rendered SVG.
-import type { BlockSeries } from '../types/widget';
+import type { BlockSeries, SeriesLine, SeriesPoint } from '../types/widget';
+import type { CardHistory } from '../types/cardstate';
 
 export const VIEW_WIDTH = 300;
 export const VIEW_HEIGHT = 64;
@@ -29,12 +30,30 @@ export interface SeriesGeometry {
   hasData: boolean;
 }
 
-export function geometry(block: BlockSeries): SeriesGeometry {
+/**
+ * The lines a block draws, whichever way it was written. A supplied block carries its own points.
+ * A bound block names its card's retained signals, and the points come from the card state the
+ * core attached them to - a signal with nothing retained yet is an empty line, not an error, so a
+ * new card shows its legend and "no readings" until the history fills in.
+ */
+export function resolveLines(block: BlockSeries, history?: CardHistory): SeriesLine[] {
+  if (block.history) {
+    return block.history.lines.map((line) => ({
+      label: line.label,
+      ...(line.level ? { level: line.level } : {}),
+      points: history?.[line.signal] ?? []
+    }));
+  }
+  return block.series ?? [];
+}
+
+export function geometry(block: BlockSeries, history?: CardHistory): SeriesGeometry {
+  const series = resolveLines(block, history);
   let tMin = Infinity;
   let tMax = -Infinity;
   let vMin = Infinity;
   let vMax = -Infinity;
-  for (const line of block.series) {
+  for (const line of series) {
     for (const p of line.points) {
       const t = Date.parse(p.t);
       if (t < tMin) tMin = t;
@@ -66,7 +85,7 @@ export function geometry(block: BlockSeries): SeriesGeometry {
   };
   const r = (n: number) => Math.round(n * 100) / 100;
 
-  const lines = block.series.map((line) => {
+  const lines = series.map((line) => {
     const runs: string[] = [];
     const dots: [number, number][] = [];
     let run: [number, number][] = [];
@@ -91,7 +110,7 @@ export function geometry(block: BlockSeries): SeriesGeometry {
 }
 
 /** The last numeric reading of a line, or undefined when it has none. */
-export function latest(points: BlockSeries['series'][number]['points']): number | undefined {
+export function latest(points: SeriesPoint[]): number | undefined {
   for (let i = points.length - 1; i >= 0; i--) {
     const v = points[i]?.v;
     if (v !== null && v !== undefined) return v;
@@ -100,7 +119,7 @@ export function latest(points: BlockSeries['series'][number]['points']): number 
 }
 
 /** The lowest and highest numeric readings of a line, or undefined when it has none. */
-export function extent(points: BlockSeries['series'][number]['points']): [number, number] | undefined {
+export function extent(points: SeriesPoint[]): [number, number] | undefined {
   let lo = Infinity;
   let hi = -Infinity;
   for (const p of points) {

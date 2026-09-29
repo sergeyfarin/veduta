@@ -371,7 +371,7 @@
         "history": {
           "type": "boolean",
           "default": false,
-          "description": "Retain a bounded numeric history for `for:` windows and sparklines."
+          "description": "Retain a bounded numeric history for `for:` windows and for series blocks that bind it with `history`. Only a number with history: true can be bound."
         }
       },
       "allOf": [

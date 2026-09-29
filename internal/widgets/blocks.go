@@ -5,6 +5,7 @@ package widgets
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 )
 
 // Block is the discriminated union of the v1 block types. There is no way to construct an
@@ -111,17 +112,63 @@ type BlockActions struct {
 	Actions  []Action `json:"actions"`
 }
 
-// BlockSeries is up to four timestamped numeric series, drawn by the core as SVG. A nil V is a
-// gap - no reading - and is never interpolated across. Points are strictly increasing in T, which
-// the validator checks. Added in Phase M3; see docs/03-backlog-resolved.md.
+// BlockSeries is up to four timestamped numeric lines, drawn by the core as SVG. It is either
+// supplied - Series carries points the integration read upstream - or bound - History names the
+// card's own retained signals, and the core attaches their points to the card state (the
+// integration never reads stored history). The schema requires exactly one. A nil V is a gap and
+// is never interpolated across; points are strictly increasing in T, which the validator checks.
+// Added in Phase M3; see docs/03-backlog-resolved.md.
 type BlockSeries struct {
-	Title    string       `json:"title,omitempty"`
-	Emphasis Emphasis     `json:"emphasis,omitempty"`
-	Format   Format       `json:"format,omitempty"`
-	Unit     string       `json:"unit,omitempty"`
-	Min      *float64     `json:"min,omitempty"`
-	Max      *float64     `json:"max,omitempty"`
-	Series   []SeriesLine `json:"series"`
+	Title    string         `json:"title,omitempty"`
+	Emphasis Emphasis       `json:"emphasis,omitempty"`
+	Format   Format         `json:"format,omitempty"`
+	Unit     string         `json:"unit,omitempty"`
+	Min      *float64       `json:"min,omitempty"`
+	Max      *float64       `json:"max,omitempty"`
+	Series   []SeriesLine   `json:"series,omitempty"`
+	History  *SeriesHistory `json:"history,omitempty"`
+}
+
+// SeriesHistory binds a series block to the card's retained signals over a window.
+type SeriesHistory struct {
+	Window string        `json:"window,omitempty"` // 1h, 6h, 24h or 7d; empty means 24h
+	Lines  []HistoryLine `json:"lines"`
+}
+
+// HistoryLine names one retained signal and how to label it.
+type HistoryLine struct {
+	Signal string `json:"signal"`
+	Label  string `json:"label"`
+	Level  Level  `json:"level,omitempty"`
+}
+
+// HistoryWindows maps each schema window to its duration. The schema's enum and this map must
+// agree; TestHistoryWindowsMatchSchema checks it.
+var HistoryWindows = map[string]time.Duration{
+	"1h": time.Hour, "6h": 6 * time.Hour, "24h": 24 * time.Hour, "7d": 7 * 24 * time.Hour,
+}
+
+// HistoryBindings returns every signal the document's series blocks bind, with its window. A
+// document that binds one signal at two windows is refused by Validate, so each signal has one.
+func HistoryBindings(doc Document) map[string]time.Duration {
+	var out map[string]time.Duration
+	for _, b := range doc.Blocks {
+		s, ok := b.(BlockSeries)
+		if !ok || s.History == nil {
+			continue
+		}
+		window := HistoryWindows[s.History.Window]
+		if window == 0 {
+			window = HistoryWindows["24h"]
+		}
+		for _, line := range s.History.Lines {
+			if out == nil {
+				out = map[string]time.Duration{}
+			}
+			out[line.Signal] = window
+		}
+	}
+	return out
 }
 
 // SeriesLine is one labelled line of a BlockSeries. 0-288 points.

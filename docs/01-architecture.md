@@ -214,6 +214,14 @@ presentation (`blocks`) and semantics (`signals`). Everything about *when* it ra
 current, and how it failed is **core-owned** and lives in the card-state envelope. An integration
 cannot forge a timestamp, claim freshness, or suppress its own error.
 
+The same line divides history (Phase M3). A `series` block may *bind* retained signals —
+`history: { window: 24h, lines: [{ signal: cpu.percent, label: CPU }] }` — and the core attaches
+those signals' points to the envelope's `history` map, keyed by signal, downsampled to at most 288,
+with a null where the record has an unusually long silence. The integration names a signal of its
+own operation that is declared `history: true`; it never reads stored history, and a document
+naming any other signal is refused. A stale envelope keeps the history that was drawn with its
+last good document.
+
 Schemas: [`widget-document.v1`](../schemas/widget-document.v1.schema.json),
 [`card-state.v1`](../schemas/card-state.v1.schema.json).
 

@@ -36,7 +36,7 @@ writing down once.
 6. **What is taken from the proposal is the visualisation gap, natively.** A
    chart or sparkline block drawn as an SVG element tree by a Svelte component,
    like every other block — tracked as
-   [no native visualisation block for retained history](../03-backlog.md#no-native-visualisation-block-for-retained-history)
+   [no native visualisation block for retained history](../03-backlog-resolved.md#there-was-no-native-visualisation-block-for-retained-history)
    and scheduled for 0.2, not for the alpha.
 7. **Directive syntax stays a candidate for the authoring layer only**, recorded
    in [markdown has no authoring syntax for structure](../03-backlog.md#markdown-is-prose-only-with-no-authoring-syntax-for-structure),
