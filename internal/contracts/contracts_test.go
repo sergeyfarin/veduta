@@ -566,9 +566,9 @@ func TestPublishedImageTagsAgreeWithChangelog(t *testing.T) {
 	documents := []string{"README.md", "compose.yaml", "docs/getting-started.md", "docs/docker.md"}
 	found := 0
 	for _, name := range documents {
-		text, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(name)))
-		if err != nil {
-			t.Fatal(err)
+		text, readErr := os.ReadFile(filepath.Join(root, filepath.FromSlash(name)))
+		if readErr != nil {
+			t.Fatal(readErr)
 		}
 		for _, pattern := range []*regexp.Regexp{image, release} {
 			for _, match := range pattern.FindAllSubmatch(text, -1) {
