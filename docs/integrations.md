@@ -100,19 +100,19 @@ connections:
 
 Home Assistant has no read-only token scope — a long-lived access token is exactly as privileged as
 the user that created it. Create a dedicated non-administrator user for Veduta. What actually keeps
-this integration read-only is its route grant: it declares `GET /api/states` and nothing else, so
-neither `/api/services` nor `/api/template` is reachable through it.
+this integration read-only is its route grant: it declares `GET /api/states` and `GET /api/states/*`
+and nothing else, so neither `/api/services` nor `/api/template` is reachable through it.
 
-Both operations read the full `/api/states`, which is several megabytes on a large installation.
-That is a real cost for `sensor`, which uses one entity out of it: Home Assistant does serve a
-single entity at `/api/states/<entity_id>`, but a v1 manifest's pipeline path must be a literal
-(see [docs/03-backlog.md](03-backlog.md)), so a per-entity path is not expressible yet. Prefer one
-overview card and a few sensor cards at a slow refresh over a wall of sensor cards.
+`overview` reads the full `/api/states`, which is several megabytes on a large installation, so give
+it a slow refresh. `sensor` reads only its own entity from `/api/states/<entityId>`, a few hundred
+bytes, so sensor cards are cheap. An `entityId` that is not one plain path segment fails the card
+rather than being sent.
 
-A `sensor` card emits a `state` signal always, and a numeric `value` signal only when the entity
-carries a `unit_of_measurement` and is currently reporting. When the entity is missing or
-unavailable, `value` is absent rather than stale — which a rule reads as unknown, so it neither
-fires nor resolves on a number nobody measured.
+A `sensor` card emits a `state` signal, and a numeric `value` signal only when the entity carries a
+`unit_of_measurement` and is currently reporting. When the entity is unavailable, `value` is absent
+rather than stale — which a rule reads as unknown, so it neither fires nor resolves on a number
+nobody measured. When the entity no longer exists (renamed in Home Assistant, say), Home Assistant
+answers 404 and the card shows that error and emits no signals at all.
 
 ```yaml
 sections:
@@ -146,11 +146,18 @@ connections:
     auth: { type: header, name: X-Api-Key, value: "${secret:ARCANE_API_KEY}" }
 ```
 
-**Local environment only.** Arcane scopes its API by environment id as a path segment, and a v1
-manifest cannot build a path from a card parameter, so this integration declares
-`GET /api/environments/0/containers` — environment `0` being the local Docker host. Remote hosts and
-agents added to the same Arcane cannot be given a card yet; the gap is recorded in
-[docs/03-backlog.md](03-backlog.md).
+The card's `environmentId` parameter chooses the environment and defaults to `0`, the local Docker
+host; remote hosts and agents added to the same Arcane have their own ids, shown in Arcane's
+environment list. The route is `GET /api/environments/*/containers`, so an approval grants that one
+endpoint in every environment the API key can see, and nothing else.
+
+```yaml
+      - id: edge-containers
+        integration: arcane
+        operation: containers
+        params: { environmentId: "3", limit: 6 }
+        slots: { server: arcane }
+```
 
 Signals: `containers.running`, `containers.stopped`, `containers.total`.
 

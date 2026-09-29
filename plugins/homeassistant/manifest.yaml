@@ -1,4 +1,4 @@
-# Home Assistant's REST API is read-only here by construction: the two routes below are both GET,
+# Home Assistant's REST API is read-only here by construction: the routes below are all GET,
 # and neither /api/services nor /api/template is requested, so an approved grant cannot call a
 # service or evaluate a template no matter what this manifest is later edited to say.
 #
@@ -18,7 +18,7 @@ kind: Integration
 metadata:
   id: homeassistant
   name: Home Assistant
-  version: 0.1.0
+  version: 0.2.0
   description: Entity counts, unavailable entities and single-sensor readings from Home Assistant.
   license: Apache-2.0
   icon: sh:home-assistant
@@ -91,22 +91,24 @@ spec:
 
     # A whole-home summary is not what most people want on a wall dashboard; one sensor is.
     #
-    # Home Assistant serves a single entity at GET /api/states/<entity_id>, which would be the
-    # cheap way to do this - but a v1 manifest's pipeline path must be a literal, so that the
-    # approver can see at load time which routes an operation can actually reach. A path built
-    # from a card parameter is not decidable that way and is refused. So this operation reads the
-    # same full /api/states as the overview does and selects one entity from it: correct, and
-    # honestly more expensive than the endpoint it is standing in for. Give sensor cards a slower
-    # refresh than the 30s you might otherwise reach for, and prefer one overview card plus a few
-    # sensor cards over a wall of them.
+    # Home Assistant serves a single entity at GET /api/states/<entity_id>, and the card's entityId
+    # parameter fills that last segment - a few hundred bytes per refresh, where reading the whole
+    # /api/states as the overview does is megabytes on a large installation. The route grants one
+    # segment under /api/states/ and nothing else, so neither /api/services nor /api/template is
+    # reachable through a crafted entityId.
+    #
+    # An entity that no longer exists - renaming one in Home Assistant is a two-click operation
+    # that tells the dashboard nothing - is a 404, which fails the card with that status. It does
+    # not render an empty, healthy-looking panel, and it emits no signals, so a rule over the card
+    # reads unknown rather than holding its last value.
     - id: sensor
       name: One sensor
       defaultRefresh: 1m
       routes:
         - slot: server
           method: GET
-          path: /api/states
-          reason: Current state of every entity, of which this card renders exactly one
+          path: /api/states/*
+          reason: Current state of the one entity this card names
       signals:
         - { name: state, type: string, unit: state }
         # Home Assistant models every state as a string, so a numeric signal can only be emitted
@@ -120,40 +122,23 @@ spec:
         properties:
           entityId: { type: string, pattern: "^[a-z_]{1,32}\\.[a-z0-9_]{1,64}$" }
       pipeline:
-        - as: states
-          request: { slot: server, method: GET, path: /api/states }
+        - as: entity
+          request: { slot: server, method: GET, path: "/api/states/{entityId}" }
       output:
-        # There is no way to bind the selected entity to a name once - a manifest expression is a
-        # single expression, and `let` is not in the loader's allowlist - so the selection is
-        # spelled out at each leaf. It is repetitive on purpose rather than by oversight; the
-        # iteration budget above is sized for it.
-        title: { expr: 'len(filter(states, .entity_id == params.entityId)) == 0 ? params.entityId : ("friendly_name" in first(filter(states, .entity_id == params.entityId)).attributes ? first(filter(states, .entity_id == params.entityId)).attributes.friendly_name : params.entityId)' }
+        title: { expr: '"friendly_name" in entity.attributes ? entity.attributes.friendly_name : entity.entity_id' }
         status:
-          # A card naming an entity that no longer exists must say so rather than rendering an
-          # empty, healthy-looking panel - renaming an entity in Home Assistant is a two-click
-          # operation and nothing tells the dashboard it happened.
-          level: { expr: 'len(filter(states, .entity_id == params.entityId)) == 0 ? "error" : (first(filter(states, .entity_id == params.entityId)).state == "unavailable" ? "error" : (first(filter(states, .entity_id == params.entityId)).state == "unknown" ? "unknown" : "ok"))' }
-          text:  { expr: 'len(filter(states, .entity_id == params.entityId)) == 0 ? "no such entity" : first(filter(states, .entity_id == params.entityId)).state' }
+          level: { expr: 'entity.state == "unavailable" ? "error" : (entity.state == "unknown" ? "unknown" : "ok")' }
+          text:  { expr: entity.state }
         signals:
-          state:
-            if: { expr: 'len(filter(states, .entity_id == params.entityId)) > 0' }
-            then:
-              value: { expr: 'first(filter(states, .entity_id == params.entityId)).state' }
+          state: { value: { expr: entity.state } }
           value:
-            if: { expr: 'len(filter(states, .entity_id == params.entityId)) > 0 && "unit_of_measurement" in first(filter(states, .entity_id == params.entityId)).attributes && first(filter(states, .entity_id == params.entityId)).state != "unavailable" && first(filter(states, .entity_id == params.entityId)).state != "unknown"' }
+            if: { expr: '"unit_of_measurement" in entity.attributes && entity.state != "unavailable" && entity.state != "unknown"' }
             then:
-              value: { expr: 'float(first(filter(states, .entity_id == params.entityId)).state)' }
+              value: { expr: 'float(entity.state)' }
         blocks:
-          # An each node over a one-element selection, rather than guarded scalars: when the
-          # entity is missing the block renders its empty state instead of every field needing its
-          # own presence branch.
           - type: list
-            empty: This entity is not in Home Assistant
             items:
-              each: { expr: 'take(filter(states, .entity_id == params.entityId), 1)' }
-              as: entity
-              item:
-                id:       { expr: entity.entity_id }
+              - id:       { expr: entity.entity_id }
                 title:    { expr: '"unit_of_measurement" in entity.attributes ? entity.state + " " + entity.attributes.unit_of_measurement : entity.state' }
                 subtitle: { expr: entity.entity_id }
                 level:    { expr: 'entity.state == "unavailable" ? "error" : "ok"' }

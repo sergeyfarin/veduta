@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"veduta.dev/veduta/internal/capabilities"
@@ -36,6 +37,11 @@ func TestFirstPartyManifests_AgainstDocumentedResponseShapes(t *testing.T) {
 		operation string
 		params    string
 		responses map[string]string
+		// statuses overrides the 200 a response is served with, by path.
+		statuses map[string]int
+		// wantErr, when set, is a substring the invocation's error must contain; nothing else is
+		// asserted, since a failed invocation produces no document.
+		wantErr string
 		// wantSignals is exact: every declared signal the operation should emit, and its value.
 		wantSignals map[string]float64
 		wantStrings map[string]string
@@ -99,33 +105,41 @@ func TestFirstPartyManifests_AgainstDocumentedResponseShapes(t *testing.T) {
 		wantStatus:        "6 entities",
 		wantFirstListItem: "Outside",
 	}, {
-		// One sensor, selected out of the full state array because a v1 manifest cannot build
-		// /api/states/<entity_id> from a parameter. The numeric signal exists only because this
-		// entity carries a unit_of_measurement and is currently reporting.
+		// One sensor, read from GET /api/states/<entity_id>, whose body is a single state object of
+		// the same shape as an element of /api/states. The numeric signal exists only because this
+		// entity carries a unit_of_measurement and is currently reporting. The server answers only
+		// that one path, so a request for the whole state set would fail the case.
 		plugin:    "homeassistant",
 		operation: "sensor",
 		params:    `{"entityId":"sensor.outside_temperature"}`,
-		responses: map[string]string{"/api/states": `[
-			{"entity_id":"light.kitchen","state":"on","attributes":{"friendly_name":"Kitchen"},"last_changed":"2026-09-15T08:00:00+00:00"},
-			{"entity_id":"sensor.outside_temperature","state":"21.5","attributes":{"friendly_name":"Outside","unit_of_measurement":"\u00b0C"},"last_changed":"2026-09-15T08:00:00+00:00"}
-		]`},
+		responses: map[string]string{"/api/states/sensor.outside_temperature": `
+			{"entity_id":"sensor.outside_temperature","state":"21.5","attributes":{"friendly_name":"Outside","unit_of_measurement":"\u00b0C"},"last_changed":"2026-09-15T08:00:00+00:00"}`},
 		wantSignals:       map[string]float64{"value": 21.5},
 		wantStrings:       map[string]string{"state": "21.5"},
 		wantStatus:        "21.5",
 		wantFirstListItem: "21.5 \u00b0C",
 	}, {
+		// Measurable but not reporting: the state signal carries "unavailable" and the numeric one
+		// is absent, so a rule reads unknown instead of a number nobody measured.
+		plugin:    "homeassistant",
+		operation: "sensor",
+		params:    `{"entityId":"sensor.freezer"}`,
+		responses: map[string]string{"/api/states/sensor.freezer": `
+			{"entity_id":"sensor.freezer","state":"unavailable","attributes":{"unit_of_measurement":"\u00b0C"},"last_changed":"2026-09-15T08:00:00+00:00"}`},
+		wantStrings:   map[string]string{"state": "unavailable"},
+		wantNoSignals: []string{"value"},
+		wantStatus:    "unavailable",
+	}, {
 		// The same card after someone renamed the entity in Home Assistant, which is a two-click
-		// operation that tells the dashboard nothing. The card must report the entity as missing
-		// rather than render an empty panel that looks healthy - and must emit NEITHER signal, so
-		// that a rule over it reads unknown instead of holding its last value forever.
+		// operation that tells the dashboard nothing. Home Assistant answers 404, and the card
+		// must fail with it rather than render an empty panel that looks healthy - a failed
+		// invocation emits no signals, so a rule over it reads unknown.
 		plugin:    "homeassistant",
 		operation: "sensor",
 		params:    `{"entityId":"sensor.renamed_away"}`,
-		responses: map[string]string{"/api/states": `[
-			{"entity_id":"light.kitchen","state":"on","attributes":{"friendly_name":"Kitchen"},"last_changed":"2026-09-15T08:00:00+00:00"}
-		]`},
-		wantNoSignals: []string{"state", "value"},
-		wantStatus:    "no such entity",
+		responses: map[string]string{"/api/states/sensor.renamed_away": `{"message":"Entity not found."}`},
+		statuses:  map[string]int{"/api/states/sensor.renamed_away": http.StatusNotFound},
+		wantErr:   "returned HTTP 404",
 	}, {
 		// Arcane's list endpoint returns base.PaginatedWithCounts: success, data (the page),
 		// counts (the WHOLE environment, not the page) and pagination. Field names are from
@@ -146,6 +160,19 @@ func TestFirstPartyManifests_AgainstDocumentedResponseShapes(t *testing.T) {
 		wantStatus: "11 of 13 running",
 		// Docker keeps the leading slash on every name; the card must not.
 		wantFirstListItem: "immich_server",
+	}, {
+		// A remote environment, chosen by the card's environmentId. The server answers only the
+		// path for environment 3, so a card that still read the local environment fails here.
+		plugin:    "arcane",
+		operation: "containers",
+		params:    `{"environmentId":"3","limit":1}`,
+		responses: map[string]string{"/api/environments/3/containers": `{"success":true,
+			"data":[{"id":"c3","names":["/edge_proxy"],"image":"caddy","state":"running","status":"Up 1 hour"}],
+			"counts":{"runningContainers":1,"stoppedContainers":0,"totalContainers":1},
+			"pagination":{"totalPages":1,"totalItems":1,"currentPage":1,"itemsPerPage":1}}`},
+		wantSignals:       map[string]float64{"containers.running": 1, "containers.stopped": 0, "containers.total": 1},
+		wantStatus:        "1 of 1 running",
+		wantFirstListItem: "edge_proxy",
 	}, {
 		// Dockhand's GET /api/dashboard/stats returns one EnvironmentStats object per environment
 		// when ?env is omitted - the interface in src/routes/api/dashboard/stats/+server.ts. The
@@ -187,6 +214,9 @@ func TestFirstPartyManifests_AgainstDocumentedResponseShapes(t *testing.T) {
 					return
 				}
 				w.Header().Set("Content-Type", "application/json")
+				if code, ok := tc.statuses[r.URL.Path]; ok {
+					w.WriteHeader(code)
+				}
 				_, _ = w.Write([]byte(body))
 			}))
 			defer srv.Close()
@@ -221,6 +251,12 @@ func TestFirstPartyManifests_AgainstDocumentedResponseShapes(t *testing.T) {
 			resp, err := inst.Invoke(context.Background(), integrations.InvokeRequest{
 				Operation: tc.operation, Params: json.RawMessage(tc.params), Grant: grant,
 			})
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("invoke %s/%s: err = %v, want it to contain %q", tc.plugin, tc.operation, err, tc.wantErr)
+				}
+				return
+			}
 			if err != nil {
 				t.Fatalf("invoke %s/%s: %v", tc.plugin, tc.operation, err)
 			}

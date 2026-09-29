@@ -1700,7 +1700,7 @@ and the pre-push quick start; all three passed.
 **M2 · Manifest and config schema revision** · 2 d · deps: none · **PROPOSED** — the two schema
 changes the backlog says to make before more integrations are shaped around the limitation, done
 as one revision so existing configs and manifests are revalidated once.
-[Named path segments](03-backlog.md#a-pipeline-path-cannot-carry-a-card-parameter): a route
+[Named path segments](03-backlog-resolved.md#a-pipeline-path-could-not-carry-a-card-parameter): a route
 declares `{name}` segments whose values come from `params` under the operation's own schema, so
 the glob stays fixed and the substitution is bounded by something the approver can read.
 [Secret-capable `httpConnection.headers`](03-backlog.md#config-httpconnectionheaders-values-are-plain-strings-not-secret-capable),

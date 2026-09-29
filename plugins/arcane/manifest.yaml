@@ -11,19 +11,18 @@
 #       auth: { type: header, name: X-Api-Key, value: "${secret:ARCANE_API_KEY}" }
 #
 # Arcane scopes its API by environment, and the environment id is a PATH segment: "0" is the local
-# Docker host (types.LocalDockerEnvironmentID upstream), and remote hosts and agents are 1, 2, ...
-# A v1 manifest's pipeline path must be a literal so that route coverage is decidable when the
-# integration is approved rather than when it runs, which means an environment id cannot come from
-# a card parameter. This operation therefore watches the local environment only. Watching a remote
-# Arcane environment needs a per-environment path, which v1 cannot express - see
-# docs/03-backlog.md.
+# Docker host (types.LocalDockerEnvironmentID upstream), and each remote host or agent has its own
+# id. A card chooses one with its environmentId parameter, which fills the {environmentId} segment
+# of the request path. The route below grants one segment there and nothing more: a value that is
+# not a plain segment - a "/", a "?", a dot segment - fails the card instead of being sent, so a
+# parameter cannot walk the request off /containers onto any other Arcane endpoint.
 apiVersion: veduta.dev/v1
 kind: Integration
 metadata:
   id: arcane
   name: Arcane
-  version: 0.1.0
-  description: Container status counts and a container list from Arcane's local Docker environment.
+  version: 0.2.0
+  description: Container status counts and a container list from one Arcane environment.
   license: Apache-2.0
   icon: sh:arcane
 spec:
@@ -39,14 +38,14 @@ spec:
       name: Containers
       defaultRefresh: 1m
       routes:
-        # Fully spelled out rather than globbed: an approver reads the exact request this
-        # integration can make. It cannot be walked into /containers/<id>/stop either - that is a
-        # different route, and a POST besides.
+        # One glob segment, for the environment, and nothing else: an approver reads the exact
+        # shape of every request this integration can make. It cannot be walked into
+        # /containers/<id>/stop either - that is a different route, and a POST besides.
         - slot: server
           method: GET
-          path: /api/environments/0/containers
+          path: /api/environments/*/containers
           queryKeys: [limit, includeInternal]
-          reason: One page of containers plus the environment's aggregate status counts
+          reason: One page of containers plus the chosen environment's aggregate status counts
       signals:
         - { name: containers.running, type: number, unit: count, history: true }
         - { name: containers.stopped, type: number, unit: count, history: true }
@@ -55,12 +54,15 @@ spec:
         type: object
         properties:
           limit: { type: integer, minimum: 1, maximum: 24, default: 8 }
+          # "0" is the local Docker host. The pattern is a courtesy that catches a typo when the
+          # configuration loads; the path template refuses anything that is not one segment anyway.
+          environmentId: { type: string, pattern: "^[A-Za-z0-9_-]{1,64}$", default: "0" }
       pipeline:
         - as: containers
           request:
             slot: server
             method: GET
-            path: /api/environments/0/containers
+            path: "/api/environments/{environmentId}/containers"
             query:
               limit: { expr: 'string(params.limit)' }
               includeInternal: "false"

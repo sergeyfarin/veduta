@@ -26,7 +26,7 @@ priority (which milestone should absorb it, or "before X" for a hard blocker).
 | [Asset-cache startup does not reconcile orphan files](#asset-cache-startup-does-not-reconcile-orphan-files) | Assets | Low |
 | [Lock-write race against a concurrent CLI approval](#the-lock-write-race-is-closed-only-within-one-process-not-against-a-concurrent-cli-approval) | Integrations | Low |
 | [`httpConnection.headers` are not secret-capable](#config-httpconnectionheaders-values-are-plain-strings-not-secret-capable) | Config schema | Low-medium |
-| [A pipeline path cannot carry a card parameter](#a-pipeline-path-cannot-carry-a-card-parameter) | Manifest DSL | 0.2 |
+| [A pipeline step cannot read 404 as absent](#a-pipeline-step-cannot-read-404-as-absent) | Manifest DSL | Low; on a second case |
 | [`CacheEntries` can't represent an explicit zero](#manifestloadlimitscacheentries-cant-represent-an-explicit-zero) | Integrations | When declarative caching lands |
 | [Approve flow can't grant a limit above its default](#the-documented-approve-flow-has-no-way-to-grant-a-limit-above-its-documented-default) | Docs | Low |
 | [Go plugin SDK needs a WASI-free toolchain](#go-plugin-sdk-requires-a-maintained-wasi-free-toolchain) | Plugins | Parked; subject to WASM review |
@@ -78,32 +78,6 @@ Priority: parked until a requirements review after 0.1, not a release blocker.
 before. The rain and energy candidates above need a way to draw a series before the question of
 how to fetch one can be judged, and without that block the comparison would be against a card that
 cannot show the result.
-
-### A pipeline path cannot carry a card parameter
-
-Found while writing `plugins/arcane` and `plugins/homeassistant`. A v1 pipeline step's `path` must
-be a literal string: `internal/contracts/semantic.go` refuses an expression-valued path because
-route coverage would otherwise stop being decidable at approval time, which is the point of
-declaring routes at all. The manifest schema's `valueNode` allows an expression there, and the
-declarative runtime evaluates one perfectly well - the semantic layer is what says no. That
-mismatch is itself worth resolving in either direction.
-
-The cost is concrete in two shipped integrations:
-
-- **Arcane** scopes everything by environment id as a path segment (`/api/environments/{id}/...`),
-  so `plugins/arcane` watches the local environment (`0`) only. A remote host or agent added to
-  the same Arcane cannot be given a card.
-- **Home Assistant** serves one entity at `/api/states/<entity_id>`. `plugins/homeassistant`'s
-  `sensor` operation instead reads the whole `/api/states` array and selects one entity from it -
-  correct, but it transfers the entire state set to render one number, which on a large
-  installation is megabytes per refresh per card.
-
-A middle way exists and is probably the right shape: let a route declare named path segments whose
-values come from `params` under a declared pattern (`/api/environments/{environmentId}/containers`
-with `environmentId` constrained by the operation's own params schema). Coverage stays decidable -
-the glob is still fixed, and the substitution is bounded by a schema the approver can read - while
-the path stops being a template the checker cannot reason about. Worth doing before more
-integrations are shaped around the limitation rather than around their upstream.
 
 ### Open question: should there be a frontend plugin surface at all?
 
@@ -544,3 +518,21 @@ The wider gap is unaddressed: the error surfaced from SQLite rather than from Ve
 nothing validates `dataDir` at config-load time, where a bad value could be reported with its
 field name and its path. A `--check-config` that opened the data directory would have caught it.
 Priority: low on its own, worth folding into whatever next touches configuration validation.
+
+### A pipeline step cannot read 404 as absent
+
+Found 2026-09-29 in Phase M2, when Home Assistant's `sensor` moved from the whole `/api/states` to
+`/api/states/{entityId}`. A renamed or deleted entity used to render "no such entity" with no
+signals; it is now a 404, and a non-2xx pipeline response fails the invocation, so the card shows
+`returned HTTP 404` instead. That is still honest - the card is in error, emits no signals, and a
+rule over it reads unknown - but the message is the upstream's status rather than the reason.
+
+`docs/01-architecture.md` already names this as the trigger for a per-step opt-out ("if an
+integration ever genuinely needs to read 404 as absent, that is the point to add one, deliberately
+and per step"). One case is not yet enough to design it well: whether the step binds `nil`, a
+sentinel, or skips the rest of the pipeline changes every expression downstream of it. Not built in
+M2 because the change was about paths, and a status opt-out is a separate DSL decision.
+
+Priority: low. Revisit when a second integration needs it, or if "HTTP 404" on a sensor card turns
+out to confuse people in practice.
+
