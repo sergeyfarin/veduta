@@ -11,7 +11,25 @@ project is pre-1.0:
 > pinned in `veduta.lock.yaml`, so an incompatible plugin fails closed rather than misbehaving;
 > expect to rebuild and re-approve third-party plugins when upgrading.
 
-## Unreleased
+## 0.2.0 — 2026-09-29
+
+Charts, an integrations page, and integrations that can be pointed at one thing. A `series` block
+draws timestamped values - supplied by an integration, or the card's own retained history - and the
+Glances card now shows CPU and memory over a day. The dashboard header links to a read-only page of
+what each integration may reach. A card parameter can select an upstream object by path, which lets
+Arcane watch any environment and a Home Assistant sensor read only its own entity.
+
+**Upgrading from 0.1.x.** Back up `config/` and `data/`, change the image tag to `0.2.0` in
+`compose.yaml` (both services), then `docker compose pull` and `docker compose up -d`. The
+`glances`, `arcane` and `homeassistant` manifests changed version, so any of them you use is disabled
+until approved again - the new Integrations page lists them with the commands; under compose:
+
+```sh
+docker compose run --rm veduta integration approve --config /config/veduta.yaml glances
+```
+
+A third-party declarative manifest whose pipeline `path` is an expression no longer loads; see
+Changed below.
 
 ### Added
 

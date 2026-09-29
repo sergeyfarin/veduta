@@ -19,7 +19,7 @@ services:
   # One-shot: writes a configuration if there is not one, then exits. It runs on every `up` and
   # does nothing once config/veduta.yaml exists, so it never overwrites your edits.
   veduta-init:
-    image: ghcr.io/sergeyfarin/veduta:0.1.3
+    image: ghcr.io/sergeyfarin/veduta:0.2.0
     user: "${VEDUTA_UID:-1000}:${VEDUTA_GID:-1000}"
     command: ["init"]
     volumes:
@@ -34,7 +34,7 @@ services:
     #   VEDUTA_ADMIN_PASSWORD: ...
 
   veduta:
-    image: ghcr.io/sergeyfarin/veduta:0.1.3
+    image: ghcr.io/sergeyfarin/veduta:0.2.0
     # To run an unreleased build from a source checkout, replace `image:` with `build: .`
     user: "${VEDUTA_UID:-1000}:${VEDUTA_GID:-1000}"
     restart: unless-stopped

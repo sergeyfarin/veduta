@@ -1765,7 +1765,7 @@ all. Action execution stays display-only through 0.2, and its next step is a des
 code. The armv7 WASM measurement waits on real hardware and is disclosed in `docs/docker.md` in
 the meantime.
 
-**Order:** M1 → M2 ⇉ M3 → M4 → M5; M6 is recorded, and the WASM review it deferred to after M3 is now due. **0.2 is M2, M3 and M4**, with M5 folded in; `0.1.x` patches continue as needed and inherit the release rules unchanged.
+**Order:** M1 → M2 ⇉ M3 → M4 → M5; M6 is recorded, and the WASM review it deferred to after M3 is now due. **0.2.0 shipped 2026-09-29 with M2, M3 and M4**; M5 was not folded in after all - the release was cut when M4 landed - and follows it; `0.1.x` patches continue as needed and inherit the release rules unchanged.
 
 ---
 
