@@ -1,0 +1,54 @@
+name: Bug report
+description: Something did not work as documented.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Veduta is pre-1.0 and maintained by one person, so a report that says exactly what you ran and what you saw is worth far more than a polished one. **Do not paste passwords, API keys or the contents of `veduta.lock.yaml` you have not read** — logs and config are scrubbed of configured secrets, but check before you post. For a security problem, use the private link on the previous page instead.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The output of `veduta version`, or the image tag you pulled (for example `ghcr.io/sergeyfarin/veduta:0.1.2`).
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How you installed it
+      options:
+        - The README quick start (docker compose)
+        - docker run
+        - A release archive
+        - Built from source
+        - Something else (say what below)
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Host and architecture
+      description: For example "Debian 12, arm64, Raspberry Pi 4", or "Synology DSM 7, amd64".
+    validations:
+      required: true
+  - type: textarea
+    id: happened
+    attributes:
+      label: What happened, and what you expected
+      description: The exact commands you ran, and the exact output or error message.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: |
+        For an install that does not start, `docker compose logs veduta-init` and `docker compose logs veduta` — `docker compose up -d` reports only an exit code, and the reason is in these. For a card that misbehaves, the server log lines naming the card's id.
+      render: text
+  - type: textarea
+    id: config
+    attributes:
+      label: Relevant configuration
+      description: The smallest part of `veduta.yaml` that reproduces it. Secrets should be `${secret:NAME}` references, never values.
+      render: yaml

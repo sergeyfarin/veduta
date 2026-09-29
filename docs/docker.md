@@ -17,6 +17,14 @@ Images are published to GitHub Container Registry for `linux/amd64`, `linux/arm6
 docker pull ghcr.io/sergeyfarin/veduta:0.1.2
 ```
 
+The `linux/arm/v7` image is built and starts, but is **not performance-tested**: the speed and
+memory of the WebAssembly runtime were measured on arm64 only, because GitHub has no 32-bit ARM
+runner. Declarative integrations never enter that runtime and are unaffected on every
+architecture. Until it is measured on real hardware, treat WebAssembly integrations (today, the
+Jellyfin card) on a 32-bit Raspberry Pi as untested rather than supported. The
+[backlog entry](03-backlog.md#arm-runtime-performance-is-measured-on-arm64-only) has the arm64
+numbers.
+
 The image is [distroless](https://github.com/GoogleContainerTools/distroless): no shell, no
 package manager, and the binary is the only executable in it. It runs as uid `65532` (`nonroot`).
 

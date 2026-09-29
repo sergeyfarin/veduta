@@ -11,6 +11,20 @@ project is pre-1.0:
 > pinned in `veduta.lock.yaml`, so an incompatible plugin fails closed rather than misbehaving;
 > expect to rebuild and re-approve third-party plugins when upgrading.
 
+## Unreleased
+
+### Changed
+
+- Release archives and `veduta version` now use the bare version: `veduta-0.1.3-linux-amd64.tar.gz`
+  and `0.1.3`, where they used the tag whole (`veduta-v0.1.3-…`, `v0.1.3`). This matches the image
+  tag and the changelog headings. The git tag keeps its `v`. Anything that downloads an archive by
+  name needs the `v` removed.
+
+### Added
+
+- Issue templates for bug reports, asking for the version, how it was installed, and the init and
+  server logs, and pointing security reports at the private advisory form.
+
 ## 0.1.2 — 2026-09-28
 
 ### Added

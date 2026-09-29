@@ -771,3 +771,52 @@ versions named.
 What this still cannot catch: a README that is right for a tag whose image was never built
 (the release job now builds it first), and instructions outside the "Quick start" section, such
 as the fixture-showcase `docker run` below it, which are not executed.
+
+### Release artefacts disagreed about the `v` prefix
+
+Noticed 2026-09-17 while confirming how `release.yml` distinguishes a stable release from one
+that is not. Nothing here affects that distinction - this is cosmetic, and recorded only so it is
+not mistaken for a packaging fault the first time someone compares a download with an image.
+
+On a tag push the workflow sets `version="${GITHUB_REF_NAME}"`, so the tag is used whole, `v` and
+all. That string reaches `internal/version.Version` through `-ldflags` and names the archives, so
+`veduta version` reports `v0.1.0` and the download is
+`veduta-v0.1.0-linux-amd64.tar.gz`. The image tag comes from `docker/metadata-action`'s
+`type=semver` instead, which strips the prefix, so the same build publishes
+`ghcr.io/…:0.1.0`. The release notes are already correct about this - they interpolate
+`${GITHUB_REF_NAME#v}` for the image line specifically - which is itself the evidence that the
+inconsistency was worked around rather than resolved.
+
+Either convention is defensible; carrying both is what makes a checksum file and a registry
+listing look like they came from different builds. Stripping the prefix once at the "Resolve
+version" step is the smaller change, and would make `veduta version` agree with the image tag and
+with the changelog heading. It also touches every archive name, so it wants doing between
+releases rather than during one.
+
+**Resolved, 2026-09-29, between releases as the entry asked.** `release.yml` strips the prefix once
+per job (`${GITHUB_REF_NAME#v}`), so the binary's `veduta version`, the archive names and the image
+tag are all `0.1.3` for the tag `v0.1.3`; both image builds take it from one "Resolve version" step
+instead of restating the expression. The release notes' own `${GITHUB_REF_NAME#v}` workaround is
+left, since it is still correct. A dry run passed (run 36526344298); it uses a `dispatch` version
+with no `v` to strip, so the strip itself is first exercised by the next tag. Recorded in the
+changelog as a change, because anything that downloads an archive by name needs updating.
+
+
+### The release workflow's Docker actions targeted Node 20
+
+Surfaced as an annotation on the 2026-09-17 dry run, not by anything failing:
+`docker/build-push-action@v6`, `docker/metadata-action@v5` and `docker/setup-buildx-action@v3` all
+declare Node 20, which GitHub has deprecated and is currently force-running on Node 24. The run was
+green and the artefacts were correct.
+
+It is recorded because of *where* it is. This is the release path, so the failure mode is not a red
+CI run on a pull request someone is already looking at - it is a tag push that does not produce a
+release, discovered at the moment of publishing. The fix is a version bump of three actions once
+upstream ships Node 24 releases, and the cost of being early is nil.
+
+**Resolved, 2026-09-29.** All four now have Node 24 majors, checked against their release notes
+for removed inputs before bumping (none this workflow uses): `docker/setup-buildx-action` v4,
+`docker/login-action` v4, `docker/metadata-action` v6, `docker/build-push-action` v7. A dry run
+passed with them (run 36526344298) and its log carries no Node 20 deprecation annotation. The
+"check before each tag" habit stands for whatever deprecation comes next.
+

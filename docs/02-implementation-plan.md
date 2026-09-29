@@ -1674,6 +1674,83 @@ and never occupying the tags that a stable release would.
    Then: push the tag, and let the workflow publish the archives, checksums, GHCR image, provenance,
    SBOM and GitHub release.
 
+### Phase M — After 0.1 (~8 d, proposed 2026-09-29)
+
+Everything above records what was built for 0.1; 0.1.0, 0.1.1 and 0.1.2 are published, and the last
+commits before this phase were reactions to the first outside install. This is the first phase
+written after a release, so **only M1 is done; M2–M6 are proposals awaiting review and commit to
+nothing.** Each cites the backlog entry it comes from, which keeps the reasoning where it was
+recorded. The order is by cost of delay: what gets more expensive as integrations accumulate comes
+before what is merely valuable.
+
+**M1 · Release hygiene** · 0.5 d · **DONE, 2026-09-29** — the guards the first outside install
+showed were missing, and the release-path debts the backlog said to clear between releases.
+`hack/check-quickstart.sh` runs the README's own compose file and commands against a given image
+and asserts init exited 0, the printed password signs in, and the dashboard is served; CI runs it
+against a build of the checkout, and `release.yml` runs it before the push step. A contract test
+requires the README, `compose.yaml`, both Docker docs and `SECURITY.md` to name the release the
+changelog says is current. Both were mutation-checked: the script exits 1 on the published 0.1.0
+image with `unknown command "init"`, and a stale tag in any one document fails the test. Release
+archives and `veduta version` drop the tag's `v`; the four Docker actions moved to their Node 24
+majors; the release job now checks the uploaded assets against the built ones; issue templates
+ask for the version, install method and init logs; `docs/docker.md` says the armv7 image is not
+performance-tested. Dry run passed. Still open from it: the asset check and the `v` strip run only
+on a real tag, so the next release is their first execution.
+**M2 · Manifest and config schema revision** · 2 d · deps: none · **PROPOSED** — the two schema
+changes the backlog says to make before more integrations are shaped around the limitation, done
+as one revision so existing configs and manifests are revalidated once.
+[Named path segments](03-backlog.md#a-pipeline-path-cannot-carry-a-card-parameter): a route
+declares `{name}` segments whose values come from `params` under the operation's own schema, so
+the glob stays fixed and the substitution is bounded by something the approver can read.
+[Secret-capable `httpConnection.headers`](03-backlog.md#config-httpconnectionheaders-values-are-plain-strings-not-secret-capable),
+matching the webhook channel's headers.
+AC: Arcane takes an `environmentId` parameter and Home Assistant's `sensor` reads
+`/api/states/<entity_id>` rather than the whole state set. **Negative tests first**, as everywhere
+in this project: a parameter value containing `/`, `..`, a percent-encoded separator or a
+control character is refused before the request is built, and route coverage is still decided at
+approval time for a manifest that uses segments. Existing configs and manifests validate
+unchanged; a secret in a connection header never appears in any HTTP response, extending the
+response scan; digests and goldens regenerated deliberately, not incidentally. The plugin ABI is
+documented as experimental, which is what makes now the cheap time to break it.
+**M3 · Native time-series block** · 3 d · deps: none · **PROPOSED**, independent of M2 — the
+[0.2 item the backlog already names](03-backlog.md#no-native-visualisation-block-for-retained-history):
+a bounded block that draws points an integration supplies, plus a separate core binding for
+retained signal history. Points in, an SVG element tree out, drawn by a Svelte component like every
+other block: no library, no injection sink, no new threat model, and the Widget Document stays
+closed ([decision 0004](decisions/0004-card-expressiveness-and-the-presentation-contract.md)).
+AC: series and point counts are capped by the schema; every point carries a timestamp and the
+series a unit; missing data is drawn as a gap, never interpolated; an over-limit or malformed
+document is rejected by the validator and covered by the fuzz corpus; the block has a text
+alternative; a golden document and a visual baseline exist; `schemas/plugin-manifest.v1.schema.json`'s
+"for `for:` windows and sparklines" sentence becomes true in the same change, as the entry asks.
+Integrations gain no direct database access. Rain and energy integrations are candidates this
+unblocks, not commitments.
+**M4 · Read-only integrations page** · 1.5 d · deps: none · **PROPOSED, needs a decision** —
+resolves [the approval API's missing client](03-backlog.md#the-approval-api-has-no-client) at its
+cheapest end. A page over the existing `GET /api/v1/integrations` and `.../approval`: each
+integration's state, digest, and requested against granted routes, capabilities and limits, with
+the exact `veduta integration approve` command to run. Approval itself stays in the CLI, where the
+security model is most defensible, so this adds visibility and no new authority. AC: unauthenticated
+requests get 401; a stale or ungranted route is shown as ungranted, not omitted; covered by an
+e2e test that drives the real API, which is also the first thing to exercise those endpoints as a
+browser would. The alternatives, a full approve flow or nothing, remain the user's call.
+**M5 · Small debts** · 0.5 d · **PROPOSED** — two entries whose own text says to fold them into
+the next change that touches their area, which this is: validate `server.dataDir` at config load,
+so a bad value is reported with its field name and path rather than as a SQLite error
+([entry](03-backlog.md#a-relative-serverdatadir-produced-a-sqlite-error-naming-neither-the-setting-nor-the-path));
+and settle whether `veduta.lock.yaml` is written `0600` or `0644`
+([entry](03-backlog.md#veduta-lock-yaml-is-written-0600-by-a-uid-the-operator-is-not)), a
+decision and not a fix.
+**M6 · Decisions to record, no code** — **PROPOSED**, each needs only a yes or a different answer.
+The [WASM review](03-backlog.md#does-wasm-add-enough-value-to-justify-further-development) runs
+after M3, since the rain and energy candidates it is waiting on need that block to be judged at
+all. Action execution stays display-only through 0.2, and its next step is a design document, not
+code. The armv7 WASM measurement waits on real hardware and is disclosed in `docs/docker.md` in
+the meantime.
+
+**Order:** M1 → M2 ⇉ M3 → M4 → M5, with M6 whenever. **A proposed 0.2** is M2 plus M3, with M4 if
+the decision is yes; `0.1.x` patches continue as needed and inherit the release rules unchanged.
+
 ---
 
 ## Part 3 — Sequencing

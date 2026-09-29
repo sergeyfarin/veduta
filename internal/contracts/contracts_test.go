@@ -582,4 +582,13 @@ func TestPublishedImageTagsAgreeWithChangelog(t *testing.T) {
 	if found == 0 {
 		t.Fatal("found no image or release references at all; the patterns no longer match how the documents write them")
 	}
+
+	// The security policy states which release is current, in prose rather than as a reference.
+	security, err := os.ReadFile(filepath.Join(root, "SECURITY.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "`" + current + "` is the current release"; !strings.Contains(string(security), want) {
+		t.Errorf("SECURITY.md must say %q; CHANGELOG.md's newest release is %s", want, current)
+	}
 }

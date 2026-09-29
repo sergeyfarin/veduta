@@ -34,9 +34,7 @@ priority (which milestone should absorb it, or "before X" for a hard blocker).
 | [ARM runtime performance is measured on arm64 only](#arm-runtime-performance-is-measured-on-arm64-only) | Plugins | armv7 deferred |
 | [No native visualisation block for retained history](#no-native-visualisation-block-for-retained-history) | Frontend | 0.2 |
 | [Markdown has no authoring syntax for structure](#markdown-is-prose-only-with-no-authoring-syntax-for-structure) | Frontend | Deferred |
-| [Release artefacts disagree about the `v` prefix](#release-artefacts-disagree-about-the-v-prefix) | Packaging | Low; not before the alpha |
-| [Release workflow's Docker actions target Node 20](#the-release-workflows-docker-actions-still-target-node-20) | Packaging | Low; recheck before each tag |
-| [Release assets uploaded all-or-nothing with the release](#the-release-job-created-its-assets-and-its-release-in-one-all-or-nothing-call) | Packaging | Retry fixed; check low |
+| [Release assets uploaded all-or-nothing with the release](#the-release-job-created-its-assets-and-its-release-in-one-all-or-nothing-call) | Packaging | Check added; first exercised at the next tag |
 | [Nothing validates `server.dataDir` at config load](#a-relative-serverdatadir-produced-a-sqlite-error-naming-neither-the-setting-nor-the-path) | Config | Low |
 
 ---
@@ -506,45 +504,6 @@ current card types cannot express, not the general appeal of the idea - recorded
 condition on [decision 0004](decisions/0004-card-expressiveness-and-the-presentation-contract.md),
 which also records why the binding layer such proposals arrive with is not wanted.
 
-### Release artefacts disagree about the `v` prefix
-
-Noticed 2026-09-17 while confirming how `release.yml` distinguishes a stable release from one
-that is not. Nothing here affects that distinction - this is cosmetic, and recorded only so it is
-not mistaken for a packaging fault the first time someone compares a download with an image.
-
-On a tag push the workflow sets `version="${GITHUB_REF_NAME}"`, so the tag is used whole, `v` and
-all. That string reaches `internal/version.Version` through `-ldflags` and names the archives, so
-`veduta version` reports `v0.1.0` and the download is
-`veduta-v0.1.0-linux-amd64.tar.gz`. The image tag comes from `docker/metadata-action`'s
-`type=semver` instead, which strips the prefix, so the same build publishes
-`ghcr.io/…:0.1.0`. The release notes are already correct about this - they interpolate
-`${GITHUB_REF_NAME#v}` for the image line specifically - which is itself the evidence that the
-inconsistency was worked around rather than resolved.
-
-Either convention is defensible; carrying both is what makes a checksum file and a registry
-listing look like they came from different builds. Stripping the prefix once at the "Resolve
-version" step is the smaller change, and would make `veduta version` agree with the image tag and
-with the changelog heading. It also touches every archive name, so it wants doing between
-releases rather than during one.
-
-Priority: low, and deliberately not before the first alpha - changing artefact names while cutting
-the release that first establishes them is the wrong moment.
-
-### The release workflow's Docker actions still target Node 20
-
-Surfaced as an annotation on the 2026-09-17 dry run, not by anything failing:
-`docker/build-push-action@v6`, `docker/metadata-action@v5` and `docker/setup-buildx-action@v3` all
-declare Node 20, which GitHub has deprecated and is currently force-running on Node 24. The run was
-green and the artefacts were correct.
-
-It is recorded because of *where* it is. This is the release path, so the failure mode is not a red
-CI run on a pull request someone is already looking at - it is a tag push that does not produce a
-release, discovered at the moment of publishing. The fix is a version bump of three actions once
-upstream ships Node 24 releases, and the cost of being early is nil.
-
-Priority: low, but check it before each tag rather than only when it breaks. Not a blocker for the
-first release - the forced Node 24 run is GitHub's own compatibility path, and it works today.
-
 ### The release job created its assets and its release in one all-or-nothing call
 
 Found by it happening, while cutting v0.1.0 on 2026-09-17. `gh release create "$TAG" dist/*` uploads
@@ -572,8 +531,13 @@ after the fact that the published asset list matches what the build produced; th
 are checked thoroughly inside the binaries job, but "did all five files actually arrive" is
 currently proven by reading the release page.
 
-Priority: the retry is done. The post-upload completeness check is low, and worth folding into
-whatever next touches this job.
+**Update, 2026-09-29:** the completeness check now exists. After the upload loop the release job
+compares the files the build produced (`dist/`) with the assets GitHub reports for the release, and
+fails with the difference if they are not the same set. It is unverified by a real run: the release
+job is skipped on a dry run, so the first tag published after this is its first execution. Move this
+entry to the resolved file once that run has passed it.
+
+Priority: the retry is done and the check is written; only its first real run is outstanding.
 
 ### A relative `server.dataDir` produced a SQLite error naming neither the setting nor the path
 
