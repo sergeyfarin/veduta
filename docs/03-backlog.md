@@ -34,7 +34,6 @@ priority (which milestone should absorb it, or "before X" for a hard blocker).
 | [ARM runtime performance is measured on arm64 only](#arm-runtime-performance-is-measured-on-arm64-only) | Plugins | armv7 deferred |
 | [No native visualisation block for retained history](#no-native-visualisation-block-for-retained-history) | Frontend | 0.2 |
 | [Markdown has no authoring syntax for structure](#markdown-is-prose-only-with-no-authoring-syntax-for-structure) | Frontend | Deferred |
-| [Release assets uploaded all-or-nothing with the release](#the-release-job-created-its-assets-and-its-release-in-one-all-or-nothing-call) | Packaging | Check added; first exercised at the next tag |
 | [Nothing validates `server.dataDir` at config load](#a-relative-serverdatadir-produced-a-sqlite-error-naming-neither-the-setting-nor-the-path) | Config | Low |
 
 ---
@@ -518,41 +517,6 @@ Deferred with no work planned. The trigger to revisit is a concrete authoring re
 current card types cannot express, not the general appeal of the idea - recorded as a revisit
 condition on [decision 0004](decisions/0004-card-expressiveness-and-the-presentation-contract.md),
 which also records why the binding layer such proposals arrive with is not wanted.
-
-### The release job created its assets and its release in one all-or-nothing call
-
-Found by it happening, while cutting v0.1.0 on 2026-09-17. `gh release create "$TAG" dist/*` uploads
-the assets as part of creating the release, and `uploads.github.com` returned HTTP 500 twice in a
-row - once on `veduta-v0.1.0-darwin-arm64.tar.gz`, once on `SHA256SUMS` after a rerun. Each failure
-took the whole step down, and `gh` removed the release it had just created, so the end state both
-times was a pushed tag and a correctly published container image with no GitHub release and no
-downloads.
-
-That state is worse than a plain failure. The tag is not re-cuttable without deleting it, the
-images are already published under it, and the recovery is improvised by hand at the one moment
-nobody wants to improvise: downloading the run's artifact, verifying the checksums locally, creating
-the release, and uploading each asset separately. It worked, and it should never have been
-necessary.
-
-**Fixed in the same change that recorded this.** The release is now created empty - which makes it
-durable - and each asset is uploaded afterwards in its own retried loop, five attempts with a
-growing pause and `--clobber` so an attempt that landed before reporting failure replaces its own
-asset rather than colliding with it. A transient upload error is now a retry instead of a rollback.
-
-Two things this does not fix, left deliberately. A genuinely sustained outage still fails the job,
-which is correct - it should - but it now fails with a release present and some assets attached, so
-the recovery is `gh release upload` rather than reconstructing everything. And nothing verifies
-after the fact that the published asset list matches what the build produced; the archive contents
-are checked thoroughly inside the binaries job, but "did all five files actually arrive" is
-currently proven by reading the release page.
-
-**Update, 2026-09-29:** the completeness check now exists. After the upload loop the release job
-compares the files the build produced (`dist/`) with the assets GitHub reports for the release, and
-fails with the difference if they are not the same set. It is unverified by a real run: the release
-job is skipped on a dry run, so the first tag published after this is its first execution. Move this
-entry to the resolved file once that run has passed it.
-
-Priority: the retry is done and the check is written; only its first real run is outstanding.
 
 ### A relative `server.dataDir` produced a SQLite error naming neither the setting nor the path
 

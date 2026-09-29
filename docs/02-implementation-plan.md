@@ -1676,7 +1676,8 @@ and never occupying the tags that a stable release would.
 
 ### Phase M — After 0.1 (~8 d, proposed 2026-09-29)
 
-Everything above records what was built for 0.1; 0.1.0, 0.1.1 and 0.1.2 are published, and the last
+Everything above records what was built for 0.1; 0.1.3 is the published release (the GitHub
+releases for 0.1.0–0.1.2 were withdrawn on 2026-09-29 for the route-authorisation fix), and the last
 commits before this phase were reactions to the first outside install. This is the first phase
 written after a release, so **only M1 is done; M2–M6 are proposals awaiting review and commit to
 nothing.** Each cites the backlog entry it comes from, which keeps the reasoning where it was
@@ -1694,8 +1695,8 @@ image with `unknown command "init"`, and a stale tag in any one document fails t
 archives and `veduta version` drop the tag's `v`; the four Docker actions moved to their Node 24
 majors; the release job now checks the uploaded assets against the built ones; issue templates
 ask for the version, install method and init logs; `docs/docker.md` says the armv7 image is not
-performance-tested. Dry run passed. Still open from it: the asset check and the `v` strip run only
-on a real tag, so the next release is their first execution.
+performance-tested. Dry run passed, and the v0.1.3 release was the first real run of the asset check, the `v` strip
+and the pre-push quick start; all three passed.
 **M2 · Manifest and config schema revision** · 2 d · deps: none · **PROPOSED** — the two schema
 changes the backlog says to make before more integrations are shaped around the limitation, done
 as one revision so existing configs and manifests are revalidated once.
