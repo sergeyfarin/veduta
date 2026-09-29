@@ -54,6 +54,21 @@ stray files pnpm/corepack creates directly under the repo root (a `.pnpm-store/`
 install` runs there instead of inside `web/`) come out root-owned - remove those the same way,
 via another `docker run ... rm -rf`, not a host-side `rm`.
 
+## Checking the README's quick start
+
+The quick start is the first thing an operator does, so CI runs it: `hack/check-quickstart.sh`
+extracts the compose file and commands from the README's "Quick start" section, replaces only the
+image with the one you name, runs them verbatim and checks that init succeeded, the printed
+password signs in, and the dashboard is served. It needs docker with compose, curl and port 8099
+free on loopback, and cleans up after itself:
+
+```bash
+docker build -t veduta:local . && hack/check-quickstart.sh veduta:local
+```
+
+Run it after any change to the README's quick start, `veduta init`, the `Dockerfile` or the
+compose file. It is not part of `mise run check`, which stays free of a docker requirement.
+
 ## What this caught
 
 The very first thing screenshotted this way - the B1 card grid at a 380px mobile width - had a

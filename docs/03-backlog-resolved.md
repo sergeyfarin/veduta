@@ -711,3 +711,63 @@ This preserves the existing PascalCase tolerance, scenario coverage and real-mod
 budget workload without a release-time rewrite. No replacement proof case or declarative
 migration is required for 0.1. See [decision 0003](decisions/0003-jellyfin-wasm-proof-case.md)
 for scope and conditions for revisiting it.
+
+### The quick start named an image that could not run it
+
+Found 2026-09-28, when the first outside install followed the README verbatim and got
+`service "veduta-init" didn't complete successfully: exit 1`. The message says nothing about why,
+because `docker compose up -d && docker compose logs veduta-init` short-circuits on the failure and
+never reaches the logs; running the image directly shows the cause:
+
+```
+veduta: unknown command "init" (try: serve, health, version, auth, manifest, integration, plugin, import)
+```
+
+`v0.1.0` was tagged on 2026-09-17, and `veduta init`, the `veduta-init` service and the
+`VEDUTA_UID`/`VEDUTA_GID` flow all landed on `main` on 2026-09-22. The README and `compose.yaml`
+on `main` pin `ghcr.io/sergeyfarin/veduta:0.1.0`, so they describe a flow the published image does
+not implement. The commit that introduced it verified the quick start against a locally built
+image, which is why it passed: nothing checks the documented commands against the *published* tag.
+
+Two separate gaps, and cutting a release fixed only the first:
+
+- **The docs ran ahead of the release.** Closed 2026-09-28 by `v0.1.1`, with every image reference
+  bumped in the same change; the README's quick start, extracted verbatim and run against the
+  published image, wrote a configuration and served the dashboard. `0.1.0` remains published and
+  still cannot run it.
+- **Nothing keeps them aligned.** A check in the release workflow's dry run - extract the quick
+  start's `compose.yaml` from the README, point it at the image just built, and run
+  `docker compose up -d` - would fail the release rather than the first reader. The same check
+  belongs in CI against `build: .`, so the README cannot drift from `main` either.
+
+The failure was also harder to read than it needed to be: an init service that exits non-zero
+prints its reason only in `docker compose logs`, and the quick start's `&&` skipped that command
+exactly when it mattered. The README now uses `;`, so the logs are printed either way.
+
+**Resolved, 2026-09-29, in the change that added `hack/check-quickstart.sh`.** The second gap is
+closed at both places it can reopen:
+
+- **`hack/check-quickstart.sh IMAGE`** extracts the README's compose file and its commands from
+  the "Quick start" section - not a copy, so the README cannot drift from what is tested - swaps
+  only the image reference for the one under test, and runs the commands verbatim. It then
+  asserts what the reader was promised rather than what the last command returned: `veduta-init`
+  exited 0, it printed a password, the server answers on `127.0.0.1:8099`, that password signs
+  in as `admin`, and `GET /` serves the dashboard page.
+- **CI runs it in two places.** The `quickstart` job in `ci.yml` builds the image from the
+  checkout and runs it, so the README cannot drift from `main`. The image job in `release.yml`
+  builds the runner's platform, loads it, and runs it **before** the push step, so a quick start
+  that does not work against what is about to be published fails the release, not the first
+  reader.
+- **`TestPublishedImageTagsAgreeWithChangelog`** covers the other direction: the README,
+  `compose.yaml`, `docs/getting-started.md` and `docs/docker.md` must all name the release
+  the changelog says is current, so a version bump that misses a file fails the build.
+
+Mutation-checked, since the point is that the guard fails on the defect: run against the
+published `ghcr.io/sergeyfarin/veduta:0.1.0`, the script exits 1 with `unknown command "init"`
+and the init logs - exactly what the first outside install saw - and it passes against the
+current build. Pointing one document at a stale tag fails the tag test with the file and both
+versions named.
+
+What this still cannot catch: a README that is right for a tag whose image was never built
+(the release job now builds it first), and instructions outside the "Quick start" section, such
+as the fixture-showcase `docker run` below it, which are not executed.

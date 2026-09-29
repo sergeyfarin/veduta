@@ -161,6 +161,18 @@ jobs:
             web/test-results
           retention-days: 7
 
+  quickstart:
+    name: README quick start, run against a built image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      # The README's own compose file and commands, with only the image swapped for the one built
+      # here. It exists because the quick start once described a flow the published image did not
+      # have, and the change that introduced it had been checked against a local build. Docs that
+      # pass here and fail against a release are caught by the same script in release.yml.
+      - run: docker build -t veduta:ci .
+      - run: hack/check-quickstart.sh veduta:ci
+
   release-build:
     name: Cross-compile ${{ matrix.label }}
     needs: web

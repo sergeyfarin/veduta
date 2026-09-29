@@ -37,7 +37,7 @@ priority (which milestone should absorb it, or "before X" for a hard blocker).
 | [Release artefacts disagree about the `v` prefix](#release-artefacts-disagree-about-the-v-prefix) | Packaging | Low; not before the alpha |
 | [Release workflow's Docker actions target Node 20](#the-release-workflows-docker-actions-still-target-node-20) | Packaging | Low; recheck before each tag |
 | [Release assets uploaded all-or-nothing with the release](#the-release-job-created-its-assets-and-its-release-in-one-all-or-nothing-call) | Packaging | Retry fixed; check low |
-| [The quick start names an image that cannot run it](#the-quick-start-names-an-image-that-cannot-run-it) | Packaging | Medium; the guard is still missing |
+| [Nothing validates `server.dataDir` at config load](#a-relative-serverdatadir-produced-a-sqlite-error-naming-neither-the-setting-nor-the-path) | Config | Low |
 
 ---
 
@@ -601,38 +601,3 @@ The wider gap is unaddressed: the error surfaced from SQLite rather than from Ve
 nothing validates `dataDir` at config-load time, where a bad value could be reported with its
 field name and its path. A `--check-config` that opened the data directory would have caught it.
 Priority: low on its own, worth folding into whatever next touches configuration validation.
-
-### The quick start names an image that cannot run it
-
-Found 2026-09-28, when the first outside install followed the README verbatim and got
-`service "veduta-init" didn't complete successfully: exit 1`. The message says nothing about why,
-because `docker compose up -d && docker compose logs veduta-init` short-circuits on the failure and
-never reaches the logs; running the image directly shows the cause:
-
-```
-veduta: unknown command "init" (try: serve, health, version, auth, manifest, integration, plugin, import)
-```
-
-`v0.1.0` was tagged on 2026-09-17, and `veduta init`, the `veduta-init` service and the
-`VEDUTA_UID`/`VEDUTA_GID` flow all landed on `main` on 2026-09-22. The README and `compose.yaml`
-on `main` pin `ghcr.io/sergeyfarin/veduta:0.1.0`, so they describe a flow the published image does
-not implement. The commit that introduced it verified the quick start against a locally built
-image, which is why it passed: nothing checks the documented commands against the *published* tag.
-
-Two separate gaps, and cutting a release fixed only the first:
-
-- **The docs ran ahead of the release.** Closed 2026-09-28 by `v0.1.1`, with every image reference
-  bumped in the same change; the README's quick start, extracted verbatim and run against the
-  published image, wrote a configuration and served the dashboard. `0.1.0` remains published and
-  still cannot run it.
-- **Nothing keeps them aligned.** A check in the release workflow's dry run - extract the quick
-  start's `compose.yaml` from the README, point it at the image just built, and run
-  `docker compose up -d` - would fail the release rather than the first reader. The same check
-  belongs in CI against `build: .`, so the README cannot drift from `main` either.
-
-The failure was also harder to read than it needed to be: an init service that exits non-zero
-prints its reason only in `docker compose logs`, and the quick start's `&&` skipped that command
-exactly when it mattered. The README now uses `;`, so the logs are printed either way.
-
-Priority: medium now. The quick start works, but the next change to it can drift the same way,
-and this is the first thing a new operator does.

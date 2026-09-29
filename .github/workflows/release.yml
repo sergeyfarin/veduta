@@ -217,6 +217,24 @@ jobs:
             type=raw,value=latest,enable=${{ github.event_name == 'push' && !contains(github.ref_name, '-') && !startsWith(github.ref_name, 'v0.') }}
             type=raw,value=dispatch-{{sha}},enable=${{ github.event_name == 'workflow_dispatch' }}
 
+      # Before anything is pushed: run the README's quick start, verbatim, against this build. A
+      # multi-platform build cannot be loaded into the local daemon, so this builds the runner's
+      # own platform once more - from the same cache, so it costs little - and the publishing step
+      # below only runs if the documented install works with what is about to be published. The
+      # alternative is the first reader finding out, which is how 0.1.0's quick start failed.
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          tags: veduta:quickstart
+          build-args: |
+            VERSION=${{ github.event_name == 'push' && github.ref_name || format('0.0.0-dispatch-{0}', github.sha) }}
+            COMMIT=${{ github.sha }}
+          cache-from: type=gha
+      - name: Run the README quick start against it
+        run: hack/check-quickstart.sh veduta:quickstart
+
       - uses: docker/build-push-action@v6
         with:
           context: .

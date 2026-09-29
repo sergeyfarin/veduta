@@ -540,3 +540,46 @@ func TestPlaywrightImageMatchesPackage(t *testing.T) {
 			want, version)
 	}
 }
+
+// TestPublishedImageTagsAgreeWithChangelog keeps every document that tells an operator which image
+// to pull naming the release the changelog says is current. The quick start shipped naming
+// 0.1.0 while describing a flow that only existed on main, so the first outside install ran the
+// old image against new instructions; a release bump that misses one of the several files that
+// restate the tag is the same failure in the other direction. The behaviour of the tagged image
+// is checked separately, by hack/check-quickstart.sh - this only proves the documents agree.
+func TestPublishedImageTagsAgreeWithChangelog(t *testing.T) {
+	root := repoRoot(t)
+	changelog, err := os.ReadFile(filepath.Join(root, "CHANGELOG.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	heading := regexp.MustCompile(`(?m)^## (\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?) `).FindSubmatch(changelog)
+	if heading == nil {
+		t.Fatal("CHANGELOG.md has no release heading of the form '## 1.2.3 - date'")
+	}
+	current := string(heading[1])
+
+	image := regexp.MustCompile(`ghcr\.io/sergeyfarin/veduta:([0-9][0-9A-Za-z.-]*)`)
+	release := regexp.MustCompile(`github\.com/sergeyfarin/veduta/releases/tag/v([0-9][0-9A-Za-z.-]*)`)
+	// Only the documents an operator follows. The plan, backlog and changelog narrate history and
+	// name old tags on purpose.
+	documents := []string{"README.md", "compose.yaml", "docs/getting-started.md", "docs/docker.md"}
+	found := 0
+	for _, name := range documents {
+		text, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(name)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, pattern := range []*regexp.Regexp{image, release} {
+			for _, match := range pattern.FindAllSubmatch(text, -1) {
+				found++
+				if got := string(match[1]); got != current {
+					t.Errorf("%s names %s, but CHANGELOG.md's newest release is %s", name, match[0], current)
+				}
+			}
+		}
+	}
+	if found == 0 {
+		t.Fatal("found no image or release references at all; the patterns no longer match how the documents write them")
+	}
+}
