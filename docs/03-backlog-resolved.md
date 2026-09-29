@@ -1053,3 +1053,61 @@ Not built, deliberately: no showcase card uses the bound form, because the fixtu
 scheduler to attach history; the renderer's bound path is covered by component tests instead. The
 WASM requirements review was waiting on this block, and is now due.
 
+### The approval API had no client
+
+Noticed 2026-09-14, from the reasonable expectation that a dashboard with a login has a settings
+page behind it. It does not, and for the config half that is decision D5 working as intended -
+YAML is the single source of truth for 0.1, and the editor is a 0.3 frontend project over
+`config.Store.Apply` (architecture section on Writes, and challenge C6). Nothing to fix there.
+
+The integrations half is a different situation. D2b built `GET /api/v1/integrations`,
+`GET /api/v1/integrations/{id}/approval` and `POST /api/v1/integrations/{id}/approve`, and H2 gated
+them properly: a fresh sudo window in password mode, the configured admin group under forward auth,
+`privilegedOperations: cli-only` by default in forward mode. D2b's own acceptance criteria are
+written in terms of a UI - "the UI shows a human-readable applicability report". That UI was never
+built, and no milestone owns it.
+
+Two consequences, neither fatal:
+
+- **Approving is CLI-only in practice**, including in password mode where the REST path is fully
+  authorized. An operator running the container without shell access has an endpoint they can only
+  reach with `curl` and a hand-managed sudo window.
+- **The REST approve path has no real client**, so it is exercised only by its own tests. The
+  handler is well covered, but nothing proves the sequence a browser would actually perform -
+  preview, sudo, approve with `expectedManifestSha256`, handle the 409 on a stale digest.
+
+This is not the 0.3 config editor and does not need D5 reopened: approval writes `veduta.lock.yaml`,
+which is already a machine-written file, not the operator's commented config. It is a page over
+three endpoints that already exist.
+
+Priority: open decision. The question is whether 0.1 ships a read-only integrations view (cheap,
+makes the state visible, leaves approval at the CLI where the security model is most defensible),
+the full approve flow, or nothing - and whether a settings entry point in the header is wanted at
+all before there is more than one thing behind it.
+
+**Decided, 2026-09-29:** 0.2 ships the read-only page, as Phase M4. It shows each integration's
+state and its requested against granted authority, with the CLI command that approves it; it does
+not approve. The full approve flow is not ruled out, but it waits for a reason stronger than
+convenience, since a browser path that grants authority is a larger surface than the CLI one. The
+entry closes when M4 lands.
+
+**Resolved, 2026-09-29, in Phase M4, as the read-only page decided above.** `IntegrationsPage.svelte`,
+behind a header link and a `#integrations` hash, reads the two GET endpoints and shows each
+integration's status, what its lock grants (only when that lock is in force - a changed integration's
+old entry is not presented as granted, since the core refuses it), and the diff in words: requested
+but not approved, approved but no longer requested, new capabilities, raised limits, body-bearing
+routes flagged. For a never-approved integration its requested limits are listed as requests, not as
+raises from zero. When there is something to do it prints the `veduta integration diff` and `approve`
+commands; it has no approve control at all.
+
+Covered by unit tests of the view model and component, a Go test that both endpoints answer 401
+without a session (mutation-checked by exempting them), and a Playwright spec that starts a second,
+real `veduta serve` from `web/tests/integrations/` - one integration in each state, including
+`examples/veduta.lock.yaml`'s immich entry with its deliberately ungranted admin route - and checks
+the page against the real API. `TestIntegrationsE2ELockMatchesExample` keeps that lock's copied
+entries identical to the example's. Dropping the ungranted route when the digest matches fails two
+tests.
+
+The second consequence recorded above - that nothing exercises the REST *approve* sequence as a
+browser client would - is unchanged, and deliberately so: there is still no browser client for it.
+

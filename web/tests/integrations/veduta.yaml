@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# The configuration web/tests/integrations.spec.ts serves with a real `veduta serve`, so the
+# integrations page is tested against the real API rather than a stub. One integration in each
+# state the page distinguishes; veduta.lock.yaml beside this file sets them up. No connections and
+# no cards: the page reads manifests and the lock, and nothing here makes a network request.
+version: 1
+auth: { mode: none }
+integrations:
+  - id: glances         # approved, and the manifest still matches
+    source: path:../../../plugins/glances
+  - id: immich          # approved, but one requested route was deliberately left out
+    source: path:../../../plugins/immich
+  - id: homeassistant   # approved at 0.1.0; the 0.2.0 manifest no longer matches
+    source: path:../../../plugins/homeassistant
+  - id: arcane          # never approved
+    source: path:../../../plugins/arcane
+  - id: http-json       # compiled in; nothing to approve
+    source: builtin

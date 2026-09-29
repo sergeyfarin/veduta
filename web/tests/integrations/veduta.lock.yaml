@@ -1,0 +1,97 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# The lock for web/tests/integrations/veduta.yaml. immich and glances are copied from
+# examples/veduta.lock.yaml, so they track the shipped manifests: TestIntegrationsE2ELockMatchesExample
+# fails if they drift apart.
+version: 1
+integrations:
+  immich:
+    manifestSha256: 09896e3f8bfe8cb00956263d17539e7d1581876c0fb4240d395acd0c060de6e5
+    version: 0.3.0
+    runtime: declarative
+    approvedAt: "2026-09-16T00:00:00Z"
+    approvedBy: admin
+    capabilities: [http, assets]
+    effectiveLimits:
+      cacheBytesKB: 256
+      cacheEntries: 64
+      exprNodes: 512
+      hostCalls: 256
+      httpRequests: 2
+      inputMB: 4
+      iterations: 20000
+      jsonDepth: 32
+      jsonNodes: 200000
+      memoryMB: 64
+      outputKB: 64
+      requestBodyKB: 64
+      responseMB: 4
+      timeoutMs: 5000
+    routes:
+      - { slot: server, method: GET,  path: /api/assets/statistics }
+      - { slot: server, method: POST, path: /api/search/metadata, contentType: application/json }
+      - { slot: server, method: GET,  path: /api/assets/*/thumbnail, use: asset }
+      - { slot: server, method: GET, path: /api/memories, queryKeys: [for, type, order] }
+      # Not approved: GET /api/server/statistics. The manifest requests it for the
+      # server-statistics operation, which needs an ADMIN api key.
+    limits: { httpRequests: 2, timeoutMs: 5000 }
+
+
+  glances:
+    manifestSha256: d3e154a952bf05ac1eea44370aa58ae9c574503c7fb085422efa81ba78faf400
+    version: 0.2.0
+    runtime: declarative
+    approvedAt: "2026-09-09T00:19:38Z"
+    approvedBy: admin
+    capabilities: [http]
+    effectiveLimits:
+      cacheBytesKB: 256
+      cacheEntries: 64
+      exprNodes: 512
+      hostCalls: 256
+      httpRequests: 6
+      inputMB: 2
+      iterations: 2000
+      jsonDepth: 32
+      jsonNodes: 200000
+      memoryMB: 64
+      outputKB: 64
+      requestBodyKB: 64
+      responseMB: 4
+      timeoutMs: 4000
+    routes:
+      - { slot: server, method: GET, path: /api/4/cpu }
+      - { slot: server, method: GET, path: /api/4/mem }
+      - { slot: server, method: GET, path: /api/4/fs }
+      - { slot: server, method: GET, path: /api/4/uptime }
+      - { slot: server, method: GET, path: /api/4/network }
+      - { slot: server, method: GET, path: /api/4/sensors }
+    limits: { timeoutMs: 4000, httpRequests: 6, inputMB: 2, iterations: 2000 }
+
+  # The shape a 0.1.0 approval had: /api/states only. The digest is not today's manifest's, so the
+  # page must call it changed, and must not list these routes as granted - the core refuses a
+  # changed integration until it is approved again.
+  homeassistant:
+    manifestSha256: "0000000000000000000000000000000000000000000000000000000000000000"
+    version: 0.1.0
+    runtime: declarative
+    approvedAt: "2026-09-15T00:00:00Z"
+    approvedBy: admin
+    capabilities: [http]
+    effectiveLimits:
+      cacheBytesKB: 256
+      cacheEntries: 64
+      exprNodes: 512
+      hostCalls: 256
+      httpRequests: 1
+      inputMB: 4
+      iterations: 20000
+      jsonDepth: 32
+      jsonNodes: 200000
+      memoryMB: 64
+      outputKB: 64
+      requestBodyKB: 64
+      responseMB: 4
+      timeoutMs: 3000
+    routes:
+      - { slot: server, method: GET, path: /api/states }

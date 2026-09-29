@@ -28,6 +28,10 @@ project is pre-1.0:
   integration either supplies the points or binds its own retained signals with `history`, in which
   case Veduta attaches what it has stored for the card (1 hour to 7 days) and the integration
   never reads stored history. The Glances card now shows CPU and memory over the last 24 hours.
+- An **Integrations** page, linked from the dashboard header: each integration's status, the routes,
+  capabilities and limits it is granted, and what it asks for beyond them - including a requested
+  route an approval left out, which is listed rather than hidden - with the command that approves
+  it. It is read-only: approval stays at the command line.
 - Arcane cards take an `environmentId` parameter (default `"0"`, the local Docker host), so a remote
   host or agent can have a card.
 
@@ -44,6 +48,8 @@ project is pre-1.0:
   card with HTTP 404 instead of showing "no such entity".
 - A connection header written as `${secret:NAME}` is now resolved. Before, it was sent to the
   upstream as that literal text.
+- The "authentication is disabled" banner used a colour token that does not exist, so it never
+  showed its warning tint. It does now.
 
 ## 0.1.3 — 2026-09-29
 

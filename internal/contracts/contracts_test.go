@@ -592,3 +592,36 @@ func TestPublishedImageTagsAgreeWithChangelog(t *testing.T) {
 		t.Errorf("SECURITY.md must say %q; CHANGELOG.md's newest release is %s", want, current)
 	}
 }
+
+// TestIntegrationsE2ELockMatchesExample keeps the integrations page's end-to-end lock
+// (web/tests/integrations/veduta.lock.yaml) honest. Its glances and immich entries are copies of
+// examples/veduta.lock.yaml's, which the semantic suite already checks against the shipped
+// manifests; if the copies drift, the page test would be checking statuses against a lock nobody
+// maintains, and "approved" there would stop meaning what it means here.
+func TestIntegrationsE2ELockMatchesExample(t *testing.T) {
+	root := repoRoot(t)
+	read := func(rel string) map[string]any {
+		raw, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(rel)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var doc map[string]any
+		if err := yaml.Unmarshal(raw, &doc); err != nil {
+			t.Fatal(err)
+		}
+		entries, ok := doc["integrations"].(map[string]any)
+		if !ok {
+			t.Fatalf("%s has no integrations map", rel)
+		}
+		return entries
+	}
+	example := read("examples/veduta.lock.yaml")
+	e2e := read("web/tests/integrations/veduta.lock.yaml")
+	for _, id := range []string{"glances", "immich"} {
+		want, _ := json.Marshal(example[id])
+		got, _ := json.Marshal(e2e[id])
+		if string(want) != string(got) {
+			t.Errorf("web/tests/integrations/veduta.lock.yaml's %s entry differs from examples/veduta.lock.yaml's; copy it across", id)
+		}
+	}
+}

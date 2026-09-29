@@ -134,3 +134,17 @@ func TestForwardAuthRejectsSpoofedUntrustedPeer(t *testing.T) {
 		t.Fatalf("status=%d body=%s", ok.Code, ok.Body.String())
 	}
 }
+
+// The integrations page (Phase M4) reads these two endpoints, and what they return - every route
+// an integration may reach, and what it asks for beyond that - is a map of the household's
+// services. Without a session they must answer 401, like the rest of the API, never an empty list.
+func TestIntegrationEndpointsRequireASession(t *testing.T) {
+	handler := passwordAuthServer(t).Handler()
+	for _, path := range []string{"/api/v1/integrations", "/api/v1/integrations/glances/approval"} {
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		if rec.Code != http.StatusUnauthorized {
+			t.Errorf("GET %s without a session: status %d, want 401", path, rec.Code)
+		}
+	}
+}

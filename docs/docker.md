@@ -199,11 +199,21 @@ deployment, which is what makes them need no preparation beyond `mkdir`.
 **`/data`** holds the SQLite database and the asset and icon caches. **`/config`** holds
 `veduta.yaml`, `conf.d/` and `veduta.lock.yaml`. `/config` has to stay writable beyond the first
 run: approving an integration writes `veduta.lock.yaml` into that directory, from
-`veduta integration approve` and from the dashboard's approve button alike, and the write is
+`veduta integration approve` and from the REST approve endpoint alike, and the write is
 atomic, so it also creates a temporary file beside the target. If the directory is not writable
 the server starts and serves normally and only approval fails, with
 `creating temp file: permission denied` — a poor place to discover a mount option. Mount
 `/config` `:ro` only if you approve integrations elsewhere and copy the resulting lock file in.
+
+The dashboard's **Integrations** page (the link in its header) shows what each integration is
+granted and what it asks for beyond that, and the command that approves it. It does not approve
+anything itself. In the compose deployment, run that command in a one-off container, with the
+config path as the container sees it:
+
+```sh
+docker compose run --rm veduta integration diff --config /config/veduta.yaml glances
+docker compose run --rm veduta integration approve --config /config/veduta.yaml glances
+```
 
 Both directories exist in the image owned by uid 65532, so a named volume mounted at either one
 inherits that ownership and works with no `user:` line at all. That is the only reason they are

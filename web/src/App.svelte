@@ -5,6 +5,7 @@
   import Section from './lib/Section.svelte';
   import Skeleton from './lib/Skeleton.svelte';
   import Login from './lib/Login.svelte';
+  import IntegrationsPage from './lib/IntegrationsPage.svelte';
   import {
     apply, applyAppearance, next, nextAppearance, stored, storedAppearance,
     type Appearance, type Theme
@@ -31,6 +32,16 @@
   let streamStatus = $state<StreamStatus>('connecting');
   let authState = $state<'checking' | 'required' | 'denied' | 'ready'>('checking');
   let authMode = $state<'password' | 'forward' | 'none'>('none');
+  // Two views and no router: a hash keeps the integrations page linkable and the back button
+  // working, without a second route the server has to know about.
+  const viewFromHash = () => (location.hash === '#integrations' ? 'integrations' : 'dashboard');
+  let view = $state<'dashboard' | 'integrations'>(viewFromHash());
+
+  $effect(() => {
+    const onHash = () => (view = viewFromHash());
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  });
 
   $effect(() => {
     apply(theme);
@@ -162,6 +173,11 @@
     <h1>Home</h1>
     <span class="connection" data-status={streamStatus}>{streamStatus}</span>
     <span class="spacer"></span>
+    {#if view === 'integrations'}
+      <a class="nav" href="#dashboard">Dashboard</a>
+    {:else}
+      <a class="nav" href="#integrations">Integrations</a>
+    {/if}
     {#if authMode === 'password'}<button onclick={() => void logout()}>Sign out</button>{/if}
     <button onclick={() => (theme = next(theme))}>
       Theme: {theme}
@@ -179,7 +195,9 @@
     <p class="error-banner">Could not load the dashboard: {loadError}</p>
   {/if}
 
-  {#if dashboard}
+  {#if view === 'integrations'}
+    <IntegrationsPage />
+  {:else if dashboard}
     {#each dashboard.sections as section, i (section.title ?? i)}
       <Section title={section.title}>
         <Grid>
@@ -272,8 +290,14 @@
     font-size: 12px;
     cursor: pointer;
   }
-  button:hover {
+  button:hover,
+  .nav:hover {
     color: var(--v-text);
+  }
+  .nav {
+    color: var(--v-muted);
+    font-size: 12px;
+    text-decoration: none;
   }
 
   .error-banner {
@@ -289,9 +313,9 @@
   .auth-banner {
     margin: 0 0 var(--v-s-5);
     padding: var(--v-s-3) var(--v-s-4);
-    border: 1px solid color-mix(in srgb, var(--v-warning) 55%, var(--v-border));
+    border: 1px solid color-mix(in srgb, var(--v-warn) 55%, var(--v-border));
     border-radius: var(--v-r-sm);
-    background: color-mix(in srgb, var(--v-warning) 10%, var(--v-surface));
+    background: color-mix(in srgb, var(--v-warn) 10%, var(--v-surface));
     color: var(--v-text);
     font-size: 13px;
   }

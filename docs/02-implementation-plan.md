@@ -1739,16 +1739,18 @@ text alternative; visual baseline; the manifest schema's sparkline sentence made
 access for integrations. **Found on the way:** the visual suite passed four desktop baselines with a
 whole new card on the page, and its footer had rendered `git describe` all along - the build
 version is now pinned and the threshold entry raised to medium.
-**M4 · Read-only integrations page** · 1.5 d · deps: none · **COMMITTED to 0.2, decided 2026-09-29** —
-resolves [the approval API's missing client](03-backlog.md#the-approval-api-has-no-client) at its
-cheapest end. A page over the existing `GET /api/v1/integrations` and `.../approval`: each
-integration's state, digest, and requested against granted routes, capabilities and limits, with
-the exact `veduta integration approve` command to run. Approval itself stays in the CLI, where the
-security model is most defensible, so this adds visibility and no new authority. AC: unauthenticated
-requests get 401; a stale or ungranted route is shown as ungranted, not omitted; covered by an
-e2e test that drives the real API, which is also the first thing to exercise those endpoints as a
-browser would. Decided over the alternatives, a full approve flow or nothing: the page shows
-authority and never grants it.
+**M4 · Read-only integrations page** · 1.5 d · deps: none · **DONE, 2026-09-29** — resolved
+[the approval API's missing client](03-backlog-resolved.md#the-approval-api-had-no-client) at its
+cheapest end, as decided. A header link opens a page over `GET /api/v1/integrations` and
+`.../approval`: each integration's status, its granted routes, capabilities and effective limits when
+its lock is in force, and the pending diff in words, with the `veduta integration diff` and `approve`
+commands. It adds visibility and no authority - there is no approve control.
+AC met: both endpoints answer 401 without a session (mutation-checked); an ungranted route is listed
+under "Requested, not approved" even when the digest matches, from the example lock's immich entry
+(mutation-checked); a Playwright spec drives the real API through a second `veduta serve` with one
+integration in each state. **Found on the way:** `docs/docker.md` described "the dashboard's approve
+button", which never existed; and the auth-disabled banner used an undefined colour token, so its
+warning tint had never rendered. Both fixed.
 **M5 · Small debts** · 0.5 d · **PROPOSED** — two entries whose own text says to fold them into
 the next change that touches their area, which this is: validate `server.dataDir` at config load,
 so a bad value is reported with its field name and path rather than as a SQLite error
