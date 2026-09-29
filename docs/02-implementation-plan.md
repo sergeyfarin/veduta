@@ -1725,7 +1725,7 @@ alternative; a golden document and a visual baseline exist; `schemas/plugin-mani
 "for `for:` windows and sparklines" sentence becomes true in the same change, as the entry asks.
 Integrations gain no direct database access. Rain and energy integrations are candidates this
 unblocks, not commitments.
-**M4 · Read-only integrations page** · 1.5 d · deps: none · **PROPOSED, needs a decision** —
+**M4 · Read-only integrations page** · 1.5 d · deps: none · **COMMITTED to 0.2, decided 2026-09-29** —
 resolves [the approval API's missing client](03-backlog.md#the-approval-api-has-no-client) at its
 cheapest end. A page over the existing `GET /api/v1/integrations` and `.../approval`: each
 integration's state, digest, and requested against granted routes, capabilities and limits, with
@@ -1733,7 +1733,8 @@ the exact `veduta integration approve` command to run. Approval itself stays in 
 security model is most defensible, so this adds visibility and no new authority. AC: unauthenticated
 requests get 401; a stale or ungranted route is shown as ungranted, not omitted; covered by an
 e2e test that drives the real API, which is also the first thing to exercise those endpoints as a
-browser would. The alternatives, a full approve flow or nothing, remain the user's call.
+browser would. Decided over the alternatives, a full approve flow or nothing: the page shows
+authority and never grants it.
 **M5 · Small debts** · 0.5 d · **PROPOSED** — two entries whose own text says to fold them into
 the next change that touches their area, which this is: validate `server.dataDir` at config load,
 so a bad value is reported with its field name and path rather than as a SQLite error
@@ -1741,15 +1742,14 @@ so a bad value is reported with its field name and path rather than as a SQLite 
 and settle whether `veduta.lock.yaml` is written `0600` or `0644`
 ([entry](03-backlog.md#veduta-lock-yaml-is-written-0600-by-a-uid-the-operator-is-not)), a
 decision and not a fix.
-**M6 · Decisions to record, no code** — **PROPOSED**, each needs only a yes or a different answer.
+**M6 · Decisions to record, no code** — **DECIDED, 2026-09-29**, all three as proposed.
 The [WASM review](03-backlog.md#does-wasm-add-enough-value-to-justify-further-development) runs
 after M3, since the rain and energy candidates it is waiting on need that block to be judged at
 all. Action execution stays display-only through 0.2, and its next step is a design document, not
 code. The armv7 WASM measurement waits on real hardware and is disclosed in `docs/docker.md` in
 the meantime.
 
-**Order:** M1 → M2 ⇉ M3 → M4 → M5, with M6 whenever. **A proposed 0.2** is M2 plus M3, with M4 if
-the decision is yes; `0.1.x` patches continue as needed and inherit the release rules unchanged.
+**Order:** M1 → M2 ⇉ M3 → M4 → M5; M6 is recorded. **0.2 is M2, M3 and M4**, with M5 folded in; `0.1.x` patches continue as needed and inherit the release rules unchanged.
 
 ---
 

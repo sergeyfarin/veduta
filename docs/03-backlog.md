@@ -16,10 +16,10 @@ priority (which milestone should absorb it, or "before X" for a hard blocker).
 
 | Open item | Area | Priority |
 | --- | --- | --- |
-| [Does WASM add enough value to justify further development?](#does-wasm-add-enough-value-to-justify-further-development) | Integrations | Parked; review after 0.1 |
+| [Does WASM add enough value to justify further development?](#does-wasm-add-enough-value-to-justify-further-development) | Integrations | Parked; review after the time-series block (M3) |
 | [Should there be a frontend plugin surface at all?](#open-question-should-there-be-a-frontend-plugin-surface-at-all) | Frontend | Open decision |
-| [The approval API has no client](#the-approval-api-has-no-client) | Frontend | Open decision |
-| [Action execution is not implemented](#action-execution-is-not-implemented) | Product/security | Design before implementation |
+| [The approval API has no client](#the-approval-api-has-no-client) | Frontend | Decided: read-only page in 0.2 (M4) |
+| [Action execution is not implemented](#action-execution-is-not-implemented) | Product/security | Display-only through 0.2; design first |
 | [Appearance options are deferred until asked for](#appearance-options-are-deferred-until-asked-for) | Frontend | On demand |
 | [The visual baseline's per-pixel threshold hides whole-area changes](#the-visual-baselines-per-pixel-threshold-hides-whole-area-changes) | Frontend | Low-medium |
 | [Asset format coverage is narrower than the allowlist](#asset-format-coverage-is-narrower-than-the-architectures-final-allowlist) | Assets | 0.2 transform milestone |
@@ -74,6 +74,11 @@ The 0.1 decision to retain the existing Jellyfin implementation is unchanged;
 it is not evidence that future integrations need WASM. See
 [decision 0003](decisions/0003-jellyfin-wasm-proof-case.md).
 Priority: parked until a requirements review after 0.1, not a release blocker.
+
+**Decided, 2026-09-29:** the review runs after the native time-series block (Phase M3) lands, not
+before. The rain and energy candidates above need a way to draw a series before the question of
+how to fetch one can be judged, and without that block the comparison would be against a card that
+cannot show the result.
 
 ### A pipeline path cannot carry a card parameter
 
@@ -162,6 +167,12 @@ makes the state visible, leaves approval at the CLI where the security model is 
 the full approve flow, or nothing - and whether a settings entry point in the header is wanted at
 all before there is more than one thing behind it.
 
+**Decided, 2026-09-29:** 0.2 ships the read-only page, as Phase M4. It shows each integration's
+state and its requested against granted authority, with the CLI command that approves it; it does
+not approve. The full approve flow is not ruled out, but it waits for a reason stronger than
+convenience, since a browser path that grants authority is a larger surface than the CLI one. The
+entry closes when M4 lands.
+
 ### Action execution is not implemented
 
 The Widget Document can describe action controls, but the frontend intentionally renders every
@@ -178,6 +189,10 @@ in a home dashboard at all.
 Priority: design before implementation; not part of the first alpha unless it is separately
 scoped, reviewed, and release-gated. Until then, documentation must describe action blocks as
 display-only.
+
+**Decided, 2026-09-29:** action controls stay display-only through 0.2. No 0.2 milestone implements
+execution, and the next step when it is picked up is a design document covering the list above,
+not code.
 
 ### Appearance options are deferred until asked for
 
