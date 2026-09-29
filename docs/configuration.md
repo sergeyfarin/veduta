@@ -36,8 +36,8 @@ Unknown fields are rejected. A required field can still be conditional on a sele
 | `connections.<name>.concurrency` | integer | no | 4 | minimum=1; maximum=32 | — |
 | `connections.<name>.enabled` | boolean | no | true | — | Disabled connections retain imported settings but are never constructed or used until reviewed. |
 | `connections.<name>.endpoint` | string | yes | — | pattern="^(unix://\|tcp://)" | — |
-| `connections.<name>.headers` | object | no | — | — | — |
-| `connections.<name>.headers.<name>` | string | no | — | — | — |
+| `connections.<name>.headers` | object | no | — | — | Static headers sent on every request to this connection, which an integration can neither set nor override. SECRET-CAPABLE, like a webhook's headers: an upstream that authenticates with a header no auth.type covers can take its credential as ${secret:NAME} here rather than in plain text. |
+| `connections.<name>.headers.<name>` | secretRef \| string | no | — | — | Literal value or ${secret:NAME} reference resolved from file:/env: providers. |
 | `connections.<name>.kind` | constant "http" \| constant "docker" | yes | — | — | — |
 | `connections.<name>.maxRedirects` | integer | no | 0 | minimum=0; maximum=5 | — |
 | `connections.<name>.maxResponseBytes` | integer | no | 8388608 | minimum=1024 | — |

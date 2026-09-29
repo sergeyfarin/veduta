@@ -25,7 +25,6 @@ priority (which milestone should absorb it, or "before X" for a hard blocker).
 | [Asset format coverage is narrower than the allowlist](#asset-format-coverage-is-narrower-than-the-architectures-final-allowlist) | Assets | 0.2 transform milestone |
 | [Asset-cache startup does not reconcile orphan files](#asset-cache-startup-does-not-reconcile-orphan-files) | Assets | Low |
 | [Lock-write race against a concurrent CLI approval](#the-lock-write-race-is-closed-only-within-one-process-not-against-a-concurrent-cli-approval) | Integrations | Low |
-| [`httpConnection.headers` are not secret-capable](#config-httpconnectionheaders-values-are-plain-strings-not-secret-capable) | Config schema | Low-medium |
 | [A pipeline step cannot read 404 as absent](#a-pipeline-step-cannot-read-404-as-absent) | Manifest DSL | Low; on a second case |
 | [`CacheEntries` can't represent an explicit zero](#manifestloadlimitscacheentries-cant-represent-an-explicit-zero) | Integrations | When declarative caching lands |
 | [Approve flow can't grant a limit above its default](#the-documented-approve-flow-has-no-way-to-grant-a-limit-above-its-documented-default) | Docs | Low |
@@ -267,19 +266,6 @@ running the CLI and the API against the same lock file at the same instant, a na
 worth closing whenever the lock file gains a real writer abstraction - an OS file lock
 (`flock`/`LockFileEx`) around the read-modify-write in whatever function both the CLI and the API
 ultimately call would close it without either caller needing to know about the other.
-
-### Config: `httpConnection.headers` values are plain strings, not secret-capable
-
-`schemas/config.v1.schema.json`'s `httpConnection.headers` (line ~556) is
-`additionalProperties: {type: string}`, while `notifications.channels.*.webhook.headers` (line
-~390) is `additionalProperties: {$ref: secretRef}`. An admin can put `${secret:NAME}` in a webhook
-header but not in a custom HTTP connection header - so an upstream API that authenticates via a
-non-standard header (not one of the schema's typed `auth.type` values) forces the credential into
-the config file in plaintext. Found while implementing C1, reading the schema closely enough to
-notice the asymmetry; not fixed there because it is a schema change (needs re-validating existing
-configs, arguably a design call, not C1's own scope of "build the loader for the schema as it
-exists"). Priority: low-medium, whenever `schemas/config.v1.schema.json` next gets a deliberate
-revision - do not roll it into an unrelated milestone's diff.
 
 ### `manifestload.Limits.CacheEntries` can't represent an explicit zero
 

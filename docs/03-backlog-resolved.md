@@ -945,3 +945,31 @@ their routes changed. A missing Home Assistant entity is now a 404 that fails th
 The work also found, and fixed first, a real route bypass through `?` and `#` in a path segment;
 see the entry above this one.
 
+### Config: `httpConnection.headers` values were plain strings, not secret-capable
+
+`schemas/config.v1.schema.json`'s `httpConnection.headers` (line ~556) is
+`additionalProperties: {type: string}`, while `notifications.channels.*.webhook.headers` (line
+~390) is `additionalProperties: {$ref: secretRef}`. An admin can put `${secret:NAME}` in a webhook
+header but not in a custom HTTP connection header - so an upstream API that authenticates via a
+non-standard header (not one of the schema's typed `auth.type` values) forces the credential into
+the config file in plaintext. Found while implementing C1, reading the schema closely enough to
+notice the asymmetry; not fixed there because it is a schema change (needs re-validating existing
+configs, arguably a design call, not C1's own scope of "build the loader for the schema as it
+exists"). Priority: low-medium, whenever `schemas/config.v1.schema.json` next gets a deliberate
+revision - do not roll it into an unrelated milestone's diff.
+
+**Resolved, 2026-09-29, in Phase M2, as the deliberate schema revision the entry asked for.**
+`httpConnection.headers` is `additionalProperties: {$ref: secretRef}` like the webhook's, the config
+type is `map[string]SecretRef`, and `connections.HTTPConfig.Headers` holds `secrets.Value`, so a
+header value gets the same redaction as `auth.value` and is revealed only where the request is built
+(and in the connection's material digest). Code that needed only the names - the broker's ownership
+set and the redirect policy - now takes names alone.
+
+Doing it found a quieter bug than the one recorded: the secret-location scanner finds
+`${secret:NAME}` in *any* scalar, so a reference written into a connection header was resolved at
+startup and then sent upstream as the literal text `${secret:NAME}`, because nothing substituted it.
+Existing configurations validate unchanged, since a plain string is a valid `secretRef`.
+`TestNew_ConnectionHeadersResolveSecrets` checks a whole-value and a templated reference on the wire
+and a missing secret refusing to build, and fails if resolution is bypassed; the L3 response scan's
+fixture now carries a secret in a connection header too.
+

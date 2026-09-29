@@ -110,7 +110,7 @@ func (r *registry) Do(ctx context.Context, id string, req Request) (*Response, e
 	// were computed into HTTPConfig.Headers at build time and never actually added to a request -
 	// a configured static header silently never went out on the wire at all.
 	for k, v := range c.cfg.Headers {
-		httpReq.Header.Set(k, v)
+		httpReq.Header.Set(k, v.Reveal())
 	}
 	injectAuth(httpReq, query, c.cfg.Auth)
 	httpReq.URL.RawQuery = query.Encode()

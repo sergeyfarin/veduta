@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"net/url"
 	"testing"
+
+	"veduta.dev/veduta/internal/secrets"
 )
 
 func TestRedirectPolicy_RefusesDifferentHost(t *testing.T) {
@@ -91,7 +93,7 @@ func TestRedirectPolicy_AllowedPathsBoundaryIsASubtree(t *testing.T) {
 
 // captureRedirect runs policy against one destination and returns the RedirectRequest the
 // authorizer was handed, which is what every normalisation below is actually about.
-func captureRedirect(t *testing.T, base *url.URL, auth Auth, headers map[string]string, req *http.Request) (RedirectRequest, error) {
+func captureRedirect(t *testing.T, base *url.URL, auth Auth, headers map[string]secrets.Value, req *http.Request) (RedirectRequest, error) {
 	t.Helper()
 	var got RedirectRequest
 	seen := false

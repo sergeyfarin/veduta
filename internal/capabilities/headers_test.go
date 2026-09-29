@@ -3,6 +3,7 @@
 package capabilities
 
 import (
+	"maps"
 	"testing"
 )
 
@@ -60,7 +61,7 @@ func TestFilterHeaders_ConnectionOwnedDropped(t *testing.T) {
 // static `headers` map is connection-owned too, even if it happens to be on the plugin
 // allowlist.
 func TestFilterHeaders_StaticConnectionHeadersDropped(t *testing.T) {
-	owned := newConnectionOwnership("none", "", map[string]string{"Accept": "application/vnd.custom+json"})
+	owned := newConnectionOwnership("none", "", maps.Keys(map[string]string{"Accept": "application/vnd.custom+json"}))
 	in := map[string]string{"Accept": "application/json"}
 	out := filterHeaders(in, owned)
 	if _, ok := out["Accept"]; ok {

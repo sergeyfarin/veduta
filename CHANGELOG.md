@@ -11,6 +11,33 @@ project is pre-1.0:
 > pinned in `veduta.lock.yaml`, so an incompatible plugin fails closed rather than misbehaving;
 > expect to rebuild and re-approve third-party plugins when upgrading.
 
+## Unreleased
+
+### Added
+
+- A declarative pipeline path can name a card parameter as a whole segment:
+  `path: "/api/states/{entityId}"`. The parameter must be a required or defaulted string or integer,
+  a value must be one plain path segment (1–128 characters from `A-Z a-z 0-9 - . _ ~ : @`, not a dot
+  segment) or the card fails, and the route must have `*` at that segment. Coverage is checked when
+  the manifest loads.
+- Connection `headers` accept `${secret:NAME}`, as a webhook's headers already did, so an upstream
+  that authenticates with a custom header no longer forces its credential into the config file.
+- Arcane cards take an `environmentId` parameter (default `"0"`, the local Docker host), so a remote
+  host or agent can have a card.
+
+### Changed
+
+- **A pipeline path must be a literal string.** An expression there used to load and was checked
+  only when a card ran; it is now refused when the manifest loads, with the placeholder syntax
+  above as the replacement. Third-party manifests using one need rewriting (the plugin ABI is
+  experimental, as noted at the top of this file).
+- `arcane` and `homeassistant` are now manifest version 0.2.0 with changed routes, so both need
+  re-approval (`veduta integration diff` then `approve`). Home Assistant's `sensor` reads only its
+  own entity from `/api/states/<entityId>` instead of every entity; a missing entity now fails the
+  card with HTTP 404 instead of showing "no such entity".
+- A connection header written as `${secret:NAME}` is now resolved. Before, it was sent to the
+  upstream as that literal text.
+
 ## 0.1.3 — 2026-09-29
 
 A security release, and the first whose artefacts drop the `v` from their names. The GitHub

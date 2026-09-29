@@ -179,3 +179,42 @@ func TestNew_RealExampleConfig(t *testing.T) {
 		}
 	}
 }
+
+// A connection header is secret-capable, like a webhook's: an upstream that authenticates with a
+// header no auth type covers takes its credential as ${secret:NAME}. Before Phase M2 the schema
+// made these plain strings, so the credential had to sit in the config file - and a reference
+// written there anyway went out on the wire as the literal text "${secret:NAME}". Both the whole
+// value and a template around a secret must resolve, and a missing secret must refuse to build.
+func TestNew_ConnectionHeadersResolveSecrets(t *testing.T) {
+	var gotToken, gotComposed string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotToken, gotComposed = r.Header.Get("X-Token"), r.Header.Get("X-Composed")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	cfg := map[string]config.Connection{
+		"svc": {Kind: "http", HTTP: &config.HTTPConnection{
+			BaseURL: srv.URL,
+			Auth:    config.ConnectionAuth{Type: "none"},
+			Headers: map[string]config.SecretRef{
+				"X-Token":    {Name: "HEADER_TOKEN"},
+				"X-Composed": {Template: "Token ${secret:HEADER_TOKEN}", Names: []string{"HEADER_TOKEN"}},
+			},
+		}},
+	}
+	reg, err := connections.New(cfg, map[string]secrets.Value{"HEADER_TOKEN": secrets.New("s3cr3t-header")}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := reg.Do(context.Background(), "svc", connections.Request{Method: http.MethodGet, Path: "/"}); err != nil {
+		t.Fatal(err)
+	}
+	if gotToken != "s3cr3t-header" || gotComposed != "Token s3cr3t-header" {
+		t.Fatalf("upstream saw X-Token=%q X-Composed=%q, want the resolved secret in both", gotToken, gotComposed)
+	}
+
+	if _, err := connections.New(cfg, map[string]secrets.Value{}, nil); err == nil {
+		t.Fatal("a header referencing an unresolved secret built anyway")
+	}
+}

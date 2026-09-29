@@ -2,7 +2,10 @@
 
 package capabilities
 
-import "strings"
+import (
+	"iter"
+	"strings"
+)
 
 // pluginHeaderAllowlist is the ONLY headers a plugin-supplied value may keep - allowlisted, not
 // denylisted, because the first draft denied a list of known auth headers, which fails open for
@@ -39,10 +42,12 @@ type connectionOwnership struct {
 // since a connection has exactly one auth type). bearer/basic need no entry here: both send
 // their credential via the "Authorization" header, which is never on pluginHeaderAllowlist in
 // the first place, so it is already unconditionally dropped regardless of connection ownership.
-func newConnectionOwnership(authType, authName string, staticHeaders map[string]string) connectionOwnership {
-	headers := make(map[string]bool, len(staticHeaders)+1)
-	for name := range staticHeaders {
-		headers[strings.ToLower(name)] = true
+func newConnectionOwnership(authType, authName string, staticHeaderNames iter.Seq[string]) connectionOwnership {
+	headers := make(map[string]bool)
+	if staticHeaderNames != nil {
+		for name := range staticHeaderNames {
+			headers[strings.ToLower(name)] = true
+		}
 	}
 	queryKeys := make(map[string]bool, 1)
 	switch authType {

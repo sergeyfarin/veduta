@@ -75,9 +75,12 @@ type RateLimit struct {
 // HTTPConfig is connections.*.kind == http, resolved and ready. See docs/01-architecture.md
 // section 3 for the exact field set and defaults this mirrors.
 type HTTPConfig struct {
-	BaseURL          string
-	Auth             Auth
-	Headers          map[string]string
+	BaseURL string
+	Auth    Auth
+	// Headers are the connection's own static headers. Their values are secrets.Value because a
+	// configuration may put a credential in one - an upstream that authenticates by a header no
+	// typed auth kind covers - so they get the same redaction as Auth's.
+	Headers          map[string]secrets.Value
 	TLS              TLSConfig
 	Timeout          time.Duration
 	MaxResponseBytes int64

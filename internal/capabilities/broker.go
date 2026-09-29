@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net/url"
 	"time"
 
@@ -105,7 +106,7 @@ func (b *broker) HTTP(ctx context.Context, g Grant, req HTTPRequest) (HTTPRespon
 	if !ok || conn.HTTP == nil {
 		return HTTPResponse{}, fmt.Errorf("capabilities: connection %q is not an http connection", connID)
 	}
-	owned := newConnectionOwnership(string(conn.HTTP.Auth.Type), conn.HTTP.Auth.Name, conn.HTTP.Headers)
+	owned := newConnectionOwnership(string(conn.HTTP.Auth.Type), conn.HTTP.Auth.Name, maps.Keys(conn.HTTP.Headers))
 
 	// A redirect the connection follows is re-checked against this same Grant, not just
 	// host/scheme/allowedPaths (connections.redirectPolicy's own, connection-level checks) -

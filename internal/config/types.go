@@ -120,16 +120,16 @@ type Connection struct {
 // HTTPConnection is connections.*.kind == http. Connections own every URL, credential, TLS
 // setting, timeout and rate limit - integrations never see anything here (docs/01 section 7).
 type HTTPConnection struct {
-	BaseURL          string            `yaml:"baseUrl"`
-	Auth             ConnectionAuth    `yaml:"auth"`
-	Headers          map[string]string `yaml:"headers"`
-	TLS              TLSConfig         `yaml:"tls"`
-	Timeout          string            `yaml:"timeout"`
-	MaxResponseBytes int               `yaml:"maxResponseBytes"`
-	MaxRedirects     int               `yaml:"maxRedirects"`
-	AllowedPaths     []string          `yaml:"allowedPaths"`
-	RateLimit        RateLimit         `yaml:"rateLimit"`
-	Concurrency      int               `yaml:"concurrency"`
+	BaseURL          string               `yaml:"baseUrl"`
+	Auth             ConnectionAuth       `yaml:"auth"`
+	Headers          map[string]SecretRef `yaml:"headers"` // secret-capable, like a webhook's
+	TLS              TLSConfig            `yaml:"tls"`
+	Timeout          string               `yaml:"timeout"`
+	MaxResponseBytes int                  `yaml:"maxResponseBytes"`
+	MaxRedirects     int                  `yaml:"maxRedirects"`
+	AllowedPaths     []string             `yaml:"allowedPaths"`
+	RateLimit        RateLimit            `yaml:"rateLimit"`
+	Concurrency      int                  `yaml:"concurrency"`
 }
 
 // ConnectionAuth is httpConnection.auth: exactly one shape per Type, matching the schema's

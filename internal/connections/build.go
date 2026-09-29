@@ -81,10 +81,19 @@ func buildHTTPConfig(id string, cfg *config.HTTPConnection, resolved map[string]
 	if err != nil {
 		return nil, fmt.Errorf("connection %q: timeout: %w", id, err)
 	}
+	var headers map[string]secrets.Value
+	if len(cfg.Headers) > 0 {
+		headers = make(map[string]secrets.Value, len(cfg.Headers))
+		for name, ref := range cfg.Headers {
+			if headers[name], err = resolveRef(id, "headers."+name, ref, resolved); err != nil {
+				return nil, err
+			}
+		}
+	}
 	return &HTTPConfig{
 		BaseURL: cfg.BaseURL,
 		Auth:    auth,
-		Headers: cfg.Headers,
+		Headers: headers,
 		TLS: TLSConfig{
 			InsecureSkipVerify: cfg.TLS.InsecureSkipVerify,
 			CAFile:             cfg.TLS.CAFile,

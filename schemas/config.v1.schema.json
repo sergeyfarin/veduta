@@ -592,8 +592,9 @@
         "headers": {
           "type": "object",
           "additionalProperties": {
-            "type": "string"
-          }
+            "$ref": "#/$defs/secretRef"
+          },
+          "description": "Static headers sent on every request to this connection, which an integration can neither set nor override. SECRET-CAPABLE, like a webhook's headers: an upstream that authenticates with a header no auth.type covers can take its credential as ${secret:NAME} here rather than in plain text."
         },
         "tls": {
           "type": "object",

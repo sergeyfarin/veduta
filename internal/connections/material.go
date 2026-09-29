@@ -41,7 +41,7 @@ func MaterialHMACs(configs map[string]config.Connection, resolved map[string]sec
 			}
 			sort.Strings(keys)
 			for _, k := range keys {
-				writeMaterial(k, h.Headers[k])
+				writeMaterial(k, h.Headers[k].Reveal())
 			}
 			paths := append([]string(nil), h.AllowedPaths...)
 			sort.Strings(paths)

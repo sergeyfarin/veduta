@@ -244,7 +244,7 @@ func TestDo_StaticHeadersAreSentAndOverrideTheCaller(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	cfg := &HTTPConfig{BaseURL: srv.URL, Headers: map[string]string{"X-Static": "from-config"}}
+	cfg := &HTTPConfig{BaseURL: srv.URL, Headers: map[string]secrets.Value{"X-Static": secrets.New("from-config")}}
 	reg := singleHTTPRegistry(t, "x", cfg)
 
 	_, err := reg.Do(context.Background(), "x", Request{

@@ -16,6 +16,7 @@ import (
 	"golang.org/x/time/rate"
 
 	"veduta.dev/veduta/internal/connections/routepath"
+	"veduta.dev/veduta/internal/secrets"
 )
 
 const defaultTimeout = 10 * time.Second
@@ -118,7 +119,7 @@ func concurrencyOrDefault(n int) int {
 // permissive direction rather than the restrictive one: an upstream that echoes the connection's
 // api_key parameter back in its Location header would otherwise be denied by a route whose
 // queryKeys legitimately never mentions a parameter the plugin cannot set in the first place.
-func redirectPolicy(base *url.URL, maxRedirects int, allowedPaths []string, auth Auth, staticHeaders map[string]string) func(req *http.Request, via []*http.Request) error {
+func redirectPolicy(base *url.URL, maxRedirects int, allowedPaths []string, auth Auth, staticHeaders map[string]secrets.Value) func(req *http.Request, via []*http.Request) error {
 	return func(req *http.Request, via []*http.Request) error {
 		if len(via) > maxRedirects {
 			return fmt.Errorf("connections: exceeded the %d allowed redirect(s)", maxRedirects)
@@ -217,7 +218,7 @@ type ownedNameSet struct {
 // ownedNames is the set of query keys and header names the connection itself owns, and which a
 // caller therefore never supplies and must never be judged on. It mirrors the equivalent set
 // capabilities.newConnectionOwnership builds for the initial request.
-func ownedNames(auth Auth, staticHeaders map[string]string) ownedNameSet {
+func ownedNames(auth Auth, staticHeaders map[string]secrets.Value) ownedNameSet {
 	out := ownedNameSet{query: map[string]bool{}, header: map[string]bool{}}
 	for name := range staticHeaders {
 		out.header[strings.ToLower(name)] = true

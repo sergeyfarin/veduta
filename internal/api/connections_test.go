@@ -36,6 +36,7 @@ connections:
     kind: http
     baseUrl: ` + upstream.URL + `
     auth: {type: none}
+    headers: {X-Custom-Token: "${secret:BROKEN_KEY}"}
   broken:
     kind: http
     baseUrl: http://192.0.2.1:81

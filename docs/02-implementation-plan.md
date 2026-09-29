@@ -1697,22 +1697,30 @@ majors; the release job now checks the uploaded assets against the built ones; i
 ask for the version, install method and init logs; `docs/docker.md` says the armv7 image is not
 performance-tested. Dry run passed, and the v0.1.3 release was the first real run of the asset check, the `v` strip
 and the pre-push quick start; all three passed.
-**M2 · Manifest and config schema revision** · 2 d · deps: none · **PROPOSED** — the two schema
-changes the backlog says to make before more integrations are shaped around the limitation, done
-as one revision so existing configs and manifests are revalidated once.
-[Named path segments](03-backlog-resolved.md#a-pipeline-path-could-not-carry-a-card-parameter): a route
-declares `{name}` segments whose values come from `params` under the operation's own schema, so
-the glob stays fixed and the substitution is bounded by something the approver can read.
-[Secret-capable `httpConnection.headers`](03-backlog.md#config-httpconnectionheaders-values-are-plain-strings-not-secret-capable),
-matching the webhook channel's headers.
-AC: Arcane takes an `environmentId` parameter and Home Assistant's `sensor` reads
-`/api/states/<entity_id>` rather than the whole state set. **Negative tests first**, as everywhere
-in this project: a parameter value containing `/`, `..`, a percent-encoded separator or a
-control character is refused before the request is built, and route coverage is still decided at
-approval time for a manifest that uses segments. Existing configs and manifests validate
-unchanged; a secret in a connection header never appears in any HTTP response, extending the
-response scan; digests and goldens regenerated deliberately, not incidentally. The plugin ABI is
-documented as experimental, which is what makes now the cheap time to break it.
+**M2 · Manifest and config schema revision** · 2 d · deps: none · **DONE, 2026-09-29** — the two
+schema changes the backlog asked for before more integrations were shaped around the limitation.
+[Named path segments](03-backlog-resolved.md#a-pipeline-path-could-not-carry-a-card-parameter):
+a pipeline path is a literal in the schema, the loader and the contract suite, and a `{name}`
+segment is filled from a required or defaulted string or integer card parameter. The design moved
+from the proposal in one respect: the placeholder lives in the *request* path, not the route, so
+routes, locks and approval are unchanged and the approver still reads a glob. A value is refused
+unless it is one plain segment (never escaped), and a template is covered exactly when each
+placeholder lands on a `*` route segment, which is checked at load. `routepath.Template` serves the
+loader and runtime; the contract suite implements it independently.
+[Secret-capable `httpConnection.headers`](03-backlog-resolved.md#config-httpconnectionheaders-values-were-plain-strings-not-secret-capable),
+held as `secrets.Value` like auth.
+AC met: Arcane 0.2.0 takes `environmentId`; Home Assistant 0.2.0's `sensor` reads
+`/api/states/<entity_id>`. Negative tests at every layer - template syntax, values that could span
+or escape a segment, globs too narrow to cover a placeholder, undeclared, optional and non-scalar
+parameters, four contract-suite fixtures, schema corpus cases both ways - and an end-to-end test
+against a real upstream that fails with the template's value rule disabled (that mutation showed
+the broker already refused most bad values; the test now includes ones only the template refuses).
+The response scan covers a header secret. **Found on the way and fixed first:** a literal `?` or `#`
+in a path segment slipped a query or a shorter path past route authorisation in 0.1.0–0.1.2
+([entry](03-backlog-resolved.md#a-path-segment-could-carry-a-query-or-fragment-past-route-authorisation)),
+released as 0.1.3; and a `${secret:…}` in a connection header had been sent as literal text. Left
+open: [reading a 404 as absent](03-backlog.md#a-pipeline-step-cannot-read-404-as-absent), since
+Home Assistant's missing-entity case now fails the card with the status.
 **M3 · Native time-series block** · 3 d · deps: none · **PROPOSED**, independent of M2 — the
 [0.2 item the backlog already names](03-backlog.md#no-native-visualisation-block-for-retained-history):
 a bounded block that draws points an integration supplies, plus a separate core binding for
