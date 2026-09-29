@@ -294,7 +294,7 @@
           "type": "string",
           "maxLength": 512,
           "pattern": "^/(?:[A-Za-z0-9_~!$&'()+,;=:@/-]|[.*][A-Za-z0-9_~!$&'()+,;=:@/-])*[.*]?$",
-          "description": "Glob pattern, RE2-compatible and lookahead-free so the Go validator can compile it. `*` matches within a single path segment and never crosses `/`. Multi-segment `**` is NOT part of v1. Percent-encoding, backslashes, `..` and `**` are structurally rejected; everything else about canonicalisation (empty segments, case, encoding) is enforced by the single canonicalisation routine described in 01-architecture.md \u00a76."
+          "description": "Glob pattern, RE2-compatible and lookahead-free so the Go validator can compile it. `*` matches within a single path segment and never crosses `/`. Multi-segment `**` is NOT part of v1. Percent-encoding, backslashes, `..` and `**` are structurally rejected; everything else about canonicalisation (empty segments, case, encoding) is enforced by the single canonicalisation routine described in 01-architecture.md §6."
         },
         "use": {
           "enum": [
@@ -518,7 +518,10 @@
                     "default": "GET"
                   },
                   "path": {
-                    "$ref": "#/$defs/valueNode"
+                    "type": "string",
+                    "maxLength": 512,
+                    "pattern": "^/(?:[A-Za-z0-9_~!$&'()*+,;=:@.%-]+|\\{[A-Za-z][A-Za-z0-9_]{0,31}\\})(?:/(?:[A-Za-z0-9_~!$&'()*+,;=:@.%-]+|\\{[A-Za-z][A-Za-z0-9_]{0,31}\\}))*$|^/$",
+                    "description": "A literal request path, never an expression, so the loader can prove when the manifest loads that every request the operation can make falls inside one of its routes. A whole segment written as {name} is filled from the card parameter of that name, which must be a required or defaulted string or integer; a value must be 1-128 characters from A-Z a-z 0-9 - . _ ~ : @ and is refused otherwise, never escaped. A placeholder is covered only by a route segment that is exactly `*`. No query or fragment: query keys go in `query`. Canonicalisation (dot segments, escapes) is enforced by the routine in 01-architecture.md section 6."
                   },
                   "query": {
                     "type": "object",

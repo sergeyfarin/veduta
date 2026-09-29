@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net/url"
 	"reflect"
 	"strconv"
@@ -240,9 +241,9 @@ func (i *instance) Invoke(ctx context.Context, req integrations.InvokeRequest) (
 				continue
 			}
 		}
-		path, e := i.evalString(ctx, step.Request.Path, env, b)
+		path, e := requestPath(step.Request, params)
 		if e != nil {
-			return integrations.InvokeResponse{}, e
+			return integrations.InvokeResponse{}, fmt.Errorf("pipeline %s: %w", step.As, e)
 		}
 		q, e := i.evalStrings(ctx, step.Request.Query, env, b)
 		if e != nil {
@@ -541,4 +542,55 @@ func signalType(v any, want string) bool {
 		}
 	}
 	return false
+}
+
+// requestPath fills a pipeline path's {param} placeholders from the card's validated parameters.
+// The loader has already proved every value this can produce falls inside a declared route, on
+// the condition that each value is one plain segment - which Expand enforces - so a value that is
+// not is an error for this card, never a request.
+func requestPath(r manifestload.RequestDef, params map[string]any) (string, error) {
+	if r.PathTemplate == nil {
+		// Only a RequestDef the loader never validated has no template; there is no such path in
+		// the tree, and refusing is the safe reading of one.
+		return "", errors.New("request path was not validated at load")
+	}
+	names := r.PathTemplate.Placeholders()
+	values := make(map[string]string, len(names))
+	for _, name := range names {
+		v, ok := params[name]
+		if !ok {
+			continue // Expand reports it
+		}
+		s, ok := segmentValue(v)
+		if !ok {
+			return "", fmt.Errorf("path parameter %s is %T, want a string or an integer", name, v)
+		}
+		values[name] = s
+	}
+	return r.PathTemplate.Expand(values)
+}
+
+// segmentValue writes a parameter as path text: a string as itself, an integer in plain decimal.
+// A JSON number arrives as float64, and one with a fractional part or beyond 2^53 is refused
+// rather than rounded into a different upstream object.
+func segmentValue(v any) (string, bool) {
+	switch n := v.(type) {
+	case string:
+		return n, true
+	case float64:
+		if n != math.Trunc(n) || math.Abs(n) > 1<<53 {
+			return "", false
+		}
+		return strconv.FormatInt(int64(n), 10), true
+	case int:
+		return strconv.Itoa(n), true
+	case int64:
+		return strconv.FormatInt(n, 10), true
+	case json.Number:
+		if _, err := n.Int64(); err != nil {
+			return "", false
+		}
+		return n.String(), true
+	}
+	return "", false
 }

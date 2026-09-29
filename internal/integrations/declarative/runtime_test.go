@@ -240,3 +240,19 @@ func TestInvokeWithNullParamsAppliesDefaultsInsteadOfPanicking(t *testing.T) {
 		}
 	}
 }
+
+// A JSON number reaches the runtime as float64. A path segment has to name exactly the object the
+// operator meant, so a fraction or a value past float64's exact-integer range is refused rather
+// than printed as 2.5, 1e+21 or a rounded neighbour.
+func TestSegmentValue(t *testing.T) {
+	for v, want := range map[any]string{"abc": "abc", float64(0): "0", float64(42): "42", float64(-7): "-7", 3: "3", int64(9): "9", json.Number("12"): "12"} {
+		if got, ok := segmentValue(v); !ok || got != want {
+			t.Errorf("segmentValue(%#v) = %q, %v; want %q", v, got, ok, want)
+		}
+	}
+	for _, v := range []any{2.5, 1e21, float64(1<<53) * 4, true, nil, json.Number("1.5"), map[string]any{}, []any{"a"}} {
+		if got, ok := segmentValue(v); ok {
+			t.Errorf("segmentValue(%#v) = %q, want refused", v, got)
+		}
+	}
+}

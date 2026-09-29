@@ -496,24 +496,61 @@ func validateRequest(m *Manifest, op *OperationDef, r *RequestDef) error {
 	if !slot {
 		return fmt.Errorf("undeclared slot %q", r.Slot)
 	}
+	// A pipeline path is a literal, so that route coverage is proved here, when the manifest
+	// loads, rather than discovered by the broker the first time a card runs. An upstream object
+	// chosen by a card parameter is a {name} placeholder segment, which stays provable; see
+	// routepath.Template for why that and not an expression.
 	if r.Path == nil || r.Path.Kind != "literal" {
-		return nil
+		return errors.New("request path must be a literal string; select an upstream object with a {param} placeholder segment, not an expression")
 	}
 	p, ok := r.Path.Literal.(string)
 	if !ok {
-		return errors.New("request path must evaluate to string")
+		return errors.New("request path must be a string")
 	}
-	cp, e := routepath.Canonicalise(p)
+	tpl, e := routepath.ParseTemplate(p)
 	if e != nil {
-		return e
+		return fmt.Errorf("request path %q: %w", p, e)
 	}
+	for _, name := range tpl.Placeholders() {
+		if e := placeholderParam(op, name); e != nil {
+			return fmt.Errorf("request path %q: %w", p, e)
+		}
+	}
+	r.PathTemplate = &tpl
 	for _, rt := range op.Routes {
-		rp, x := routepath.Canonicalise(rt.Path)
-		if x == nil && rt.Slot == r.Slot && rt.Method == r.Method && (rt.Use == "" || rt.Use == "data") && routepath.Match(rp, cp) && routeCoversRequest(rt, r) {
+		if rt.Slot == r.Slot && rt.Method == r.Method && (rt.Use == "" || rt.Use == "data") && tpl.CoveredBy(rt.Path) && routeCoversRequest(rt, r) {
 			return nil
 		}
 	}
+	if len(tpl.Placeholders()) > 0 {
+		return fmt.Errorf("no declared route covers %s %s for every value; each {param} segment needs a route segment that is exactly *", r.Method, p)
+	}
 	return fmt.Errorf("no declared route covers %s %s", r.Method, p)
+}
+
+// placeholderParam requires a path placeholder to name a card parameter that is always present
+// when the pipeline runs - required, or given a default - and is a string or an integer, the
+// two types a path segment can be written from. Anything else would fail only at invocation.
+func placeholderParam(op *OperationDef, name string) error {
+	schema, _ := op.Params.(map[string]any)
+	props, _ := schema["properties"].(map[string]any)
+	prop, ok := props[name].(map[string]any)
+	if !ok {
+		return fmt.Errorf("placeholder {%s} names no parameter in this operation's params.properties", name)
+	}
+	if t, _ := prop["type"].(string); t != "string" && t != "integer" {
+		return fmt.Errorf("placeholder {%s}: parameter type must be string or integer, got %v", name, prop["type"])
+	}
+	if _, hasDefault := prop["default"]; hasDefault {
+		return nil
+	}
+	required, _ := schema["required"].([]any)
+	for _, r := range required {
+		if r == name {
+			return nil
+		}
+	}
+	return fmt.Errorf("placeholder {%s}: parameter must be required or have a default, or a card without it has no path", name)
 }
 
 func hasCapability(m *Manifest, want string) bool {

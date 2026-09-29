@@ -1,0 +1,18 @@
+# Negative fixture: a path parameter that is neither required nor defaulted leaves a card with no
+# path to request.
+expect: "is neither required nor defaulted"
+manifests:
+  glances:
+    spec:
+      operations:
+        - id: overview
+          routes:
+            - { slot: server, method: GET, path: /api/4/* }
+          params:
+            type: object
+            properties: { plugin: { type: string } }
+          pipeline:
+            - as: plugin
+              request: { slot: server, method: GET, path: "/api/4/{plugin}" }
+          output: {}
+          signals: []

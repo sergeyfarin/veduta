@@ -676,6 +676,18 @@ error surfaced in the UI — not a runtime denial discovered on a Tuesday. A dec
 with no matching manifest route is likewise rejected at load: the declarative runtime is subject to
 exactly the same route checks as WASM, or it would be the way around them.
 
+That load-time check is only possible because a pipeline path is a **literal**, never an
+expression: an expression can build any string, so no route can be shown to cover it in advance.
+An upstream object chosen by a card parameter is a whole-segment placeholder instead —
+`/api/environments/{environmentId}/containers` — naming a required or defaulted string or integer
+parameter. A value must be 1–128 characters from `A-Z a-z 0-9 - . _ ~ : @` and not a dot segment,
+and is refused, never escaped, otherwise; so a placeholder always fills exactly one segment, and a
+template is covered by a route exactly when each placeholder lands on a glob segment that is `*`.
+The approver still sees the route as a glob — the placeholder is how the manifest *uses* a route,
+not a change to what a route grants. (Added 2026-09-29, Phase M2. Asset paths are still
+expressions, since they carry ids the upstream returned; those are checked per request by the
+broker.)
+
 ### Budgets cover every host call, not just HTTP
 
 `httpRequests` bounds upstream traffic; it does nothing about a plugin that mints 10 000 asset refs,

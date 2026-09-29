@@ -44,6 +44,23 @@ Validate trust state while authoring:
 
 A declarative operation supplies a bounded `pipeline` and `output`. Each pipeline request names a declared slot and a route already present in the manifest. Expressions select and transform response data. Output templates produce a Widget Document, and declared signals expose typed values for history and rules.
 
+A pipeline `path` is always a literal string, so the loader can prove when the manifest loads that every request stays inside a declared route. To let a card choose which upstream object to read, make a whole segment a placeholder named after a card parameter:
+
+```yaml
+routes:
+  - { slot: server, method: GET, path: /api/states/*, reason: One entity's current state }
+params:
+  type: object
+  required: [entityId]
+  properties:
+    entityId: { type: string, pattern: "^[a-z_]+\\.[a-z0-9_]+$" }
+pipeline:
+  - as: entity
+    request: { slot: server, method: GET, path: "/api/states/{entityId}" }
+```
+
+The parameter must be a string or integer and either required or defaulted. A route covers the placeholder only if that segment is exactly `*`. A value is sent only if it is 1–128 characters from `A-Z a-z 0-9 - . _ ~ : @` and is not `.` or `..`; anything else — a `/`, a `?`, a space, an escape — fails the card rather than being encoded, so a value can never reach a path the route does not name. A `pattern` on the parameter is still worth writing, because it rejects a bad value when the configuration loads rather than when the card runs.
+
 An upstream field that is sometimes missing needs `{ if: …, then: … }`, which omits the key or list element entirely rather than emitting `null`:
 
 ```yaml

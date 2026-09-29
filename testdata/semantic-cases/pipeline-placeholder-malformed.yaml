@@ -1,0 +1,18 @@
+# Negative fixture: a brace is only meaningful around a whole segment.
+expect: "has a brace that is not a whole {name} segment"
+manifests:
+  glances:
+    spec:
+      operations:
+        - id: overview
+          routes:
+            - { slot: server, method: GET, path: /api/4/* }
+          params:
+            type: object
+            required: [plugin]
+            properties: { plugin: { type: string } }
+          pipeline:
+            - as: plugin
+              request: { slot: server, method: GET, path: "/api/4/x{plugin}" }
+          output: {}
+          signals: []

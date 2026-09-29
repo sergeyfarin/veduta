@@ -1912,6 +1912,148 @@
           }
         }
       }
+    },
+    {
+      "name": "request path with a whole-segment placeholder",
+      "schema": "manifest",
+      "expect": "accept",
+      "doc": {
+        "apiVersion": "veduta.dev/v1",
+        "kind": "Integration",
+        "metadata": {
+          "id": "demo",
+          "name": "Demo",
+          "version": "1.0.0"
+        },
+        "spec": {
+          "runtime": "declarative",
+          "capabilities": [
+            "http"
+          ],
+          "operations": [
+            {
+              "id": "o",
+              "pipeline": [
+                {
+                  "as": "a",
+                  "request": {
+                    "slot": "s",
+                    "path": "/api/environments/{environmentId}/containers"
+                  }
+                }
+              ],
+              "output": {}
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "request path as an expression",
+      "schema": "manifest",
+      "expect": "reject",
+      "doc": {
+        "apiVersion": "veduta.dev/v1",
+        "kind": "Integration",
+        "metadata": {
+          "id": "demo",
+          "name": "Demo",
+          "version": "1.0.0"
+        },
+        "spec": {
+          "runtime": "declarative",
+          "capabilities": [
+            "http"
+          ],
+          "operations": [
+            {
+              "id": "o",
+              "pipeline": [
+                {
+                  "as": "a",
+                  "request": {
+                    "slot": "s",
+                    "path": {
+                      "expr": "\"/p/\" + params.id"
+                    }
+                  }
+                }
+              ],
+              "output": {}
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "request path with a query string",
+      "schema": "manifest",
+      "expect": "reject",
+      "doc": {
+        "apiVersion": "veduta.dev/v1",
+        "kind": "Integration",
+        "metadata": {
+          "id": "demo",
+          "name": "Demo",
+          "version": "1.0.0"
+        },
+        "spec": {
+          "runtime": "declarative",
+          "capabilities": [
+            "http"
+          ],
+          "operations": [
+            {
+              "id": "o",
+              "pipeline": [
+                {
+                  "as": "a",
+                  "request": {
+                    "slot": "s",
+                    "path": "/p?x=1"
+                  }
+                }
+              ],
+              "output": {}
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "request path with a brace inside a segment",
+      "schema": "manifest",
+      "expect": "reject",
+      "doc": {
+        "apiVersion": "veduta.dev/v1",
+        "kind": "Integration",
+        "metadata": {
+          "id": "demo",
+          "name": "Demo",
+          "version": "1.0.0"
+        },
+        "spec": {
+          "runtime": "declarative",
+          "capabilities": [
+            "http"
+          ],
+          "operations": [
+            {
+              "id": "o",
+              "pipeline": [
+                {
+                  "as": "a",
+                  "request": {
+                    "slot": "s",
+                    "path": "/p/x{id}"
+                  }
+                }
+              ],
+              "output": {}
+            }
+          ]
+        }
+      }
     }
   ]
 }

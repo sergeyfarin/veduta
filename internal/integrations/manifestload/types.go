@@ -3,7 +3,11 @@
 // Package manifestload parses and statically validates executable integration manifests.
 package manifestload
 
-import "gopkg.in/yaml.v3"
+import (
+	"gopkg.in/yaml.v3"
+
+	"veduta.dev/veduta/internal/connections/routepath"
+)
 
 // Manifest is the fully validated executable view of a plugin manifest.
 type Manifest struct {
@@ -77,8 +81,11 @@ type PipelineStep struct {
 
 // RequestDef is a recursively compiled broker request template.
 type RequestDef struct {
-	Slot, Method   string
-	Path           *Template
+	Slot, Method string
+	Path         *Template
+	// PathTemplate is Path parsed by routepath.ParseTemplate, set by validateRequest. A pipeline
+	// path is always a literal, and may name card parameters as whole segments ({name}).
+	PathTemplate   *routepath.Template
 	Query, Headers map[string]*Template
 	Body           *BodyDef
 }

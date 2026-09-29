@@ -147,7 +147,7 @@ func (c *checker) checkOperation(iid string, op map[string]any, slots map[string
 	}
 
 	for _, stepRaw := range sliceOf(op, "pipeline") {
-		c.checkPipelineStep(oid, asMap(stepRaw), slots, routes, bodyKB)
+		c.checkPipelineStep(oid, asMap(stepRaw), mapOf(op, "params"), slots, routes, bodyKB)
 	}
 
 	for _, name := range sortedKeys(mapOf(mapOf(op, "output"), "signals")) {
@@ -172,7 +172,7 @@ func (c *checker) checkOperation(iid string, op map[string]any, slots map[string
 
 // checkPipelineStep decides every constraint that is statically decidable. Anything dynamic -
 // body size, expression-valued paths - is deferred to the broker at runtime by design.
-func (c *checker) checkPipelineStep(oid string, step map[string]any,
+func (c *checker) checkPipelineStep(oid string, step map[string]any, params map[string]any,
 	slots map[string]map[string]any, routes []any, bodyKB float64) {
 	req := mapOf(step, "request")
 	slot := strOf(req, "slot")
@@ -183,8 +183,16 @@ func (c *checker) checkPipelineStep(oid string, step map[string]any,
 	pathRaw, ok := req["path"].(string)
 	if !ok {
 		c.badf("%s: pipeline path is an expression; v1 requires literal paths so route coverage "+
-			"is decidable at load time", oid)
+			"is decidable at load time - select an upstream object with a {param} segment", oid)
 		return
+	}
+	placeholders, ok := pathPlaceholders(pathRaw)
+	if !ok {
+		c.badf("%s: pipeline path %q has a brace that is not a whole {name} segment", oid, pathRaw)
+		return
+	}
+	for _, name := range placeholders {
+		c.checkPlaceholderParam(oid, pathRaw, name, params)
 	}
 	method := "GET"
 	if m, ok := req["method"].(string); ok {
@@ -195,7 +203,7 @@ func (c *checker) checkPipelineStep(oid string, step map[string]any,
 	for _, rRaw := range routes {
 		r := asMap(rRaw)
 		if strOf(r, "slot") == slot && strOf(r, "method") == method &&
-			routeUse(r) == "data" && GlobMatch(strOf(r, "path"), pathRaw) {
+			routeUse(r) == "data" && templateCovered(strOf(r, "path"), pathRaw) {
 			candidates = append(candidates, r)
 		}
 	}
@@ -655,6 +663,66 @@ func GlobMatch(pattern, path string) bool {
 		}
 	}
 	return true
+}
+
+// pathPlaceholders returns the {name} placeholders in a pipeline path, and false if a brace
+// appears anywhere other than around a whole segment with a valid name. Written independently of
+// routepath.ParseTemplate, which the loader uses, so the two are a check on each other.
+func pathPlaceholders(path string) ([]string, bool) {
+	var names []string
+	for _, seg := range strings.Split(path, "/") {
+		if !strings.ContainsAny(seg, "{}") {
+			continue
+		}
+		if !placeholderSegment.MatchString(seg) {
+			return nil, false
+		}
+		names = append(names, seg[1:len(seg)-1])
+	}
+	return names, true
+}
+
+var placeholderSegment = regexp.MustCompile(`^\{[A-Za-z][A-Za-z0-9_]{0,31}\}$`)
+
+// templateCovered is GlobMatch with one addition: a {name} segment can hold any single segment, so
+// only a glob segment that is exactly "*" covers it.
+func templateCovered(pattern, path string) bool {
+	pp, sp := strings.Split(pattern, "/"), strings.Split(path, "/")
+	if len(pp) != len(sp) {
+		return false
+	}
+	for i := range sp {
+		if strings.HasPrefix(sp[i], "{") {
+			if pp[i] != "*" {
+				return false
+			}
+			sp[i] = "x" // any value; the glob segment is "*"
+		}
+	}
+	return GlobMatch(pattern, strings.Join(sp, "/"))
+}
+
+// checkPlaceholderParam requires a path placeholder to name a declared string or integer card
+// parameter that is always present: required, or with a default.
+func (c *checker) checkPlaceholderParam(oid, path, name string, params map[string]any) {
+	raw, declared := mapOf(params, "properties")[name]
+	prop := asMap(raw)
+	if !declared {
+		c.badf("%s: pipeline path %q names {%s}, which is not a declared parameter", oid, path, name)
+		return
+	}
+	if t := strOf(prop, "type"); t != "string" && t != "integer" {
+		c.badf("%s: path parameter {%s} must be a string or integer, not %q", oid, name, t)
+	}
+	if _, ok := prop["default"]; ok {
+		return
+	}
+	for _, r := range sliceOf(params, "required") {
+		if r == name {
+			return
+		}
+	}
+	c.badf("%s: path parameter {%s} is neither required nor defaulted, so a card could have no path", oid, name)
 }
 
 // routeIdentity is the FULL authority tuple. Comparing by method and path alone would let a

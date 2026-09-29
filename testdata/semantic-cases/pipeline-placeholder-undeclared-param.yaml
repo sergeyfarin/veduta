@@ -1,0 +1,15 @@
+# Negative fixture: a {name} path segment must name a declared card parameter.
+expect: "which is not a declared parameter"
+manifests:
+  glances:
+    spec:
+      operations:
+        - id: overview
+          routes:
+            - { slot: server, method: GET, path: /api/4/* }
+          params: { type: object, properties: {} }
+          pipeline:
+            - as: plugin
+              request: { slot: server, method: GET, path: "/api/4/{plugin}" }
+          output: {}
+          signals: []

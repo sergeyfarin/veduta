@@ -1,0 +1,20 @@
+# Negative fixture: a placeholder can hold any single segment, so only a glob segment that is
+# exactly "*" covers it. "c*" admits cpu and not processlist, and approving it must not read as
+# approving both.
+expect: "is not covered by any declared route"
+manifests:
+  glances:
+    spec:
+      operations:
+        - id: overview
+          routes:
+            - { slot: server, method: GET, path: /api/4/c* }
+          params:
+            type: object
+            required: [plugin]
+            properties: { plugin: { type: string } }
+          pipeline:
+            - as: plugin
+              request: { slot: server, method: GET, path: "/api/4/{plugin}" }
+          output: {}
+          signals: []

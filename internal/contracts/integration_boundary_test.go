@@ -33,6 +33,11 @@ func TestIntegrationImportBoundary(t *testing.T) {
 		filepath.Join("internal", "integrations", "manifestload", "load.go"): {
 			"veduta.dev/veduta/internal/connections/routepath": true,
 		},
+		// Phase M2: RequestDef carries the routepath.Template load.go parsed, so that the runtime
+		// expands the path the loader proved covered rather than re-deriving it.
+		filepath.Join("internal", "integrations", "manifestload", "types.go"): {
+			"veduta.dev/veduta/internal/connections/routepath": true,
+		},
 	}
 	files := 0
 	err := filepath.WalkDir(integrationsDir, func(filename string, entry os.DirEntry, walkErr error) error {

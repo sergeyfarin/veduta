@@ -108,3 +108,16 @@ func TestBindBareFieldsToData(t *testing.T) {
 		})
 	}
 }
+
+// An http-json card has no parameters to fill a {name} segment from, and its path comes from the
+// operator's configuration rather than through the manifest schema - so the loader's own template
+// check is the only thing that sees it, and must refuse it plainly rather than send a brace.
+func TestSynthesizeHTTPJSON_RefusesPlaceholders(t *testing.T) {
+	if _, err := SynthesizeHTTPJSON("server", "GET", "/api/{id}", nil, map[string]any{}); err == nil ||
+		!strings.Contains(err.Error(), "names no parameter") {
+		t.Fatalf("err = %v, want a refusal naming the placeholder", err)
+	}
+	if _, err := SynthesizeHTTPJSON("server", "GET", "/api/x{id}", nil, map[string]any{}); err == nil {
+		t.Fatal("a brace inside a segment was accepted")
+	}
+}
