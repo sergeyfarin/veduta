@@ -7,8 +7,8 @@ import (
 	"fmt"
 )
 
-// Block is the discriminated union of the nine v1 block types. There is no way to construct an
-// arbitrary Block from outside the package - only the nine concrete types below implement it, so
+// Block is the discriminated union of the v1 block types. There is no way to construct an
+// arbitrary Block from outside the package - only the concrete types below implement it, so
 // a Document's blocks are exhaustively one of exactly these, matching the schema's closed `oneOf`.
 type Block interface {
 	// BlockType returns the JSON "type" discriminator this block serialises as.
@@ -111,6 +111,32 @@ type BlockActions struct {
 	Actions  []Action `json:"actions"`
 }
 
+// BlockSeries is up to four timestamped numeric series, drawn by the core as SVG. A nil V is a
+// gap - no reading - and is never interpolated across. Points are strictly increasing in T, which
+// the validator checks. Added in Phase M3; see docs/03-backlog-resolved.md.
+type BlockSeries struct {
+	Title    string       `json:"title,omitempty"`
+	Emphasis Emphasis     `json:"emphasis,omitempty"`
+	Format   Format       `json:"format,omitempty"`
+	Unit     string       `json:"unit,omitempty"`
+	Min      *float64     `json:"min,omitempty"`
+	Max      *float64     `json:"max,omitempty"`
+	Series   []SeriesLine `json:"series"`
+}
+
+// SeriesLine is one labelled line of a BlockSeries. 0-288 points.
+type SeriesLine struct {
+	Label  string        `json:"label"`
+	Level  Level         `json:"level,omitempty"`
+	Points []SeriesPoint `json:"points"`
+}
+
+// SeriesPoint is one sample; V is nil where there was no reading.
+type SeriesPoint struct {
+	T string   `json:"t"`
+	V *float64 `json:"v"`
+}
+
 // BlockType returns this block's JSON "type" discriminator, satisfying the Block interface.
 func (b BlockMetrics) BlockType() string { return "metrics" }
 
@@ -138,7 +164,10 @@ func (b BlockTable) BlockType() string { return "table" }
 // BlockType returns this block's JSON "type" discriminator, satisfying the Block interface.
 func (b BlockActions) BlockType() string { return "actions" }
 
-// isBlock is unexported: it exists only to close the Block interface to this package's nine
+// BlockType returns this block's JSON "type" discriminator, satisfying the Block interface.
+func (b BlockSeries) BlockType() string { return "series" }
+
+// isBlock is unexported: it exists only to close the Block interface to this package's
 // concrete types, so a Document's blocks are exhaustively one of exactly these.
 func (BlockMetrics) isBlock()  {}
 func (BlockKeyValue) isBlock() {}
@@ -149,6 +178,7 @@ func (BlockMedia) isBlock()    {}
 func (BlockText) isBlock()     {}
 func (BlockTable) isBlock()    {}
 func (BlockActions) isBlock()  {}
+func (BlockSeries) isBlock()   {}
 
 // withType marshals v (via an alias type, to avoid recursing back into MarshalJSON) and splices
 // in the "type" discriminator every block variant needs on the wire but none of them stores as
@@ -231,6 +261,11 @@ type blockActionsAlias BlockActions
 func (b BlockActions) MarshalJSON() ([]byte, error) {
 	return withType("actions", blockActionsAlias(b))
 }
+
+type blockSeriesAlias BlockSeries
+
+// MarshalJSON adds the "series" discriminator this type does not otherwise store as a field.
+func (b BlockSeries) MarshalJSON() ([]byte, error) { return withType("series", blockSeriesAlias(b)) }
 
 // UnmarshalJSON dispatches on the "type" discriminator to decode each element of Document.Blocks
 // into its concrete Go type. This is the ONLY place block decoding happens; a type this package
@@ -351,6 +386,9 @@ func decodeBlock(raw json.RawMessage) (Block, error) {
 	case "actions":
 		var v BlockActions
 		return v, json.Unmarshal(raw, (*blockActionsAlias)(&v))
+	case "series":
+		var v BlockSeries
+		return v, json.Unmarshal(raw, (*blockSeriesAlias)(&v))
 	default:
 		return nil, fmt.Errorf("unknown block type %q", head.Type)
 	}

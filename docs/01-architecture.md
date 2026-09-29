@@ -301,8 +301,10 @@ building a rules engine on top of them would be building on sand.
 ### Block types in v1
 
 `status`, `metrics`, `key-value`, `progress`, `list`, `image`, `image-grid`, `poster-grid`,
-`text`, `markdown`, `table`, `actions`. Deferred to 0.2+: `sparkline`, `timeline`, `chart`,
-`carousel`, `video`, `camera`, `form`.
+`text`, `markdown`, `table`, `actions`, and since Phase M3 `series` — up to four timestamped
+numeric lines of up to 288 points each, `null` drawn as a gap, strictly increasing in time, drawn
+natively as SVG with a text alternative. Deferred to 0.2+: `timeline`, `carousel`, `video`,
+`camera`, `form`. (`sparkline` and `chart` were on this list; `series` is both.)
 
 ### Rules baked into the schema
 

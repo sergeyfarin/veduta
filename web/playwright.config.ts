@@ -29,9 +29,18 @@ export default defineConfig({
   // last built, silently, which is exactly the flakiness C14 warns about. --fixtures serves the
   // checked-in showcase (internal/fixtures) - no network, no real integration, nothing that can
   // drift between two runs except the clock, which each test freezes itself.
+  //
+  // The version is pinned rather than taken from `pnpm build`, which asks git: the footer prints
+  // it, so a baseline otherwise depends on whether the checkout has tags and how dirty it is. It
+  // did - the committed baselines said 0.0.0-dev, CI rendered a short commit hash, a tagged local
+  // clone rendered v0.1.3-5-g...-dirty - and only the pixel budget kept that from failing.
   webServer: {
     command:
-      (process.env.PLAYWRIGHT_BUILT ? '' : 'cd .. && pnpm build && cd web && ') +
+      (process.env.PLAYWRIGHT_BUILT
+        ? ''
+        : 'cd .. && pnpm --filter veduta-web build && go build -trimpath ' +
+          '-ldflags "-X veduta.dev/veduta/internal/version.Version=0.0.0-dev ' +
+          '-X veduta.dev/veduta/internal/version.Commit=visual" -o veduta ./cmd/veduta && cd web && ') +
       `../veduta serve --fixtures --listen 127.0.0.1:${port}`,
     url: `${address}/api/v1/health`,
     reuseExistingServer: false,

@@ -2,8 +2,8 @@
 
 // Maps a Widget Document block's "type" discriminator to the Svelte component that renders it.
 // BlockRenderer.svelte is the only consumer; nothing else should import this map directly, so
-// that adding a block type is a one-line change in exactly one place. All nine v1 block types
-// are registered here now (B4 completes image/image-grid/poster-grid/table/actions).
+// that adding a block type is a one-line change in exactly one place. Every v1 block type is
+// registered here; `series` joined in Phase M3.
 import type { Component } from 'svelte';
 import MetricsBlock from './MetricsBlock.svelte';
 import KeyValueBlock from './KeyValueBlock.svelte';
@@ -14,6 +14,7 @@ import TextBlock from './TextBlock.svelte';
 import MediaBlock from './MediaBlock.svelte';
 import TableBlock from './TableBlock.svelte';
 import ActionsBlock from './ActionsBlock.svelte';
+import SeriesBlock from './SeriesBlock.svelte';
 
 // `Component<any>`: each concrete block component's prop type is a specific narrowed Block
 // variant (via Extract<...>), which is intentionally incompatible with a single generic map
@@ -32,5 +33,6 @@ export const registry: Record<string, Component<any>> = {
   'image-grid': MediaBlock,
   'poster-grid': MediaBlock,
   table: TableBlock,
-  actions: ActionsBlock
+  actions: ActionsBlock,
+  series: SeriesBlock
 };

@@ -400,6 +400,9 @@
         },
         {
           "$ref": "#/$defs/blockActions"
+        },
+        {
+          "$ref": "#/$defs/blockSeries"
         }
       ]
     },
@@ -761,6 +764,99 @@
                 "type": "boolean"
               }
             }
+          }
+        }
+      }
+    },
+    "seriesPoint": {
+      "type": "object",
+      "required": [
+        "t",
+        "v"
+      ],
+      "additionalProperties": false,
+      "description": "One sample. v is null where there is no reading, and is drawn as a gap: missing data is never interpolated across.",
+      "properties": {
+        "t": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})$"
+        },
+        "v": {
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      }
+    },
+    "seriesLine": {
+      "type": "object",
+      "required": [
+        "label",
+        "points"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "$ref": "#/$defs/shortText"
+        },
+        "level": {
+          "$ref": "#/$defs/level"
+        },
+        "points": {
+          "type": "array",
+          "maxItems": 288,
+          "items": {
+            "$ref": "#/$defs/seriesPoint"
+          },
+          "description": "Strictly increasing in t (checked by the validator, which the schema cannot express). 288 is a day at five-minute resolution."
+        }
+      }
+    },
+    "blockSeries": {
+      "type": "object",
+      "required": [
+        "type",
+        "series"
+      ],
+      "additionalProperties": false,
+      "description": "Timestamped numeric series, drawn natively as SVG by the core renderer: no library, no markup from the integration. Bounded (4 series of 288 points) and always paired with a text summary. Retention and long-term aggregation belong upstream; this is a bounded local trend.",
+      "properties": {
+        "type": {
+          "const": "series"
+        },
+        "title": {
+          "$ref": "#/$defs/shortText"
+        },
+        "emphasis": {
+          "enum": [
+            "normal",
+            "strong",
+            "subtle"
+          ]
+        },
+        "format": {
+          "$ref": "#/$defs/format"
+        },
+        "unit": {
+          "type": "string",
+          "maxLength": 16,
+          "description": "Shown after values when format does not already imply one, e.g. mm/h."
+        },
+        "min": {
+          "type": "number",
+          "description": "Fixed lower bound of the value axis; otherwise the data's own minimum."
+        },
+        "max": {
+          "type": "number",
+          "description": "Fixed upper bound of the value axis; otherwise the data's own maximum."
+        },
+        "series": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4,
+          "items": {
+            "$ref": "#/$defs/seriesLine"
           }
         }
       }

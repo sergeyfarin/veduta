@@ -40,10 +40,11 @@ func TestFixtureRoutesAbsentByDefault(t *testing.T) {
 }
 
 func TestFixtureRoutes(t *testing.T) {
+	bundle := mustLoadFixtures(t)
 	s, err := api.New(api.Config{
 		Listen:   "127.0.0.1:0",
 		Assets:   fstest.MapFS{},
-		Fixtures: mustLoadFixtures(t),
+		Fixtures: bundle,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -84,8 +85,9 @@ func TestFixtureRoutes(t *testing.T) {
 		if err := json.Unmarshal(rec.Body.Bytes(), &cards); err != nil {
 			t.Fatal(err)
 		}
-		if len(cards) != 13 {
-			t.Fatalf("got %d cards, want 13", len(cards))
+		// Every card in the showcase, however many that is: internal/fixtures pins the count.
+		if len(cards) != len(bundle.Cards) {
+			t.Fatalf("got %d cards, want the showcase's %d", len(cards), len(bundle.Cards))
 		}
 	})
 

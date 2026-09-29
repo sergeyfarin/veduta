@@ -21,7 +21,7 @@ priority (which milestone should absorb it, or "before X" for a hard blocker).
 | [The approval API has no client](#the-approval-api-has-no-client) | Frontend | Decided: read-only page in 0.2 (M4) |
 | [Action execution is not implemented](#action-execution-is-not-implemented) | Product/security | Display-only through 0.2; design first |
 | [Appearance options are deferred until asked for](#appearance-options-are-deferred-until-asked-for) | Frontend | On demand |
-| [The visual baseline's per-pixel threshold hides whole-area changes](#the-visual-baselines-per-pixel-threshold-hides-whole-area-changes) | Frontend | Low-medium |
+| [The visual baseline's per-pixel threshold hides whole-area changes](#the-visual-baselines-per-pixel-threshold-hides-whole-area-changes) | Frontend | Medium |
 | [Asset format coverage is narrower than the allowlist](#asset-format-coverage-is-narrower-than-the-architectures-final-allowlist) | Assets | 0.2 transform milestone |
 | [Asset-cache startup does not reconcile orphan files](#asset-cache-startup-does-not-reconcile-orphan-files) | Assets | Low |
 | [Lock-write race against a concurrent CLI approval](#the-lock-write-race-is-closed-only-within-one-process-not-against-a-concurrent-cli-approval) | Integrations | Low |
@@ -232,7 +232,18 @@ asserted functionally instead - `veil {light,dark} loads its bundled backdrop` i
 `web/tests/visual.spec.ts` checks the computed `--v-backdrop-image` and fetches it - which covers
 the failure that matters most (a 404 leaving a blank preset) without touching the thresholds.
 
-Priority: low-medium. It does not affect what ships, only how much CI notices. The fix is a
+**Seen again on a real change, 2026-09-29.** Adding the Climate showcase card for the `series`
+block - a whole new two-by-two card on a page of fourteen - regenerated only the mobile baseline;
+all four desktop screenshots *passed* against the old images, because the card filled an empty
+grid slot whose background differs from a card surface by a few shades, and its lines are thin.
+The baselines were force-regenerated (`--update-snapshots=all`). The same investigation found the
+footer rendered the build's `git describe`, so a baseline depended on the checkout's tags and
+dirtiness and CI had been rendering a different version string all along; the suite now builds
+with a pinned version, and a fresh container re-verified the new baselines. That fixes the
+nondeterminism, not the threshold. This raises the entry's priority: a new card is exactly the
+change the suite should notice.
+
+Priority: medium (raised from low-medium). It does not affect what ships, only how much CI notices. The fix is a
 measured `threshold` chosen the way the ratio was: regenerate in the pinned image, re-verify in a
 fresh container, and record the noise floor for the new pair rather than assuming the old one
 transfers.
@@ -451,6 +462,13 @@ A calendar agenda can use the existing list block; a month-grid renderer is not
 a prerequisite for assessing calendar integration.
 
 Priority: the block itself 0.2; candidate integrations are not committed by it.
+
+**Progress, 2026-09-29 (Phase M3a): the block exists.** `series` is in the Widget Document schema,
+`internal/widgets` (strictly increasing real timestamps, `min` below `max`), the secret scanner and
+the renderer (`SeriesBlock.svelte` over a tested geometry module - gaps split a line, a lone reading
+is a dot, a fixed range clips to its edge), with a showcase card and regenerated baselines. **Still
+open: the core binding for retained signal history** (M3b), which is also when the manifest schema's
+"for `for:` windows and sparklines" sentence becomes true. This entry closes with that.
 
 ### Markdown is prose-only, with no authoring syntax for structure
 

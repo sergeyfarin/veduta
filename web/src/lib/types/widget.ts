@@ -20,7 +20,8 @@ export type Block =
   | BlockMedia
   | BlockText
   | BlockTable
-  | BlockActions;
+  | BlockActions
+  | BlockSeries;
 export type Scalar = string | number | boolean | null;
 export type Format =
   | 'text'
@@ -243,6 +244,49 @@ export interface BlockActions {
     confirm?: boolean;
     danger?: boolean;
   }[];
+}
+/**
+ * Timestamped numeric series, drawn natively as SVG by the core renderer: no library, no markup from the integration. Bounded (4 series of 288 points) and always paired with a text summary. Retention and long-term aggregation belong upstream; this is a bounded local trend.
+ */
+export interface BlockSeries {
+  type: 'series';
+  title?: ShortText;
+  emphasis?: 'normal' | 'strong' | 'subtle';
+  format?: Format;
+  /**
+   * Shown after values when format does not already imply one, e.g. mm/h.
+   */
+  unit?: string;
+  /**
+   * Fixed lower bound of the value axis; otherwise the data's own minimum.
+   */
+  min?: number;
+  /**
+   * Fixed upper bound of the value axis; otherwise the data's own maximum.
+   */
+  max?: number;
+  /**
+   * @minItems 1
+   * @maxItems 4
+   */
+  series: SeriesLine[];
+}
+export interface SeriesLine {
+  label: ShortText;
+  level?: Level;
+  /**
+   * Strictly increasing in t (checked by the validator, which the schema cannot express). 288 is a day at five-minute resolution.
+   *
+   * @maxItems 288
+   */
+  points: SeriesPoint[];
+}
+/**
+ * One sample. v is null where there is no reading, and is drawn as a gap: missing data is never interpolated across.
+ */
+export interface SeriesPoint {
+  t: string;
+  v: number | null;
 }
 export interface Signal {
   value: number | string | boolean | null;

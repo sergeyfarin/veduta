@@ -42,8 +42,13 @@ docker run --rm -v "$(pwd)":/work -w /work -e CI=true \
     tar -C /usr/local -xzf /tmp/go.tgz
     export PATH=$PATH:/usr/local/go/bin
     corepack enable
-    cd web && pnpm exec playwright test --update-snapshots'
+    cd web && pnpm exec playwright test --update-snapshots=all'
 ```
+
+`=all` matters. Plain `--update-snapshots` rewrites only the baselines that *fail*, and a failure is
+judged by the same tolerant comparison the suite uses - so a real change that slips under it (a
+whole new card did, on 2026-09-29) leaves stale baselines behind looking current. Re-run the suite
+in a second, fresh container afterwards; the baselines are only proven once that passes.
 
 Match the image tag to `web/package.json`'s `@playwright/test` version whenever that gets bumped -
 `TestPlaywrightImageMatchesPackage` in `internal/contracts` fails if they drift, because they did:
@@ -52,7 +57,15 @@ then failed on a missing browser build rather than on anything about the pixels.
 `docker run` writes the new PNGs as your own UID (the bind mount inherits host ownership), but any
 stray files pnpm/corepack creates directly under the repo root (a `.pnpm-store/` cache, if `pnpm
 install` runs there instead of inside `web/`) come out root-owned - remove those the same way,
-via another `docker run ... rm -rf`, not a host-side `rm`.
+via another `docker run ... rm -rf`, not a host-side `rm`. The container's pnpm also leaves files
+under `node_modules/` and `web/build/` owned by root, after which the host's `pnpm install` - and
+so `mise run check` - fails with `ERR_PNPM_PACKAGE_MANAGER_REMOVE_MODULES_DIR`. Hand them back the
+same way, with `-h` so symlinks change too:
+
+```bash
+docker run --rm -v "$(pwd)":/work alpine sh -c \
+  "find /work -path /work/.git -prune -o -user root -exec chown -h $(id -u):$(id -g) {} +"
+```
 
 ## Checking the README's quick start
 

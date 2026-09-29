@@ -122,8 +122,22 @@ func (r *Registry) blockLeaks(b widgets.Block) bool {
 			}
 		}
 		return false
-	default:
+	case widgets.BlockSeries:
+		if r.containsAny(v.Title, v.Unit) {
+			return true
+		}
+		for _, line := range v.Series {
+			if r.containsAny(line.Label) {
+				return true
+			}
+		}
 		return false
+	default:
+		// Fail closed. This used to return false, so a block type added to widgets without a case
+		// here would have had its text waved through unscanned - found adding BlockSeries, which
+		// is the first block type added since this walker was written. Refusing the document is
+		// the visible failure; an unscanned secret on a dashboard is the invisible one.
+		return true
 	}
 }
 

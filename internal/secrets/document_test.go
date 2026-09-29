@@ -63,6 +63,9 @@ func TestContainsSecretInDocument_EveryBlockType(t *testing.T) {
 		"metric val":   widgets.BlockMetrics{Items: []widgets.MetricItem{{Label: "x", Value: leaked}}},
 		"list val":     widgets.BlockList{Items: []widgets.ListItem{{Title: "x", Value: leaked}}},
 		"progress val": widgets.BlockProgress{Items: []widgets.ProgressItem{{Label: "x", Progress: 0.1, Value: leaked}}},
+		"series label": widgets.BlockSeries{Series: []widgets.SeriesLine{{Label: leaked}}},
+		"series title": widgets.BlockSeries{Title: leaked, Series: []widgets.SeriesLine{{Label: "x"}}},
+		"series unit":  widgets.BlockSeries{Unit: leaked, Series: []widgets.SeriesLine{{Label: "x"}}},
 	}
 	reg := registryWithLeaked()
 	for name, block := range cases {

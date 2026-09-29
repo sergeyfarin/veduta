@@ -1721,7 +1721,7 @@ in a path segment slipped a query or a shorter path past route authorisation in 
 released as 0.1.3; and a `${secret:…}` in a connection header had been sent as literal text. Left
 open: [reading a 404 as absent](03-backlog.md#a-pipeline-step-cannot-read-404-as-absent), since
 Home Assistant's missing-entity case now fails the card with the status.
-**M3 · Native time-series block** · 3 d · deps: none · **PROPOSED**, independent of M2 — the
+**M3 · Native time-series block** · 3 d · deps: none · **IN PROGRESS: M3a (the block) done 2026-09-29; M3b (history binding) next** — the
 [0.2 item the backlog already names](03-backlog.md#no-native-visualisation-block-for-retained-history):
 a bounded block that draws points an integration supplies, plus a separate core binding for
 retained signal history. Points in, an SVG element tree out, drawn by a Svelte component like every

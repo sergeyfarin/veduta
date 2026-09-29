@@ -173,6 +173,28 @@ func validateSemantics(doc *Document) []string {
 			for j, it := range v.Items {
 				checkTime(fmt.Sprintf("blocks[%d].items[%d].timestamp", i, j), it.Timestamp)
 			}
+		case BlockSeries:
+			if v.Min != nil && v.Max != nil && *v.Min >= *v.Max {
+				problems = append(problems, fmt.Sprintf("blocks[%d]: min %g is not below max %g", i, *v.Min, *v.Max))
+			}
+			for j, line := range v.Series {
+				var prev time.Time
+				for k, pt := range line.Points {
+					field := fmt.Sprintf("blocks[%d].series[%d].points[%d].t", i, j, k)
+					t, err := time.Parse(time.RFC3339Nano, pt.T)
+					if err != nil {
+						problems = append(problems, fmt.Sprintf("%s: %q is pattern-shaped but not a real timestamp", field, pt.T))
+						break
+					}
+					// Strictly increasing, so a line is a function of time and the renderer never
+					// has to decide what a doubled-back or duplicated sample means.
+					if k > 0 && !t.After(prev) {
+						problems = append(problems, fmt.Sprintf("%s: %s is not after the previous point", field, pt.T))
+						break
+					}
+					prev = t
+				}
+			}
 		case BlockText:
 			if v.Kind == TextMarkdown {
 				if len(v.Content) > maxMarkdownBytes {

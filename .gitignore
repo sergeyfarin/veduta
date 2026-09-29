@@ -8,6 +8,8 @@ __pycache__/
 
 # Node
 node_modules/
+# Left at the repository root by pnpm when it runs inside the Playwright container.
+/.pnpm-store/
 # The build output is generated, but one placeholder is committed so `go build` works on a
 # clean clone: //go:embed needs at least one matching file.
 web/build/*

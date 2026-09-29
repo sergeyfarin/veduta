@@ -10,32 +10,9 @@ import (
 	"veduta.dev/veduta/internal/widgets"
 )
 
-// blockType and imageRefs exist only to let the tests below walk a widgets.Block generically;
-// the closed Block interface intentionally has no such accessors on the production type itself.
-func blockType(b widgets.Block) string {
-	switch v := b.(type) {
-	case widgets.BlockMetrics:
-		return "metrics"
-	case widgets.BlockKeyValue:
-		return "key-value"
-	case widgets.BlockProgress:
-		return "progress"
-	case widgets.BlockStatus:
-		return "status"
-	case widgets.BlockList:
-		return "list"
-	case widgets.BlockMedia:
-		return string(v.Kind)
-	case widgets.BlockText:
-		return string(v.Kind)
-	case widgets.BlockTable:
-		return "table"
-	case widgets.BlockActions:
-		return "actions"
-	default:
-		return "unknown"
-	}
-}
+// blockType is the block's own discriminator; imageRefs exists only to let the tests below reach
+// into media blocks, which the closed Block interface has no accessor for.
+func blockType(b widgets.Block) string { return b.BlockType() }
 
 func imageRefs(b widgets.Block) []string {
 	media, ok := b.(widgets.BlockMedia)
@@ -67,8 +44,8 @@ func TestLoad_RealShowcaseIsValid(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if len(b.Cards) != 13 {
-		t.Fatalf("got %d cards, want 13", len(b.Cards))
+	if len(b.Cards) != 14 {
+		t.Fatalf("got %d cards, want 14", len(b.Cards))
 	}
 	if len(b.Dashboard.Sections) == 0 {
 		t.Fatal("no sections")
@@ -85,7 +62,7 @@ func TestLoad_RealShowcaseIsValid(t *testing.T) {
 	}
 	wantTypes := []string{
 		"poster-grid", "progress", "metrics", "key-value", "list", "status",
-		"markdown", "image-grid", "table", "actions",
+		"markdown", "image-grid", "table", "actions", "series",
 	}
 	for _, want := range wantTypes {
 		if !seenTypes[want] {

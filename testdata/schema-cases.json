@@ -2054,6 +2054,98 @@
           ]
         }
       }
+    },
+    {
+      "name": "series block with a gap",
+      "schema": "widget",
+      "expect": "accept",
+      "doc": {
+        "schemaVersion": 1,
+        "blocks": [
+          {
+            "type": "series",
+            "format": "percent",
+            "series": [
+              {
+                "label": "CPU",
+                "points": [
+                  {
+                    "t": "2026-09-29T00:00:00Z",
+                    "v": 12.5
+                  },
+                  {
+                    "t": "2026-09-29T00:05:00Z",
+                    "v": null
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "series point carrying markup",
+      "schema": "widget",
+      "expect": "reject",
+      "doc": {
+        "schemaVersion": 1,
+        "blocks": [
+          {
+            "type": "series",
+            "series": [
+              {
+                "label": "CPU",
+                "points": [
+                  {
+                    "t": "2026-09-29T00:00:00Z",
+                    "v": 1,
+                    "svg": "<path/>"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "series value as a string",
+      "schema": "widget",
+      "expect": "reject",
+      "doc": {
+        "schemaVersion": 1,
+        "blocks": [
+          {
+            "type": "series",
+            "series": [
+              {
+                "label": "CPU",
+                "points": [
+                  {
+                    "t": "2026-09-29T00:00:00Z",
+                    "v": "1"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "series with no lines",
+      "schema": "widget",
+      "expect": "reject",
+      "doc": {
+        "schemaVersion": 1,
+        "blocks": [
+          {
+            "type": "series",
+            "series": []
+          }
+        ]
+      }
     }
   ]
 }

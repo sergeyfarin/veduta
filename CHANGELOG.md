@@ -22,6 +22,9 @@ project is pre-1.0:
   the manifest loads.
 - Connection `headers` accept `${secret:NAME}`, as a webhook's headers already did, so an upstream
   that authenticates with a custom header no longer forces its credential into the config file.
+- A `series` block: up to four timestamped numeric lines, drawn by the dashboard itself as SVG with
+  no charting library, where a `null` reading is a gap rather than a line drawn across it. Every
+  chart carries a text summary of what each line reads now and the range it moved through.
 - Arcane cards take an `environmentId` parameter (default `"0"`, the local Docker host), so a remote
   host or agent can have a card.
 
