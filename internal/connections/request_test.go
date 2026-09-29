@@ -79,14 +79,17 @@ func TestJoinPath_StaysWithinBaseWithSubpath(t *testing.T) {
 	}
 }
 
-func TestJoinPath_PreservesQueryFromPath(t *testing.T) {
+// TestJoinPath_RejectsQueryOrFragmentInPath replaces D1's TestJoinPath_PreservesQueryFromPath.
+// Keeping a query written into the path was the mechanism of a route bypass: the broker authorised
+// "/items/x?admin=1/detail" as a path matching "/items/*/detail", and this function then sent
+// "admin" as a query key the route's allowlist had never been asked about. Request.Query is the
+// only channel for a query now, and no caller in the tree used the other one.
+func TestJoinPath_RejectsQueryOrFragmentInPath(t *testing.T) {
 	base := mustParseURL(t, "http://example.com/api")
-	got, err := joinPath(base, "/search?q=x")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got.RawQuery != "q=x" {
-		t.Fatalf("query = %q", got.RawQuery)
+	for _, p := range []string{"/search?q=x", "/items/x?admin=1/detail", "/items/x#/detail", "/search?"} {
+		if got, err := joinPath(base, p); err == nil {
+			t.Errorf("joinPath(%q) = %q, want it rejected", p, got)
+		}
 	}
 }
 

@@ -820,3 +820,43 @@ for removed inputs before bumping (none this workflow uses): `docker/setup-build
 passed with them (run 36526344298) and its log carries no Node 20 deprecation annotation. The
 "check before each tag" habit stands for whatever deprecation comes next.
 
+### A path segment could carry a query or fragment past route authorisation
+
+Found 2026-09-29 while designing Phase M2's named path segments, by asking what a parameter value
+could contain once it sat inside a route's `*` segment - and finding that the answer did not depend
+on M2 at all. `routepath.Canonicalise` rejected traversal, encoded separators, control characters
+and empty segments, but not a literal `?` or `#`, and `connections.joinPath` then parsed the
+authorised path as a URL. So against a route `GET /api/items/*/detail` with `queryKeys: []`:
+
+- `/api/items/x?admin=1/detail` was authorised (the `*` matched `x?admin=1`) and reached the
+  upstream as `/api/items/x?admin=1%2Fdetail` - a query key the allowlist forbade;
+- `/api/items/x#/detail` was authorised and reached the upstream as `/api/items/x` - a path no route
+  approved.
+
+**Released in 0.1.0 through 0.1.2.** The effect is bounded: the same connection, credentials, host
+and method as an approved route, and only through a route with a `*` segment. It still broke the
+project's central claim, that an integration reaches an upstream only through routes the operator
+approved. Three things could supply such a path: a WASM plugin, which passes the path directly; a
+declarative manifest with an expression-valued path, which the loader accepts and defers to the
+broker; and upstream data flowing into one - Immich's thumbnail paths are built from asset ids the
+upstream returns, so a malicious or compromised upstream could steer its own requests within the
+approved slot.
+
+**Resolved the same day.** `Canonicalise` rejects a literal `?` or `#` with a distinct
+`ErrQueryOrFragment`, so every one of its call sites refuses the path - the broker's `Authorize`,
+asset-token minting, manifest and lock loading, and connection `allowedPaths`. `joinPath` refuses
+both independently, since `registry.Do` has callers that do not pass through the broker; that
+replaced D1's `TestJoinPath_PreservesQueryFromPath`, which had asserted the unsafe behaviour as a
+feature, and which no caller in the tree relied on (the Homepage importer already strips queries,
+and `http-json` passes its query as a map). Covered by
+`TestBroker_HTTP_PathCannotSmuggleQueryOrFragment`, which runs against a real upstream and asserts
+nothing is received, `TestBroker_AssetRef_PathCannotSmuggleQueryOrFragment`, new negative cases in
+`TestCanonicalise_RejectsAdversarialInputs`, and `TestJoinPath_RejectsQueryOrFragmentInPath`.
+Mutation-checked: with the `Canonicalise` check disabled, both the routepath and the broker tests
+fail. A percent-encoded `%3F` or `%23` is still a legal path character and passes authorisation;
+`joinPath` then refuses it after decoding, which fails closed and affects no shipped integration.
+
+Architecture section "Route canonicalisation" gained the rule. Whether this warrants a patch
+release and a GitHub security advisory is the maintainer's decision; it is recorded here either
+way.
+

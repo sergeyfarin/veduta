@@ -793,6 +793,7 @@ serving, and connection `allowedPaths`:
 canonicalise(raw) → (path, error)
   reject if: it does not begin with "/"
              it contains a backslash, a control character, or whitespace
+             it contains a literal "?" or "#"
              it contains a malformed percent escape
              percent-decoding would yield "/" or "\" (%2f, %5c, and their mixed-case forms)
              any segment is "." or ".." before OR after decoding
@@ -802,6 +803,13 @@ canonicalise(raw) → (path, error)
   invariant: canonicalise(canonicalise(x)) == canonicalise(x), and decoding never
              changes the number of segments
 ```
+
+The `?`/`#` rule was added on 2026-09-29, after the rest had shipped. A path is authorised as a
+string and then parsed as a URL, which gives both characters meaning: without the rule, a value in
+an approved `*` segment could become query keys no route allowlisted, or cut the request short of
+the approved path. A request's query travels only in its query map, and the connection layer
+refuses a path carrying either character on its own as well, for callers that do not go through
+the broker. See [the resolved backlog entry](03-backlog-resolved.md#a-path-segment-could-carry-a-query-or-fragment-past-route-authorisation).
 
 Glob patterns are additionally restricted at schema level: `*` matches within one segment and never
 crosses `/`; **multi-segment `**` is not part of v1** at all, because "`/a/**/b`" has no unambiguous

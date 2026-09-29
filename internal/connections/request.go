@@ -61,6 +61,12 @@ func joinPath(base *url.URL, p string) (*url.URL, error) {
 	if strings.Contains(p, "://") || strings.HasPrefix(p, "//") {
 		return nil, ErrPathTraversal
 	}
+	// Request.Query is the only way a query reaches the wire. A "?" or "#" in Path would be
+	// parsed below into a query or fragment the caller's authorisation never saw - the broker
+	// refuses them already (routepath.Canonicalise), but Do has callers that are not the broker.
+	if strings.ContainsAny(p, "?#") {
+		return nil, fmt.Errorf("%w: %w", ErrPathTraversal, routepath.ErrQueryOrFragment)
+	}
 	parsed, err := url.Parse(p)
 	if err != nil {
 		return nil, err

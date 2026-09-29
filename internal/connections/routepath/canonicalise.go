@@ -24,12 +24,14 @@ var (
 	ErrEncodedSeparator = errors.New("routepath: a percent-escape decodes to / or \\")
 	ErrDotSegment       = errors.New("routepath: a segment is . or .. (before or after decoding)")
 	ErrEmptySegment     = errors.New("routepath: path contains an empty segment (//)")
+	ErrQueryOrFragment  = errors.New("routepath: path contains a literal ? or #")
 )
 
 // Canonicalise implements the normative algorithm exactly:
 //
 //	reject if: it does not begin with "/"
 //	           it contains a backslash, a control character, or whitespace
+//	           it contains a literal "?" or "#"
 //	           it contains a malformed percent escape
 //	           percent-decoding would yield "/" or "\" (%2f, %5c, and their mixed-case forms)
 //	           any segment is "." or ".." before OR after decoding
@@ -49,6 +51,15 @@ func Canonicalise(raw string) (string, error) {
 	}
 	if strings.ContainsRune(raw, '\\') {
 		return "", ErrBackslash
+	}
+	// A path is checked here as a string and later handed to a URL parser, which reads "?" as the
+	// start of a query and "#" as the start of a fragment. Accepting either let a value inside an
+	// approved "*" segment become query keys no route allowlisted ("/items/x?admin=1/detail"), or
+	// cut the path short of what was approved ("/items/x#/detail" went out as "/items/x"). RFC 3986
+	// excludes both from a path, so a request's query travels only in its Query map, and a segment
+	// that genuinely contains one of them must escape it as %3F or %23.
+	if strings.ContainsAny(raw, "?#") {
+		return "", ErrQueryOrFragment
 	}
 	// Byte-wise, deliberately: this rejects every ASCII control character and the space
 	// character (0x00-0x20, 0x7f) without decoding anything, and does not require raw to be

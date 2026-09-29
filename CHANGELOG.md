@@ -13,6 +13,14 @@ project is pre-1.0:
 
 ## Unreleased
 
+### Security
+
+- A request path could carry a query or fragment past route authorisation. A value inside a route's
+  `*` segment containing `?` or `#` was authorised as ordinary path text and then parsed as a URL,
+  so it could send query keys the route's `queryKeys` did not allow, or reach a shorter path than
+  the approved one, on the same connection and method. Paths containing a literal `?` or `#` are
+  now refused everywhere a route is checked. Affects 0.1.0–0.1.2.
+
 ### Changed
 
 - Release archives and `veduta version` now use the bare version: `veduta-0.1.3-linux-amd64.tar.gz`
