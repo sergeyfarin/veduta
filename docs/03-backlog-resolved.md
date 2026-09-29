@@ -857,7 +857,9 @@ fail. A percent-encoded `%3F` or `%23` is still a legal path character and passe
 `joinPath` then refuses it after decoding, which fails closed and affects no shipped integration.
 
 Architecture section "Route canonicalisation" gained the rule. Released as 0.1.3 the same day;
-the GitHub releases for 0.1.0–0.1.2 were withdrawn rather than left beside it, and no security
+the GitHub releases for 0.1.0–0.1.2 were withdrawn rather than left beside it, their GHCR images
+were deleted (checked by digest against 0.1.3's index first, so `:0.1.3` and `:0.1` were
+untouched), and no security
 advisory was published, by the maintainer's decision, since no outside install was known to be
 running them.
 

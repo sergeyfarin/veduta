@@ -1677,7 +1677,7 @@ and never occupying the tags that a stable release would.
 ### Phase M — After 0.1 (~8 d, proposed 2026-09-29)
 
 Everything above records what was built for 0.1; 0.1.3 is the published release (the GitHub
-releases for 0.1.0–0.1.2 were withdrawn on 2026-09-29 for the route-authorisation fix), and the last
+releases and images for 0.1.0–0.1.2 were withdrawn on 2026-09-29 for the route-authorisation fix), and the last
 commits before this phase were reactions to the first outside install. This is the first phase
 written after a release, so **only M1 is done; M2–M6 are proposals awaiting review and commit to
 nothing.** Each cites the backlog entry it comes from, which keeps the reasoning where it was

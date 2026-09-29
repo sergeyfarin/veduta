@@ -41,8 +41,9 @@ project is pre-1.0:
 ## 0.1.3 — 2026-09-29
 
 A security release, and the first whose artefacts drop the `v` from their names. The GitHub
-releases for 0.1.0, 0.1.1 and 0.1.2 have been withdrawn because all three carry the route
-authorisation flaw below; their tags and entries here are kept so the history stays readable.
+releases and container images for 0.1.0, 0.1.1 and 0.1.2 have been withdrawn because all three
+carry the route authorisation flaw below; their tags and entries here are kept so the history stays
+readable.
 Upgrade to 0.1.3.
 
 ### Security
