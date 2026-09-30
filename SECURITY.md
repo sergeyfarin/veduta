@@ -22,7 +22,7 @@ so and a pointer to where that is written down.
 
 ## Supported versions
 
-`0.2.0` is the current release, and **`main` is the only line that receives fixes** — pre-1.0, there
+`0.2.1` is the current release, and **`main` is the only line that receives fixes** — pre-1.0, there
 is no older line to back-port to. Security fixes land on `main` and in the next patch release, and
 anything warranting an advisory gets one on the Security tab.
 

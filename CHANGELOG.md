@@ -11,7 +11,12 @@ project is pre-1.0:
 > pinned in `veduta.lock.yaml`, so an incompatible plugin fails closed rather than misbehaving;
 > expect to rebuild and re-approve third-party plugins when upgrading.
 
-## Unreleased
+## 0.2.1 — 2026-09-30
+
+A small release: clearer failures when the data directory is unusable, and a lock file you can
+read back without `sudo`. Upgrading from 0.2.0 is the tag change alone - `0.2.1` in both services of
+`compose.yaml`, then `docker compose pull` and `docker compose up -d`. Nothing needs approving
+again, and there are no database migrations.
 
 ### Changed
 

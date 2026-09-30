@@ -11,7 +11,7 @@ to service credentials. Integrations declare the operations they need; Veduta's 
 credentials and applies the approved capability and route limits.
 
 > [!WARNING]
-> **Veduta is early software, and `v0.2.0` is a pre-release.** Pre-1.0 carries no stability
+> **Veduta is early software, and `v0.2.1` is a pre-release.** Pre-1.0 carries no stability
 > promise: configuration, storage, APIs, packaging, and the plugin ABI may change between releases
 > without a migration path. Action controls render and are permanently disabled — executing them is
 > not implemented. Treat it as something to evaluate, not as a dashboard to depend on.
@@ -63,7 +63,7 @@ Save this as `compose.yaml`:
 name: veduta
 services:
   veduta-init:
-    image: ghcr.io/sergeyfarin/veduta:0.2.0
+    image: ghcr.io/sergeyfarin/veduta:0.2.1
     user: "${VEDUTA_UID:-1000}:${VEDUTA_GID:-1000}"
     command: ["init"]
     volumes:
@@ -73,7 +73,7 @@ services:
     security_opt: ["no-new-privileges:true"]
 
   veduta:
-    image: ghcr.io/sergeyfarin/veduta:0.2.0
+    image: ghcr.io/sergeyfarin/veduta:0.2.1
     user: "${VEDUTA_UID:-1000}:${VEDUTA_GID:-1000}"
     restart: unless-stopped
     depends_on:
@@ -143,7 +143,7 @@ nowhere else — the container has to bind `0.0.0.0` to be reachable from the ho
 exactly the bind Veduta refuses without authentication:
 
 ```sh
-docker run --rm -p 127.0.0.1:8099:8099 ghcr.io/sergeyfarin/veduta:0.2.0 \
+docker run --rm -p 127.0.0.1:8099:8099 ghcr.io/sergeyfarin/veduta:0.2.1 \
   serve --fixtures --listen 0.0.0.0:8099 --i-know-what-im-doing
 ```
 
@@ -154,7 +154,7 @@ socket proxy, behind a profile, for the Docker card.
 
 Archives for `linux/amd64`, `linux/arm64`, `linux/arm/v7` and `darwin/arm64`, each carrying the
 first-party integrations and the licences beside the binary, are attached to the
-[release](https://github.com/sergeyfarin/veduta/releases/tag/v0.2.0) with a `SHA256SUMS` to check
+[release](https://github.com/sergeyfarin/veduta/releases/tag/v0.2.1) with a `SHA256SUMS` to check
 them against. The toolchain for building from source is in
 [docs/dev-environment.md](docs/dev-environment.md).
 

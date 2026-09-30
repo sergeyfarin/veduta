@@ -10,7 +10,7 @@ body:
     id: version
     attributes:
       label: Version
-      description: The output of `veduta version`, or the image tag you pulled (for example `ghcr.io/sergeyfarin/veduta:0.2.0`).
+      description: The output of `veduta version`, or the image tag you pulled (for example `ghcr.io/sergeyfarin/veduta:0.2.1`).
     validations:
       required: true
   - type: dropdown
