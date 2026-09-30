@@ -53,7 +53,7 @@ inform is merged. Each ends with a decision recorded in `docs/01-architecture.md
 
 *Outcome: answered for arm64 on 2026-09-17 by a permanent CI gate rather than by a spike on a
 board, with 20-28x headroom on every criterion - see
-[03-backlog.md](03-backlog.md#arm-runtime-performance-is-measured-on-arm64-only). A gate that runs
+[03-backlog.md](03-backlog-resolved.md#arm-runtime-performance-was-measured-on-arm64-only). A gate that runs
 on every push is worth more than a one-off measurement anyway, because it is the regression that
 would go unnoticed, not the first number.*
 
@@ -1339,7 +1339,7 @@ implementation, fixes and security/regression checks through 0.1. No new WASM
 example or feature is a release requirement. Revisit after 0.1 only with a concrete
 need and a comparison against declarative integration and existing upstream
 services; there is no automatic 0.2 commitment. See the
-[requirements review](03-backlog.md#does-wasm-add-enough-value-to-justify-further-development).
+[requirements review](03-backlog-resolved.md#did-wasm-add-enough-value-to-justify-further-development).
 
 For 0.2, prioritize the independent
 [native time-series rendering work](03-backlog-resolved.md#there-was-no-native-visualisation-block-for-retained-history)
@@ -1356,7 +1356,7 @@ S1a's hardware acceptance is met on native arm64, measured 2026-09-17 by
 `TestPluginRuntimePiClassBudget` in the `arm-budgets` CI job: 244 ms cold compile, 12 ms from a
 warm cache, a 1.765 ms warm-invocation median and 1.0 MiB resident per added instance, against
 S1b's kill criteria of 50 ms and 20 MB. armv7 has no native runner and stays unmeasured; see
-[03-backlog.md](03-backlog.md#arm-runtime-performance-is-measured-on-arm64-only).
+[03-backlog.md](03-backlog-resolved.md#arm-runtime-performance-was-measured-on-arm64-only).
 
 **G2 · Host functions** · 0.5 d · deps: G1 · **DONE**
 Bind `veduta_http`, `veduta_cache_get/put`, `veduta_asset_ref`, `veduta_log` to the broker; encode
@@ -1759,14 +1759,22 @@ The lock file is written `0640`, matching `veduta.yaml`: group-readable so it ca
 owner-only to write -
 [entry](03-backlog-resolved.md#veduta-lock-yaml-was-written-0600-by-a-uid-the-operator-is-not).
 Released as 0.2.1.
-**M6 · Decisions to record, no code** — **DECIDED, 2026-09-29**, all three as proposed.
-The [WASM review](03-backlog.md#does-wasm-add-enough-value-to-justify-further-development) runs
+**M6 · Decisions to record, no code** — **DECIDED, 2026-09-29**, all three as proposed; the WASM
+review itself concluded 2026-09-30 in [decision 0005](decisions/0005-wasm-frozen.md): frozen, with
+formats served by core decoders instead.
+The [WASM review](03-backlog-resolved.md#did-wasm-add-enough-value-to-justify-further-development) runs
 after M3, since the rain and energy candidates it is waiting on need that block to be judged at
 all. Action execution stays display-only through 0.2, and its next step is a design document, not
 code. The armv7 WASM measurement waits on real hardware and is disclosed in `docs/docker.md` in
 the meantime.
 
-**Order:** M1 → M2 ⇉ M3 → M4 → M5; M6 is recorded, and the WASM review it deferred to after M3 is now due. **0.2.0 shipped 2026-09-29 with M2, M3 and M4**; M5 was not folded in after all - the release was cut when M4 landed - and follows it; `0.1.x` patches continue as needed and inherit the release rules unchanged.
+**Order:** M1 → M2 ⇉ M3 → M4 → M5; M6 is recorded, and the WASM review it deferred to after M3 is closed by decision 0005. **0.2.0 shipped 2026-09-29 with M2, M3 and M4**; M5 was not folded in after all - the release was cut when M4 landed - and follows it; `0.1.x` patches continue as needed and inherit the release rules unchanged.
+
+**Phase M is complete.** 0.2.1 (2026-09-30) carries M2–M5. No next phase is planned yet. One
+candidate is recorded here so it is not lost, and is not committed: **core decoders for formats a
+manifest cannot read** - ICS for a calendar agenda, XML for RSS/Atom feeds - each added when a
+concrete integration needs it, as [decision 0005](decisions/0005-wasm-frozen.md) directs, with the
+JSON decoder's budgets, a fuzz target and an adversarial corpus.
 
 ---
 

@@ -561,11 +561,11 @@ then run unmodified against the WASM version, which is how you prove the swap is
 
 ### WASM specifics
 
-**Roadmap status (2026-09-16): further WASM development is parked.** This section
-describes the implemented architecture; its existence does not establish a need
-for new WASM features. Product requirements and value are
-[under review](03-backlog.md#does-wasm-add-enough-value-to-justify-further-development)
-after 0.1. Existing security boundaries and regression checks remain in force.
+**Status (2026-09-30): frozen by [decision 0005](decisions/0005-wasm-frozen.md).** This section
+describes the implemented architecture, which is maintained and secured but not extended: no new
+host functions, ABI changes, SDKs or WASM integrations. Formats a manifest cannot read are served
+by core decoders on declarative pipeline steps instead. At 1.0 the path is stabilised only if a real
+integration beyond Jellyfin depends on it, and removed otherwise.
 
 - Host: **wazero** via **Extism**, cgo-free. `PluginRuntime` isolates the choice.
   See the [G1 sandbox decision](spikes/s1-wasm-sandbox.md) for the implemented ABI and conformance coverage.
@@ -1371,7 +1371,7 @@ user needs that, the webhook channel hands off to n8n/Node-RED, which is the cor
 | D3 | Credentials live in the core; integrations use slots | **Frozen** | See C2/C3 |
 | D4 | Asset refs are broker-minted signed tokens | **Frozen** | See C9 |
 | D5 | YAML is the single source of truth | **Frozen for 0.1** | Avoids duelling stores; GUI is additive later |
-| D6 | Extism on wazero for WASM | **Adopted and measured** — [G1 sandbox decision](spikes/s1-wasm-sandbox.md) | Per-call instances. S1b's kill criteria (50 ms warm invocation, 20 MB resident per instance) are [met on native arm64 with 20-28× headroom](03-backlog.md#arm-runtime-performance-is-measured-on-arm64-only) against the real Jellyfin module: 1.765 ms warm, 1.0 MiB per instance, 244 ms cold compile. armv7 has no native runner and is unmeasured |
+| D6 | Extism on wazero for WASM | **Adopted and measured** — [G1 sandbox decision](spikes/s1-wasm-sandbox.md) | Per-call instances. S1b's kill criteria (50 ms warm invocation, 20 MB resident per instance) are [met on native arm64 with 20-28× headroom](03-backlog-resolved.md#arm-runtime-performance-was-measured-on-arm64-only) against the real Jellyfin module: 1.765 ms warm, 1.0 MiB per instance, 244 ms cold compile. armv7 has no native runner and is unmeasured |
 | D7 | `expr-lang/expr` for mapping and rules | **Decided — S3** | Ergonomics decide it, not safety: D3's manifest DSL is templating-shaped (`map`/`filter`/`sortBy`/`take`/string and date helpers), which is what expr already looks like natively; CEL optimises for boolean policy predicates and would push a manifest-DSL redesign around CEL's macro model rather than a library swap. CEL's actual edge — an interpreter that accounts for its own comprehensions — is answered by D47 instead: expr is used as a parser/evaluator only, never as the sandbox |
 | D8 | No SSH in 0.1 | **Decided** | See C4; host metrics come from Glances/Beszel over HTTP |
 | D9 | SSE, one stream per tab | Decided | WebSockets only if bidirectional need appears |

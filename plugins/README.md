@@ -1,6 +1,10 @@
 # Building Veduta plugins
 
-Rust is the supported compiled plugin language for Veduta 0.1. Its SDK produces
+> **Frozen.** The WebAssembly path is maintained but not extended: no new host functions, ABI
+> changes or integrations, and it is removed at 1.0 unless a real integration needs it. Prefer a
+> declarative manifest; see [decision 0005](../docs/decisions/0005-wasm-frozen.md).
+
+Rust is the only compiled plugin language, and will stay so while the path is frozen. Its SDK produces
 small `wasm32-unknown-unknown` modules with no WASI imports, preserving the
 sandbox rule that all external effects pass through Veduta's capability broker.
 

@@ -11,6 +11,16 @@ project is pre-1.0:
 > pinned in `veduta.lock.yaml`, so an incompatible plugin fails closed rather than misbehaving;
 > expect to rebuild and re-approve third-party plugins when upgrading.
 
+## Unreleased
+
+### Changed
+
+- **The WebAssembly plugin path is frozen** ([decision 0005](docs/decisions/0005-wasm-frozen.md)).
+  It keeps working and keeps being secured, but gains no new host functions, ABI changes, SDKs or
+  integrations, and its ABI stays experimental. Formats a manifest cannot read will be added as
+  core decoders for declarative manifests instead. At 1.0 it is removed unless a real integration
+  beyond Jellyfin depends on it. Nothing changes for an existing installation.
+
 ## 0.2.1 — 2026-09-30
 
 A small release: clearer failures when the data directory is unusable, and a lock file you can

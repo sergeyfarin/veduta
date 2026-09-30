@@ -1,7 +1,8 @@
 # Jellyfin remains the WASM proof case for 0.1
 
-Status: accepted for retaining Jellyfin in 0.1, 2026-09-16. Further WASM
-development is parked; its product requirements and value are under review.
+Status: accepted for retaining Jellyfin in 0.1, 2026-09-16. The review it deferred to was closed
+on 2026-09-30 by [decision 0005](0005-wasm-frozen.md), which freezes WASM, keeps Jellyfin on it,
+and makes 1.0 the point at which Jellyfin moves to a declarative manifest if the path is removed.
 
 ## Decision
 
@@ -53,5 +54,5 @@ A review after 0.1 must start with a concrete need, compare declarative and upst
 alternatives, and account for maintenance, resource and permission costs. Keeping
 WASM parked or reducing its role are valid outcomes. Candidate integrations and
 review criteria are recorded in the
-[open requirements review](../03-backlog.md#does-wasm-add-enough-value-to-justify-further-development).
+[open requirements review](../03-backlog-resolved.md#did-wasm-add-enough-value-to-justify-further-development).
 Visualization work is independent of this decision.

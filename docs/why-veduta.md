@@ -45,7 +45,8 @@ more mature or generally better.
 - A capability model reduces authority only when its policies and implementation are correct; it
   does not make the project automatically secure.
 - Rich media is an emphasis, not a claim that other dashboards cannot display images or video.
-- The WebAssembly path is experimental, and its long-term value remains under review.
+- The WebAssembly path is experimental and frozen: maintained, not extended, and removed at 1.0
+  unless a real integration needs it ([decision 0005](decisions/0005-wasm-frozen.md)).
 
 ## When the trade-off may be worthwhile
 

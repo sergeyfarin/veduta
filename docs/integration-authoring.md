@@ -8,15 +8,16 @@ Three rungs, in order. Start at the lowest one that fits — **most integrations
 
 1. **An `http-json` card, for a single endpoint.** No manifest, no new files: name a connection, a path, and the values to show. See the `adguard` card in [`examples/veduta.yaml`](../examples/veduta.yaml). It gets the same expression and resource budgets as any declarative integration.
 2. **A declarative manifest, for most integrations.** Up to eight requests, later requests using earlier results, conditional steps, structured bodies, filtering and mapping over JSON, iteration into cards and lists, broker-minted image references, and declared signals for history and alerts. Seven of the eight shipped integrations are this - everything but `plugins/jellyfin` - and `plugins/glances` alone makes six requests. Nothing here is compiled; a manifest is data.
-3. **A WASM plugin, only when logic genuinely demands it.** Loops with per-item requests, non-JSON parsing, error recovery, or branching the bounded template grammar cannot express. Rust is the supported SDK today; it is not a requirement for the rungs above, and the runtime itself is language-neutral — see [decisions/0001-backend-language.md](decisions/0001-backend-language.md).
+3. **A WASM plugin — frozen; see below.** The runtime and the Rust SDK exist and are maintained, but the path is not being extended, and a new integration should not be built on it: see [decision 0005](decisions/0005-wasm-frozen.md).
 
 All three use the same capability broker, credential boundary, limits, output validation, and approval flow. Moving up a rung buys expressiveness, not authority: a WASM plugin can do nothing a manifest could not ask for.
 
-Further first-party WASM work is currently parked while its requirements and
-value are reviewed. The supported SDK and existing plugin remain available;
-prefer declarative integrations for new work. See the
-[requirements review](03-backlog.md#does-wasm-add-enough-value-to-justify-further-development)
-before proposing a new WASM example.
+**WASM is frozen** ([decision 0005](decisions/0005-wasm-frozen.md)). What exists stays working and
+secure; nothing is added to it, and its guest ABI will not be stabilised unless a real integration
+needs it by 1.0 — without one, the path is removed then. If what stops you writing a manifest is a
+*format* — a calendar (ICS), a feed (RSS/Atom XML), Prometheus metrics text — the answer is a core
+decoder on a declarative pipeline step, and the place to ask is an issue describing the integration,
+not a WASM plugin. Decision 0005 says what would reopen the question, and how it would be weighed.
 
 ## Manifest structure
 

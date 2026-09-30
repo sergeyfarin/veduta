@@ -16,7 +16,6 @@ priority (which milestone should absorb it, or "before X" for a hard blocker).
 
 | Open item | Area | Priority |
 | --- | --- | --- |
-| [Does WASM add enough value to justify further development?](#does-wasm-add-enough-value-to-justify-further-development) | Integrations | Due: M3 landed 2026-09-29 |
 | [Should there be a frontend plugin surface at all?](#open-question-should-there-be-a-frontend-plugin-surface-at-all) | Frontend | Open decision |
 | [Action execution is not implemented](#action-execution-is-not-implemented) | Product/security | Display-only through 0.2; design first |
 | [Appearance options are deferred until asked for](#appearance-options-are-deferred-until-asked-for) | Frontend | On demand |
@@ -27,52 +26,9 @@ priority (which milestone should absorb it, or "before X" for a hard blocker).
 | [A pipeline step cannot read 404 as absent](#a-pipeline-step-cannot-read-404-as-absent) | Manifest DSL | Low; on a second case |
 | [`CacheEntries` can't represent an explicit zero](#manifestloadlimitscacheentries-cant-represent-an-explicit-zero) | Integrations | When declarative caching lands |
 | [Approve flow can't grant a limit above its default](#the-documented-approve-flow-has-no-way-to-grant-a-limit-above-its-documented-default) | Docs | Low |
-| [Go plugin SDK needs a WASI-free toolchain](#go-plugin-sdk-requires-a-maintained-wasi-free-toolchain) | Plugins | Parked; subject to WASM review |
-| [ARM runtime performance is measured on arm64 only](#arm-runtime-performance-is-measured-on-arm64-only) | Plugins | armv7 deferred |
 | [Markdown has no authoring syntax for structure](#markdown-is-prose-only-with-no-authoring-syntax-for-structure) | Frontend | Deferred |
 
 ---
-
-### Does WASM add enough value to justify further development?
-
-**Parked, 2026-09-16. Requirements under review.** The runtime and Rust SDK exist,
-but that alone does not establish a product need for further WASM development.
-Jellyfin can be expressed declaratively, and Immich memories now uses that approach. No new WASM
-integration, replacement proof case, SDK expansion or runtime feature is scheduled
-for 0.1 or automatically committed to 0.2. Keep existing functionality and its
-security/regression coverage maintained while this question is open.
-
-Reopen only around a concrete user need. Compare a declarative implementation,
-an upstream service that already does the work, and a WASM implementation.
-Record the additional behavior WASM enables, its build/maintenance and resource
-costs, and any broker or permission changes. Continuing to defer or reducing
-WASM's role are valid outcomes. A parser's compatibility with the WASI-free
-sandbox must be demonstrated before treating it as an implementation choice.
-
-Candidates discussed, **not scheduled**:
-
-- Provider-independent ICS agenda: accept compatible calendar subscriptions
-  rather than couple the feature to Nextcloud. Recurrence, exceptions and
-  timezone handling could justify WASM; the existing list block can show an
-  agenda. Provider-specific authenticated APIs are a separate scope.
-- GitHub releases/activity: prefer declarative JSON. Installed-version and
-  deployment-update knowledge should come from services such as Dockhand.
-- Rain forecasts: prefer declarative JSON when available. A text-feed parser
-  could justify a small plugin; probability and intensity remain distinct.
-  Forecast visualization is a core rendering concern, independent of WASM.
-- Energy monitoring: use existing Home Assistant sensor data or an upstream
-  JSON API first. Direct Prometheus exposition parsing is a possible WASM use
-  case; long-term energy accounting remains upstream.
-
-The 0.1 decision to retain the existing Jellyfin implementation is unchanged;
-it is not evidence that future integrations need WASM. See
-[decision 0003](decisions/0003-jellyfin-wasm-proof-case.md).
-Priority: parked until a requirements review after 0.1, not a release blocker.
-
-**Decided, 2026-09-29:** the review runs after the native time-series block (Phase M3) lands, not
-before. The rain and energy candidates above need a way to draw a series before the question of
-how to fetch one can be judged, and without that block the comparison would be against a card that
-cannot show the result.
 
 ### Open question: should there be a frontend plugin surface at all?
 
@@ -273,82 +229,6 @@ the architecture doc's own illustrative request body does not show this field, a
 implementing a second client from that prose alone would miss it.
 Priority: low - clarify in `docs/01-architecture.md` section 6 the next time that section gets a
 deliberate revision, so the illustrative POST body includes the optional `limits` field.
-
-### Go plugin SDK requires a maintained WASI-free toolchain
-
-Found during G3. The stock Go Extism guest was 4.3 MiB, took about five seconds
-to cold-validate on the development host, and imported 17 WASI functions. That
-conflicts with S1's strict no-WASI sandbox and the size/latency goals for
-Pi-class hosts. Enabling WASI only for this toolchain would widen the sandbox,
-while owning a custom PDK would create an ongoing compiler/ABI maintenance
-burden. G3 therefore ships Rust as the supported guest language. Priority: parked
-under the [WASM requirements review](#does-wasm-add-enough-value-to-justify-further-development).
-Only revisit if that review establishes a need and an official or maintained Go PDK can emit `wasm32-unknown-unknown`
-with no forbidden imports and passes the G1 conformance suite plus S1a ARM
-budgets. The Go backend is a separate decision and remains in place; see
-`docs/decisions/0001-backend-language.md`.
-
-### ARM runtime performance is measured on arm64 only
-
-G1's sandbox half was always evidenced: the conformance suite is real and runs in CI - no
-filesystem, no env, no sockets, no native HTTP, deadline kill, memory trap, output cap, corrupted
-module rejected before compile. None of it measures speed or memory, and the ARM scheduler test
-drives synthetic callbacks, so it exercised scheduling on ARM rather than WASM on ARM: it never
-compiled a real module and never ran Jellyfin's.
-
-The three figures S1a was written to produce - cold compilation of a real plugin, warm invocation,
-resident memory per instance - therefore had no number attached on ARM hardware, and they are the
-ones that decide whether a Pi-class host is a supported target or an aspiration.
-
-**arm64 is measured, 2026-09-17, and it passes with an order of magnitude of headroom.** The
-deferral of the day before assumed this needed a board nobody has. It did not: L3's load gate was
-already running on GitHub's native four-core ARM64 runner, and that job now runs
-[`TestPluginRuntimePiClassBudget`](../internal/integrations/wasm/budget_test.go) beside it. The
-test loads `plugins/jellyfin/jellyfin.wasm` - the committed module, the fixtures the golden test
-pins, the limits a real approval grants - and measures cold compilation, compilation from a warm
-cache, warm invocation over 24 calls, and resident growth per additional loaded instance, read
-from `/proc` rather than from Go's heap statistics, since wazero's machine code is mapped and not
-on the heap. It asserts S1b's own kill criteria: 50 ms warm invocation, 20 MB resident per
-instance, plus a five-second ceiling on cold compilation that S1b never set but a container start
-deserves. `-v` is deliberate - the job log carries the numbers, not just the verdict. Because the
-release workflow's gate requires a green CI run for the exact tagged commit, these budgets are
-release-gating without any further wiring.
-
-The measured figures, from run
-[35182718050](https://github.com/sergeyfarin/veduta/actions/runs/35182718050) on
-`ubuntu-24.04-arm`, four cores, `GOARCH=arm64`:
-
-| Figure | arm64 | Budget | Headroom |
-| --- | --- | --- | --- |
-| Cold compile, empty cache | 244 ms | 5 s (local ceiling) | 20× |
-| Compile from a warm cache | 12 ms | — | — |
-| Warm invocation, median of 18 | 1.765 ms | 50 ms (S1b) | 28× |
-| Warm invocation, worst of 18 | 1.993 ms | — | — |
-| Resident per added instance | 1.0 MiB | 20 MB (S1b) | 20× |
-| Process peak resident | 46.8 MiB | — | — |
-
-So the kill criteria are not close to being tested, which is the answer a spike hopes for: an
-in-process WASM runtime on a Pi-class arm64 host costs about two milliseconds and a megabyte per
-integration. The arm64 runner is in fact *faster* than the x86 development machine these were
-first taken on (244 ms against 470 ms cold, 1.8 ms against 3.3 ms warm), so a slower board would
-have to be an order of magnitude worse than this runner before anything here came under pressure.
-Cold compilation is worth the persistent cache directory: 244 ms down to 12 ms on a restart.
-
-These numbers reached CI only after the repository went public on 2026-09-17. Every job had
-aborted in six seconds since 2026-09-15 on a GitHub billing block, which is why the gate sat
-instrumented but unverified for a day; the block was account-wide and survived the visibility
-change until the payment state cleared, so it was never a minutes-quota problem.
-
-**What is still open is armv7 only.** GitHub has no 32-bit ARM runner, so the images published for
-`linux/arm/v7` carry a WASM runtime whose cost on that architecture is unmeasured - and 32-bit is
-where it is most likely to differ, since wazero's compiler and the guest's address space both
-change shape there. qemu would measure the emulator. Resolving it needs real hardware, or dropping
-armv7 to a build target that is published without a performance claim. Priority: after 0.1, and
-before describing armv7 Pi-class hosts as a supported target for WASM integrations. Declarative
-integrations are unaffected on every architecture; they never enter the WASM runtime.
-
-Nothing user-facing over-claimed this in the meantime: the README, `docs/getting-started.md` and
-`docs/docker.md` promise multi-arch *images*, never Pi-class *performance*.
 
 ### Markdown is prose-only, with no authoring syntax for structure
 

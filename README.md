@@ -53,6 +53,7 @@ Detailed engineering progress and remaining work live outside this README:
 - [Product rationale and dashboard comparison](docs/why-veduta.md)
 - [Theming and visual-customisation decision](docs/decisions/0002-theming-and-visual-customisation.md)
 - [Why cards are not extensible with JS, CSS, Mermaid or Adaptive Cards](docs/decisions/0004-card-expressiveness-and-the-presentation-contract.md)
+- [Why WebAssembly integrations are frozen](docs/decisions/0005-wasm-frozen.md)
 
 ## Quick start
 
