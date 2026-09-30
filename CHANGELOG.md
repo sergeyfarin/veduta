@@ -11,7 +11,11 @@ project is pre-1.0:
 > pinned in `veduta.lock.yaml`, so an incompatible plugin fails closed rather than misbehaving;
 > expect to rebuild and re-approve third-party plugins when upgrading.
 
-## Unreleased
+## 0.2.2 — 2026-09-30
+
+Upgrade instructions, a new light backdrop for the Veil preset, and the decision to freeze the
+WebAssembly plugin path. Upgrading from 0.2.x is the tag change alone - nothing needs approving
+again and there are no database migrations; the README's new Upgrading section has the command.
 
 ### Added
 

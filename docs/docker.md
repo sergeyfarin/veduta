@@ -14,7 +14,7 @@ Images are published to GitHub Container Registry for `linux/amd64`, `linux/arm6
 `linux/arm/v7`. `latest` is deliberately not published before 1.0, so name the version:
 
 ```sh
-docker pull ghcr.io/sergeyfarin/veduta:0.2.1
+docker pull ghcr.io/sergeyfarin/veduta:0.2.2
 ```
 
 The `linux/arm/v7` image is built and starts, but is **not performance-tested**: the speed and
@@ -106,7 +106,7 @@ it when the alternatives are closed to you:
 
 ```yaml
   veduta-init:
-    image: ghcr.io/sergeyfarin/veduta:0.2.1
+    image: ghcr.io/sergeyfarin/veduta:0.2.2
     user: "0:0"
     command: ["init", "--fix-permissions"]
     volumes:
@@ -137,14 +137,14 @@ server reload. `auth.admin.passwordHash` is an Argon2id PHC string, never a pass
 shell history and in every other user's `ps` — and writes the verifier to stdout and nothing else:
 
 ```sh
-docker run --rm -i ghcr.io/sergeyfarin/veduta:0.2.1 auth hash
+docker run --rm -i ghcr.io/sergeyfarin/veduta:0.2.2 auth hash
 ```
 
 Terminal input is echoed. To keep the password off the screen, or to script it:
 
 ```sh
 read -rs -p 'Password: ' pw && printf %s "$pw" | \
-  docker run --rm -i ghcr.io/sergeyfarin/veduta:0.2.1 auth hash
+  docker run --rm -i ghcr.io/sergeyfarin/veduta:0.2.2 auth hash
 ```
 
 The cost defaults to RFC 9106's second recommended configuration — 64 MiB, three passes, four
@@ -291,7 +291,7 @@ The image tag is pinned in `compose.yaml` on purpose, so an upgrade is a change 
 3. Name the new version on both services, then pull and recreate:
 
    ```sh
-   sed -i 's|ghcr.io/sergeyfarin/veduta:.*|ghcr.io/sergeyfarin/veduta:0.2.1|' compose.yaml
+   sed -i 's|ghcr.io/sergeyfarin/veduta:.*|ghcr.io/sergeyfarin/veduta:0.2.2|' compose.yaml
    docker compose pull
    docker compose up -d
    ```
@@ -317,7 +317,7 @@ sha256sum --check --ignore-missing SHA256SUMS
 ```
 
 Images carry build provenance and an SBOM attestation, readable with
-`docker buildx imagetools inspect ghcr.io/sergeyfarin/veduta:0.2.1`.
+`docker buildx imagetools inspect ghcr.io/sergeyfarin/veduta:0.2.2`.
 
 ---
 
