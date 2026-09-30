@@ -51,7 +51,7 @@ Detailed engineering progress and remaining work live outside this README:
 - [Architecture and security boundaries](docs/01-architecture.md)
 - [Design research and product scope](docs/00-review-and-prior-art.md)
 - [Product rationale and dashboard comparison](docs/why-veduta.md)
-- [Proposal: private activity feed and validation plan](docs/proposals/0001-private-activity-feed.md)
+- [Proposal: an activity feed, tested alongside the dashboard](docs/proposals/0001-private-activity-feed.md)
 - [Theming and visual-customisation decision](docs/decisions/0002-theming-and-visual-customisation.md)
 - [Why cards are not extensible with JS, CSS, Mermaid or Adaptive Cards](docs/decisions/0004-card-expressiveness-and-the-presentation-contract.md)
 - [Why WebAssembly integrations are frozen](docs/decisions/0005-wasm-frozen.md)

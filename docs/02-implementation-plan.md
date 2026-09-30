@@ -3,9 +3,10 @@
 Sized for a single developer (or one coding agent) working in 0.5–2 day slices. Every issue is
 independently implementable, testable and mergeable. Estimates are ideal developer-days.
 
-The [private activity feed proposal](proposals/0001-private-activity-feed.md) describes a separate,
-staged product experiment with acceptance gates and a limited pilot. It is proposed work, not an
-addition to the committed milestones below or a change to the default dashboard direction.
+The [private activity feed proposal](proposals/0001-private-activity-feed.md) runs alongside this
+plan, not inside it. The dashboard remains the main line of work. The feed's immediate step is a
+limited, time-boxed test that adds a built-in Activity card to the dashboard. Any later stage waits
+for that test's recorded result, and none reorders or delays the milestones below.
 
 ---
 
