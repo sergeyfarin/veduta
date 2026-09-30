@@ -13,7 +13,17 @@ project is pre-1.0:
 
 ## Unreleased
 
+### Added
+
+- Upgrade instructions, in the README and in full in `docs/docker.md`: the version is pinned in
+  `compose.yaml`, so `docker compose pull` alone does not upgrade - the file has to name the new
+  one.
+
 ### Changed
+
+- The Veil preset's light backdrop is Luigi Querena's *Campo di San Giovanni e Paolo, Venice*,
+  replacing the Canaletto, toned down the same way so text over it keeps its contrast. The dark
+  backdrop is unchanged.
 
 - **The WebAssembly plugin path is frozen** ([decision 0005](docs/decisions/0005-wasm-frozen.md)).
   It keeps working and keeps being secured, but gains no new host functions, ABI changes, SDKs or

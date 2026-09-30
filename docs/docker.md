@@ -274,6 +274,40 @@ image grants them nothing. **The plugin ABI is experimental and changes between 
 built against an older ABI is refused at load rather than run, so expect to rebuild and re-approve
 on upgrade.
 
+### Upgrading
+
+The image tag is pinned in `compose.yaml` on purpose, so an upgrade is a change to that file:
+`docker compose pull` on its own fetches the version the file already names, and nothing moves.
+
+1. Read the [changelog](../CHANGELOG.md) entry for every version you are skipping. Each release
+   says whether integrations need approving again and whether there are database migrations.
+2. Back up both directories. Migrations run on start and only go forward, so this backup is the
+   way back:
+
+   ```sh
+   tar czf veduta-backup-$(date +%F).tgz config data
+   ```
+
+3. Name the new version on both services, then pull and recreate:
+
+   ```sh
+   sed -i 's|ghcr.io/sergeyfarin/veduta:.*|ghcr.io/sergeyfarin/veduta:0.2.1|' compose.yaml
+   docker compose pull
+   docker compose up -d
+   ```
+
+4. Check it: `docker compose exec veduta veduta version` prints the new version. If the release
+   changed an integration you use, its cards are disabled and the dashboard's **Integrations** page
+   lists it with the command to approve it again.
+
+To roll back, restore the backup and the previous tag together; a newer database is not guaranteed
+to work with an older version.
+
+Every release also publishes a `major.minor` tag, such as `:0.2`, which follows that series' newest
+patch release. Naming it in `compose.yaml` lets `docker compose pull` pick up fixes by itself, at the
+cost of no longer choosing exactly when a new version arrives. A new minor version still needs the
+file changed.
+
 ### Verifying a download
 
 Release archives ship with `SHA256SUMS`:

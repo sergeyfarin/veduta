@@ -149,6 +149,19 @@ docker run --rm -p 127.0.0.1:8099:8099 ghcr.io/sergeyfarin/veduta:0.2.1 \
   serve --fixtures --listen 0.0.0.0:8099 --i-know-what-im-doing
 ```
 
+### Upgrading
+
+`compose.yaml` pins the version, so `docker compose pull` alone changes nothing. Back up `config/`
+and `data/`, read the [changelog](CHANGELOG.md) for the versions you are skipping, then:
+
+```sh
+sed -i 's|ghcr.io/sergeyfarin/veduta:.*|ghcr.io/sergeyfarin/veduta:0.2.1|' compose.yaml
+docker compose pull && docker compose up -d
+```
+
+[docs/docker.md](docs/docker.md#upgrading) has the full steps, rolling back, and the `:0.2` tag that
+follows patch releases by itself.
+
 ### Other ways to install
 
 [`compose.yaml`](compose.yaml) in this repository is the quick start's file plus a read-only Docker
