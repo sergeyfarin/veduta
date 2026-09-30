@@ -24,6 +24,12 @@ That model trades flexibility for inspectability. A template or frontend compone
 almost anything; a Veduta integration can express only what the broker and Widget Document allow.
 The restriction is the point, but whether it remains useful in practice is still being tested.
 
+An additional product hypothesis is recorded in the
+[private activity feed proposal](proposals/0001-private-activity-feed.md): present meaningful
+changes, attention items, and upcoming reminders across sources, while retaining current-status
+views. The proposal includes benefits, risks, required changes, and pilot decision criteria. It
+is an experiment to review, not shipped functionality or an accepted replacement for the dashboard.
+
 ## Comparison with established dashboards
 
 This is a comparison of architecture and product emphasis, not a security ranking. Each project

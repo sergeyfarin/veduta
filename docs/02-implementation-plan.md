@@ -3,6 +3,10 @@
 Sized for a single developer (or one coding agent) working in 0.5–2 day slices. Every issue is
 independently implementable, testable and mergeable. Estimates are ideal developer-days.
 
+The [private activity feed proposal](proposals/0001-private-activity-feed.md) describes a separate,
+staged product experiment with acceptance gates and a limited pilot. It is proposed work, not an
+addition to the committed milestones below or a change to the default dashboard direction.
+
 ---
 
 ## Part 0 — Contract freeze (0.5 d, before anything else)
