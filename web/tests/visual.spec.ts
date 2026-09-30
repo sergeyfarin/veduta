@@ -83,7 +83,7 @@ test('dashboard - veil light', async ({ page }) => {
 // directly: the CSS names a bundled file, and the browser gets it. Not a baseline, because what is
 // being checked is a request and a response, and pinning pixels to check a fetch is how a test ends
 // up failing for an unrelated reason.
-for (const [scheme, file] of [['light', 'canaletto'], ['dark', 'vernet']] as const) {
+for (const [scheme, file] of [['light', 'querena'], ['dark', 'vernet']] as const) {
   test(`veil ${scheme} loads its bundled backdrop`, async ({ page }) => {
     await loadDashboard(page, scheme, 'veil');
 

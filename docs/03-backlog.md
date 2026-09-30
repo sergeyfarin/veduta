@@ -115,10 +115,9 @@ Two gaps the 2026-09-13 amendment leaves open, neither blocking:
   tone the image down before configuring it, which is what the bundled ones do. A build step that
   did that toning for the operator is the real fix, and would need a decode/re-encode path the
   asset milestone is already planning. Priority: when that milestone lands.
-- **The Canaletto ships at 956x640**, the largest reproduction on Commons of that exact painting.
-  It is soft on a large display, and more so now that the scrim only holds back 18% of it. Not
-  visible in review at 1440px, plausible above that. Replace it if a higher-resolution
-  public-domain scan appears.
+- **The light background ships at 1600x1112** after the 2026-09-30 replacement with Luigi
+  Querena's *Campo di San Giovanni e Paolo, Venice*. This improves on the former 956x640
+  Canaletto reproduction. Revisit if a higher-resolution scan is selected for larger displays.
 
 Priority: on demand. Nothing here blocks anything; the entry is the record of a decision not to
 build, which is easy to forget and expensive to rediscover.

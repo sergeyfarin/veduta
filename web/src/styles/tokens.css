@@ -121,8 +121,8 @@ body {
  * docs/decisions/0002-theming-and-visual-customisation.md.
  *
  * The backdrop is a veduta: the Italian genre of wide topographical views this project is named
- * after. Each colour scheme gets the painting that belongs to its light - Canaletto's daylit Molo
- * seen from the Bacino di San Marco, and Vernet's moonlit entrance to the port of Palermo. Both
+ * after. Each colour scheme gets the painting that belongs to its light - Querena's daylit Campo
+ * di San Giovanni e Paolo in Venice, and Vernet's moonlit entrance to the port of Palermo. Both
  * are public domain and both ship pre-toned: desaturated and contrast-compressed toward the
  * scheme's own scrim colour at encode time, not with a CSS filter. A filter on the root would cost
  * a composited layer on every paint and could not be checked by a test; a baked file can.
@@ -166,12 +166,12 @@ body {
 :root[data-appearance="veil"] {
   --v-veil-alpha: 0.55;
   --v-veil-tint: 255 255 255;
-  --v-backdrop-from: #cdd6e0;   /* daylit sky, inside the Canaletto's channel box */
+  --v-backdrop-from: #cdd6e0;   /* daylit sky, inside Querena's channel box */
   --v-backdrop-to: #e4dcd0;     /* warm horizon haze, likewise */
 
   --v-scrim-alpha: 0.18;
   --v-scrim: 232 238 246;
-  --v-backdrop-image: url("./backdrops/canaletto-molo.jpg");
+  --v-backdrop-image: url("./backdrops/querena-san-giovanni-paolo.jpg");
 
   --v-surface: rgb(var(--v-veil-tint) / var(--v-veil-alpha));
   /* Nested panels are MORE opaque than the card, never less: stacked on the card their effective
@@ -214,7 +214,7 @@ body {
     --v-backdrop-from: #cdd6e0;
     --v-backdrop-to: #e4dcd0;
     --v-scrim: 232 238 246;
-    --v-backdrop-image: url("./backdrops/canaletto-molo.jpg");
+    --v-backdrop-image: url("./backdrops/querena-san-giovanni-paolo.jpg");
     --v-muted: #4f4f58;
     --v-faint: #55555e;
     --v-border: #a9b2c0;

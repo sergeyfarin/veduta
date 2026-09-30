@@ -309,6 +309,15 @@ No user-authored CSS. No theme editor. No public knobs for surface alpha, scrim,
 blur radius. No server-side storage of anyone's preference. The contrast matrix, and the
 worst-case evaluation that backs it for any image, are the same.
 
+## 2026-09-30 amendment: selected light background
+
+The light scheme now uses Luigi Querena's *Campo di San Giovanni e Paolo, Venice*, from the
+user-selected 1600x1112 reproduction. It replaces the lower-resolution Canaletto image;
+Vernet's dark background is retained. The light image is desaturated and contrast-compressed
+before JPEG encoding, with the same centered `cover` layout and pixel-based tone, contrast and
+fallback-gradient contracts. Source and encoding details are recorded in
+`web/src/styles/backdrops/README.md`.
+
 ## Revisit triggers
 
 - **Public appearance options** are reconsidered when users ask for a specific

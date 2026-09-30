@@ -123,5 +123,5 @@ here is legally required; provenance for a shipped binary asset is worth recordi
 
 | Source | Version | Licence |
 | --- | --- | --- |
-| Canaletto, *The Molo, Venice, from the Bacino di San Marco* (1730s) | Wikimedia Commons, retrieved 2026-09-13 | Public domain (PD-old-100, PD-Art) |
 | Joseph Vernet, *Entrance to the Port of Palermo by Moonlight* (1769) | Wikimedia Commons, retrieved 2026-09-13 | Public domain (PD-old-100, PD-Art) |
+| Luigi Querena, *Campo di San Giovanni e Paolo, Venice* | [User-selected reproduction](https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEgORNKDN55oVEu_dekL-x7fyowVfFGRnrAJU1I0P2PrPmPjGyIoiM-2jblgJZFwvkHLhDH8QO23yC2f0LdDakLWKgXQO_pelrg683GvUv5tFIRubRH8xMfeUGqZv22xd7NdpF9B38efW_E/s1600/Luigi-Querena-Campo-di-San-Giovanni-e-Paolo-Venice.jpg), retrieved 2026-09-30 | Public domain artwork; faithful reproduction (PD-old-100, PD-Art) |
