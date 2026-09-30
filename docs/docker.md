@@ -221,9 +221,12 @@ in the image: without `/data` there, Docker would create the volume `root:root` 
 report the failure as `unable to open database file (out of memory)` — which says nothing about
 permissions.
 
-`veduta.lock.yaml` is written mode `0600`, owned by the uid that wrote it. When that uid is not
-yours — because you dropped `user:` and let the server run as 65532 — reading it back on the host
-to commit it beside `veduta.yaml`, as you should, takes `sudo`.
+`veduta.lock.yaml` is written mode `0640`, like the `veduta.yaml` that `veduta init` writes: the
+owner can write it, its group can read it, and nobody else can do either. When the server runs as a
+uid that is not yours — because you dropped `user:` and let it run as 65532 — you can still read it
+to commit it beside `veduta.yaml` if you share its group, which is what `--fix-permissions` sets
+up. Only the owner can change it, and that is the part that matters: whoever can write the lock can
+widen what an integration is allowed to do. (0.2.0 and earlier wrote it `0600`.)
 
 ### Hardening, and exposure
 

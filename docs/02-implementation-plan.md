@@ -1751,13 +1751,14 @@ under "Requested, not approved" even when the digest matches, from the example l
 integration in each state. **Found on the way:** `docs/docker.md` described "the dashboard's approve
 button", which never existed; and the auth-disabled banner used an undefined colour token, so its
 warning tint had never rendered. Both fixed.
-**M5 · Small debts** · 0.5 d · **PROPOSED** — two entries whose own text says to fold them into
-the next change that touches their area, which this is: validate `server.dataDir` at config load,
-so a bad value is reported with its field name and path rather than as a SQLite error
-([entry](03-backlog.md#a-relative-serverdatadir-produced-a-sqlite-error-naming-neither-the-setting-nor-the-path));
-and settle whether `veduta.lock.yaml` is written `0600` or `0644`
-([entry](03-backlog.md#veduta-lock-yaml-is-written-0600-by-a-uid-the-operator-is-not)), a
-decision and not a fix.
+**M5 · Small debts** · 0.5 d · **DONE, 2026-09-30** — the two entries whose own text said to fold
+them into the next change in their area. A bad data directory is reported before SQLite sees it,
+naming the setting and the absolute path - refused by `serve`, warned about by `--check-config`,
+which never creates it - [entry](03-backlog-resolved.md#a-relative-serverdatadir-produced-a-sqlite-error-naming-neither-the-setting-nor-the-path).
+The lock file is written `0640`, matching `veduta.yaml`: group-readable so it can be committed, and
+owner-only to write -
+[entry](03-backlog-resolved.md#veduta-lock-yaml-was-written-0600-by-a-uid-the-operator-is-not).
+Released as 0.2.1.
 **M6 · Decisions to record, no code** — **DECIDED, 2026-09-29**, all three as proposed.
 The [WASM review](03-backlog.md#does-wasm-add-enough-value-to-justify-further-development) runs
 after M3, since the rain and energy candidates it is waiting on need that block to be judged at

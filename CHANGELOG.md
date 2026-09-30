@@ -11,6 +11,24 @@ project is pre-1.0:
 > pinned in `veduta.lock.yaml`, so an incompatible plugin fails closed rather than misbehaving;
 > expect to rebuild and re-approve third-party plugins when upgrading.
 
+## Unreleased
+
+### Changed
+
+- `veduta.lock.yaml` is written mode `0640` instead of `0600` - owner-writable and group-readable,
+  like `veduta.yaml` - so an operator in the file's group can read and commit the record of what
+  they approved when the server runs as another uid. It holds no secret, and only its owner can
+  write it.
+
+### Fixed
+
+- A data directory that is a file, sits under a file, cannot be created, or is not writable is now
+  reported before the database opens, naming the setting that chose it (`server.dataDir` or
+  `--data-dir`) and the absolute path it resolved to. It used to surface as a SQLite error naming
+  neither. `veduta --check-config` checks an explicitly set data directory too - without creating
+  it, and as a warning, since a configuration is often checked away from the host it is for - and
+  accepts `--data-dir`.
+
 ## 0.2.0 — 2026-09-29
 
 Charts, an integrations page, and integrations that can be pointed at one thing. A `series` block

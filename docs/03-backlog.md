@@ -28,10 +28,8 @@ priority (which milestone should absorb it, or "before X" for a hard blocker).
 | [`CacheEntries` can't represent an explicit zero](#manifestloadlimitscacheentries-cant-represent-an-explicit-zero) | Integrations | When declarative caching lands |
 | [Approve flow can't grant a limit above its default](#the-documented-approve-flow-has-no-way-to-grant-a-limit-above-its-documented-default) | Docs | Low |
 | [Go plugin SDK needs a WASI-free toolchain](#go-plugin-sdk-requires-a-maintained-wasi-free-toolchain) | Plugins | Parked; subject to WASM review |
-| [The lock file is written 0600, but is meant to be committed](#veduta-lock-yaml-is-written-0600-by-a-uid-the-operator-is-not) | Deployment | Low |
 | [ARM runtime performance is measured on arm64 only](#arm-runtime-performance-is-measured-on-arm64-only) | Plugins | armv7 deferred |
 | [Markdown has no authoring syntax for structure](#markdown-is-prose-only-with-no-authoring-syntax-for-structure) | Frontend | Deferred |
-| [Nothing validates `server.dataDir` at config load](#a-relative-serverdatadir-produced-a-sqlite-error-naming-neither-the-setting-nor-the-path) | Config | Low |
 
 ---
 
@@ -290,22 +288,6 @@ with no forbidden imports and passes the G1 conformance suite plus S1a ARM
 budgets. The Go backend is a separate decision and remains in place; see
 `docs/decisions/0001-backend-language.md`.
 
-### `veduta.lock.yaml` is written 0600 by a uid the operator is not
-
-Found while testing `compose.yaml` against a real approval, 2026-09-12. `integrations.WriteLock`
-creates the file mode `0600`, owned by whoever ran the approval - uid 65532 in a container. The
-file's own header tells the reader to "commit it alongside veduta.yaml", and its content is
-digests, capabilities, routes and limits with no secret in it, so the operator being unable to
-read their own record of granted authority without `sudo` is friction with no security return.
-
-The counter-argument is real and is why this is not simply a bug: the lock file *is* the grant
-record, so anyone who can write it can widen an integration's authority, and `0600` owned by the
-runtime user is a defensible answer to that. But `0600` restricts reading as well as writing, and
-`0644` would keep the write restriction while letting the operator diff and commit it.
-
-Priority: low, and a decision rather than a fix - settle it the next time the approval flow is
-touched. Documented as a consequence in `docs/docker.md` in the meantime.
-
 ### ARM runtime performance is measured on arm64 only
 
 G1's sandbox half was always evidenced: the conformance suite is real and runs in CI - no
@@ -393,33 +375,6 @@ Deferred with no work planned. The trigger to revisit is a concrete authoring re
 current card types cannot express, not the general appeal of the idea - recorded as a revisit
 condition on [decision 0004](decisions/0004-card-expressiveness-and-the-presentation-contract.md),
 which also records why the binding layer such proposals arrive with is not wanted.
-
-### A relative `server.dataDir` produced a SQLite error naming neither the setting nor the path
-
-Found while validating the README quick start against a real run, 2026-09-21.
-`storage.Open` built its DSN as `(&url.URL{Scheme: "file", Path: path}).String()`, and `url.URL`
-renders a path with no leading slash as an *authority* rather than a path: `data/veduta.db` became
-`file://data/veduta.db`. SQLite then refused it with
-
-```
-open storage: sqlite PRAGMA journal_mode=WAL: SQL logic error: invalid uri authority: data (1)
-```
-
-which names neither `server.dataDir` nor the directory, and reads like database corruption rather
-than a path that needed one more slash. Every relative value failed the same way, including
-`Open`'s own `dataDir = "data"` fallback for the empty string, so the documented default was
-unreachable. `docs/getting-started.md` recommended `dataDir: ./data`, a configuration that could
-not start; the container images were unaffected because `/data` and `/var/lib/veduta` are both
-absolute, which is why this survived the packaging work.
-
-**Fixed in the same change that recorded this.** `Open` resolves with `filepath.Abs` before
-building the URL, since an absolute path has no authority to mistake, and
-`TestRelativeDataDirOpens` covers `./data`, `data` and `nested/data` against a working write.
-
-The wider gap is unaddressed: the error surfaced from SQLite rather than from Veduta, because
-nothing validates `dataDir` at config-load time, where a bad value could be reported with its
-field name and its path. A `--check-config` that opened the data directory would have caught it.
-Priority: low on its own, worth folding into whatever next touches configuration validation.
 
 ### A pipeline step cannot read 404 as absent
 

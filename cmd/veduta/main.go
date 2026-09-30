@@ -103,18 +103,49 @@ func checkConfig(args []string) error {
 	fs := flag.NewFlagSet("--check-config", flag.ContinueOnError)
 	path := fs.String("config", "veduta.yaml",
 		"path to the primary config file; a sibling conf.d/*.yaml is loaded automatically")
+	dataDirFlag := fs.String("data-dir", "",
+		"also check this data directory, as `serve --data-dir` would use it")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	_, diags := config.LoadPath(*path)
+	snapshot, diags := config.LoadPath(*path)
 	if len(diags) > 0 {
 		fmt.Fprintln(os.Stderr, diags.String())
 	}
 	if diags.HasErrors() {
 		os.Exit(1)
 	}
+	// Only a data directory someone actually chose. Left unset, the default depends on how serve
+	// is started - the compose file passes --data-dir /data - so there is nothing to check here.
+	// Checked without creating it, and a warning rather than a failure: a configuration is often
+	// checked somewhere other than the host it is for - a workstation, CI - where /var/lib/veduta
+	// legitimately does not exist. serve, which runs where it matters, refuses outright.
+	if snapshot != nil && (snapshot.Config.Server.DataDir != "" || *dataDirFlag != "") {
+		dir, source := effectiveDataDir(snapshot.Config.Server.DataDir, *dataDirFlag, *path)
+		if abs, err := storage.CheckDataDir(dir, false); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: data directory (%s): %v\n"+
+				"  serve will refuse to start with this unless it is run where the directory is usable.\n", source, err)
+		} else {
+			fmt.Println("data directory OK:", abs)
+		}
+	}
 	fmt.Println("config OK:", *path)
 	return nil
+}
+
+// effectiveDataDir is the data directory serve will use, and a description of what chose it for
+// an error message: the --data-dir flag wins over server.dataDir, and neither means Open's default.
+func effectiveDataDir(configured, flagValue, configPath string) (dir, source string) {
+	switch {
+	case flagValue != "":
+		return flagValue, "--data-dir " + flagValue
+	case configured != "" && filepath.IsAbs(configured):
+		return configured, fmt.Sprintf("server.dataDir %q in %s", configured, configPath)
+	case configured != "":
+		return configured, fmt.Sprintf("server.dataDir %q in %s, relative to the working directory", configured, configPath)
+	default:
+		return "", "the default ./data, relative to the working directory"
+	}
 }
 
 func isFlag(s string) bool { return len(s) > 0 && s[0] == '-' }
@@ -195,9 +226,11 @@ func serve(args []string) error {
 
 		snapshot := store.Snapshot()
 		cfg.AuthMode = snapshot.Config.Auth.Mode
-		dir := snapshot.Config.Server.DataDir
-		if *dataDir != "" {
-			dir = *dataDir
+		dir, source := effectiveDataDir(snapshot.Config.Server.DataDir, *dataDir, *configPath)
+		// Checked before SQLite sees it, so a bad value is reported with the setting that chose it
+		// and the absolute path it resolved to, instead of as a database error naming neither.
+		if _, err := storage.CheckDataDir(dir, true); err != nil {
+			return fmt.Errorf("data directory (%s): %w", source, err)
 		}
 		db, err := storage.Open(ctx, dir)
 		if err != nil {

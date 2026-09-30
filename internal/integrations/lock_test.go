@@ -121,3 +121,20 @@ func TestWriteLock_NoTempFileLeftBehindOnSuccess(t *testing.T) {
 		t.Fatalf("dir contains %v, want exactly veduta.lock.yaml (no leftover temp file)", entries)
 	}
 }
+
+// The lock is the grant record: readable by the owner's group, so an operator whose server runs as
+// another uid can still diff and commit it, and writable only by its owner, since whoever can write
+// it can widen what an integration may do. Never world-readable, like veduta.yaml beside it.
+func TestWriteLock_ModeIsOwnerWriteGroupRead(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "veduta.lock.yaml")
+	if err := integrations.WriteLock(path, &integrations.Lock{Version: 1, Integrations: map[string]*integrations.LockEntry{}}); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0o640 {
+		t.Fatalf("lock file mode = %#o, want 0640", got)
+	}
+}

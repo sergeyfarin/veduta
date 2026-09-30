@@ -15,6 +15,9 @@ import (
 // - docs/01-architecture.md section 6.
 const LockFileName = "veduta.lock.yaml"
 
+// LockFileMode is the permission WriteLock gives the lock file: owner read-write, group read.
+const LockFileMode os.FileMode = 0o640
+
 // LockEntry is one integration's approval record - schemas/integration-lock.v1.schema.json's
 // per-id object. Field names match the schema exactly.
 type LockEntry struct {
@@ -114,7 +117,11 @@ func WriteLock(path string, lock *Lock) error {
 	if err := tmp.Close(); err != nil {
 		return fmt.Errorf("closing temp file: %w", err)
 	}
-	if err := os.Chmod(tmpPath, 0o600); err != nil {
+	// 0640, the mode `veduta init` gives veduta.yaml. The lock holds no secret - digests, routes,
+	// capabilities and limits - and its own header says to commit it, so 0600 made a file owned by
+	// another uid unreadable to the operator for no security return (docs/03-backlog-resolved.md).
+	// Writing stays owner-only, which is what matters: whoever can write the lock can widen a grant.
+	if err := os.Chmod(tmpPath, LockFileMode); err != nil {
 		return fmt.Errorf("setting permissions: %w", err)
 	}
 	if err := os.Rename(tmpPath, path); err != nil {

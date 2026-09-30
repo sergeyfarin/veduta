@@ -1111,3 +1111,65 @@ tests.
 The second consequence recorded above - that nothing exercises the REST *approve* sequence as a
 browser client would - is unchanged, and deliberately so: there is still no browser client for it.
 
+### A relative `server.dataDir` produced a SQLite error naming neither the setting nor the path
+
+Found while validating the README quick start against a real run, 2026-09-21.
+`storage.Open` built its DSN as `(&url.URL{Scheme: "file", Path: path}).String()`, and `url.URL`
+renders a path with no leading slash as an *authority* rather than a path: `data/veduta.db` became
+`file://data/veduta.db`. SQLite then refused it with
+
+```
+open storage: sqlite PRAGMA journal_mode=WAL: SQL logic error: invalid uri authority: data (1)
+```
+
+which names neither `server.dataDir` nor the directory, and reads like database corruption rather
+than a path that needed one more slash. Every relative value failed the same way, including
+`Open`'s own `dataDir = "data"` fallback for the empty string, so the documented default was
+unreachable. `docs/getting-started.md` recommended `dataDir: ./data`, a configuration that could
+not start; the container images were unaffected because `/data` and `/var/lib/veduta` are both
+absolute, which is why this survived the packaging work.
+
+**Fixed in the same change that recorded this.** `Open` resolves with `filepath.Abs` before
+building the URL, since an absolute path has no authority to mistake, and
+`TestRelativeDataDirOpens` covers `./data`, `data` and `nested/data` against a working write.
+
+The wider gap is unaddressed: the error surfaced from SQLite rather than from Veduta, because
+nothing validates `dataDir` at config-load time, where a bad value could be reported with its
+field name and its path. A `--check-config` that opened the data directory would have caught it.
+Priority: low on its own, worth folding into whatever next touches configuration validation.
+
+**The wider gap resolved 2026-09-30, in Phase M5.** `storage.CheckDataDir` runs before SQLite
+sees the value: a file, a path through a file, a directory that cannot be created, or one this uid
+cannot write are each reported with the absolute path, and `serve` prefixes the setting that chose
+it (`server.dataDir "…" in <file>, relative to the working directory`, or `--data-dir`). Writability
+is tested by creating a file, since mode bits say nothing about read-only mounts. It lives at serve
+and `--check-config` rather than in the config loader, because the loader runs on every reload and
+the data directory is fixed at startup. `--check-config` checks it only when one was chosen - the
+compose file passes `--data-dir /data`, so an unset value tells a check nothing - never creates it,
+and only warns: the first run of the suite failed on `examples/veduta.yaml`'s `/var/lib/veduta`,
+which a workstation does not have and should not need to check a configuration meant for a server. The schema's description of `server.dataDir` now says a relative path resolves against the
+working directory, not the config file, which is the one resolution rule in the file that differs.
+
+### `veduta.lock.yaml` was written 0600 by a uid the operator is not
+
+Found while testing `compose.yaml` against a real approval, 2026-09-12. `integrations.WriteLock`
+creates the file mode `0600`, owned by whoever ran the approval - uid 65532 in a container. The
+file's own header tells the reader to "commit it alongside veduta.yaml", and its content is
+digests, capabilities, routes and limits with no secret in it, so the operator being unable to
+read their own record of granted authority without `sudo` is friction with no security return.
+
+The counter-argument is real and is why this is not simply a bug: the lock file *is* the grant
+record, so anyone who can write it can widen an integration's authority, and `0600` owned by the
+runtime user is a defensible answer to that. But `0600` restricts reading as well as writing, and
+`0644` would keep the write restriction while letting the operator diff and commit it.
+
+Priority: low, and a decision rather than a fix - settle it the next time the approval flow is
+touched. Documented as a consequence in `docs/docker.md` in the meantime.
+
+**Decided and resolved 2026-09-30, in Phase M5: `0640`.** The same mode `veduta init` gives
+`veduta.yaml`, which is the more sensitive of the two files (it holds the password hash), so the
+lock has no reason to be stricter. Group-read lets the operator read and commit it when the server
+runs as another uid, the case `--fix-permissions`' group-writable directory exists for; write stays
+owner-only, which is the property the counter-argument above was about; other local users still
+cannot read it. `integrations.LockFileMode` names it and `TestWriteLock_ModeIsOwnerWriteGroupRead`
+pins it. An existing lock keeps its mode until the next approval rewrites it.

@@ -110,7 +110,7 @@ Unknown fields are rejected. A required field can still be conditional on a sele
 | `sections[].title` | string | no | — | maxLength=64 | — |
 | `server` | object | no | — | — | — |
 | `server.baseURL` | string | no | — | — | — |
-| `server.dataDir` | string | no | — | — | — |
+| `server.dataDir` | string | no | — | — | Directory for the SQLite database and the asset and icon caches. A relative path resolves against the working directory serve is started in, not against this file; --data-dir overrides it. Unset means ./data. serve checks it before opening the database and names this setting and the absolute path if it is a file, cannot be created, or is not writable; --check-config checks it too, without creating it, and warns rather than fails, since a configuration is often checked away from its host. |
 | `server.listen` | string | no | "127.0.0.1:8099" | — | Defaults to LOOPBACK. Binding a non-loopback address is refused while auth.mode is none, and refused entirely until the authentication milestone (H1) has landed in the running build. |
 | `server.trustedProxies` | array | no | — | — | — |
 | `server.trustedProxies[]` | string | no | — | — | — |
