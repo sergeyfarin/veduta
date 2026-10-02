@@ -119,7 +119,7 @@ func WriteLock(path string, lock *Lock) error {
 	}
 	// 0640, the mode `veduta init` gives veduta.yaml. The lock holds no secret - digests, routes,
 	// capabilities and limits - and its own header says to commit it, so 0600 made a file owned by
-	// another uid unreadable to the operator for no security return (docs/03-backlog-resolved.md).
+	// another uid unreadable to the operator for no security return (docs/archive/03-backlog-resolved.md).
 	// Writing stays owner-only, which is what matters: whoever can write the lock can widen a grant.
 	if err := os.Chmod(tmpPath, LockFileMode); err != nil {
 		return fmt.Errorf("setting permissions: %w", err)

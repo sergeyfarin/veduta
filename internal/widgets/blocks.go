@@ -117,7 +117,7 @@ type BlockActions struct {
 // card's own retained signals, and the core attaches their points to the card state (the
 // integration never reads stored history). The schema requires exactly one. A nil V is a gap and
 // is never interpolated across; points are strictly increasing in T, which the validator checks.
-// Added in Phase M3; see docs/03-backlog-resolved.md.
+// Added in Phase M3; see docs/archive/03-backlog-resolved.md.
 type BlockSeries struct {
 	Title    string         `json:"title,omitempty"`
 	Emphasis Emphasis       `json:"emphasis,omitempty"`

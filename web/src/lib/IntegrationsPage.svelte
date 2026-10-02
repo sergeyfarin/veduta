@@ -6,7 +6,7 @@
    * Phase M4: a read-only view of every integration's authority. It shows what each one is granted
    * and what it asks for beyond that, and says which command approves it - it never approves
    * anything itself. Approval stays at the CLI, where the operator is at a shell on the host and
-   * the security model is most defensible (docs/03-backlog-resolved.md, "The approval API had no
+   * the security model is most defensible (docs/archive/03-backlog-resolved.md, "The approval API had no
    * client"). A load callback is injectable so the component can be tested without a server.
    */
   let { load = loadIntegrations }: { load?: () => Promise<IntegrationView[]> } = $props();

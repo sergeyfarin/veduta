@@ -46,7 +46,7 @@ var ErrPathTraversal = errors.New("connections: path is absolute, scheme-bearing
 // absolute URL or scheme-bearing path (http://, //host - a request "path" that is secretly a
 // full URL to somewhere else), and once that is ruled out, p's actual path component is run
 // through routepath.Canonicalise - milestone D1b's one shared route-canonicalisation routine,
-// used here instead of an ad-hoc check (docs/02-implementation-plan.md's D1b AC: "no other
+// used here instead of an ad-hoc check (docs/archive/02-implementation-plan.md's D1b AC: "no other
 // package in the tree performs path comparison or unescaping"). Canonicalise rejects any ".."
 // or encoded separator on its own, in isolation, for both base's path and p - so the two
 // canonical strings can simply be concatenated afterwards with no further cleaning step and no

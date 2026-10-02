@@ -22,7 +22,7 @@ memory of the WebAssembly runtime were measured on arm64 only, because GitHub ha
 runner. Declarative integrations never enter that runtime and are unaffected on every
 architecture. Until it is measured on real hardware, treat WebAssembly integrations (today, the
 Jellyfin card) on a 32-bit Raspberry Pi as untested rather than supported. The
-[backlog entry](03-backlog-resolved.md#arm-runtime-performance-was-measured-on-arm64-only) has the arm64
+[backlog entry](archive/03-backlog-resolved.md#arm-runtime-performance-was-measured-on-arm64-only) has the arm64
 numbers.
 
 The image is [distroless](https://github.com/GoogleContainerTools/distroless): no shell, no

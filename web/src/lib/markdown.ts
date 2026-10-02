@@ -14,7 +14,7 @@
 //
 // Never produces an HTML string. Every node here is rendered by TextBlock.svelte as a real
 // Svelte element tree - {@html} appears nowhere in this project, and a lint rule plus a CI grep
-// enforce that (see B3 in docs/02-implementation-plan.md).
+// enforce that (see B3 in docs/archive/02-implementation-plan.md).
 
 export type InlineNode =
   | { kind: 'text'; value: string }

@@ -261,7 +261,7 @@ func (m *Manager) refresh(ctx context.Context, d Definition) error {
 		// secret came back through the data path - a compromised or merely careless upstream
 		// echoing a header, say. Drop the document rather than storing or serving it, and fail
 		// the run so the card shows an error (and the breaker eventually opens) instead of
-		// silently rendering nothing. This is the production caller docs/03-backlog-resolved.md's
+		// silently rendering nothing. This is the production caller docs/archive/03-backlog-resolved.md's
 		// "ContainsSecretInDocument had no production caller" entry asked for; the log scrubber
 		// and CI's secret-response scan stay as the layers around it.
 		doc = widgets.Document{}

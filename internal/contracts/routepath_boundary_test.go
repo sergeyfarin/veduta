@@ -11,7 +11,7 @@ import (
 )
 
 // pathHandlingCalls matches the standard-library functions that decode, clean or compare a path
-// - exactly what docs/02-implementation-plan.md's D1b milestone means by "path comparison or
+// - exactly what docs/archive/02-implementation-plan.md's D1b milestone means by "path comparison or
 // unescaping". Matched by call syntax (name followed by "("), not by import, so a package that
 // imports "path" or "net/url" for an unrelated reason (building a URL, say) is not flagged for
 // merely importing it.

@@ -56,7 +56,7 @@ made when a concrete integration needs it; none is committed by this decision.
 rewriting it gains users nothing. Decision 0003's conditions for migrating it are unchanged.
 
 **4. The Go SDK will not be built.** It existed only for a WASM path that grows; see
-[the resolved entry](../03-backlog-resolved.md#go-plugin-sdk-would-have-required-a-maintained-wasi-free-toolchain).
+[the resolved entry](../archive/03-backlog-resolved.md#go-plugin-sdk-would-have-required-a-maintained-wasi-free-toolchain).
 
 **5. armv7 is disclosed, not measured.** `docs/docker.md` says the armv7 image is not
 performance-tested for WASM integrations. Buying hardware to measure a frozen path is not justified.

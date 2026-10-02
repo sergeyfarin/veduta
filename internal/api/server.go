@@ -103,7 +103,8 @@ type Server struct {
 	// integrations) could each read the same lock, add their own entry to their own in-memory
 	// copy, and the second WriteLock silently discards the first's addition. This closes the
 	// in-process race; a concurrent writer in a different process (the CLI, running at the same
-	// moment) is a separate, recorded gap - see docs/03-backlog.md.
+	// moment) is a separate, recorded gap - see
+	// https://github.com/sergeyfarin/veduta/issues/7.
 	approveMu sync.Mutex
 	hub       *sseHub
 }
@@ -373,7 +374,7 @@ func (s *Server) handleNotices(w http.ResponseWriter, _ *http.Request) {
 // maxRequestBodyBytes bounds every request body server-wide - milestone A3's own "Creates" list
 // promised "max header/body bytes" alongside the header limit already enforced by
 // http.Server.MaxHeaderBytes, but nothing ever added the body half; found in review, still
-// self-documented in docs/02-implementation-plan.md as an A3 gap ("Request-id middleware and
+// self-documented in docs/archive/02-implementation-plan.md as an A3 gap ("Request-id middleware and
 // config flags remain" did not mention this one). 1 MiB is generous for every JSON body this API
 // accepts today (an approval's grants list is the largest, and still far under this).
 const maxRequestBodyBytes = 1 << 20

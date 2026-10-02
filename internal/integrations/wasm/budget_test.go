@@ -56,7 +56,8 @@ const warmInvocations = 24
 // to run it on, and emulation would measure the emulator.
 //
 // Every measurement is logged whether or not it passes, so the CI log is the record of the numbers
-// rather than merely of the verdict. See docs/03-backlog.md for what they were outstanding for.
+// rather than merely of the verdict. See docs/archive/03-backlog-resolved.md
+// ("ARM runtime performance was measured on arm64 only") for what they were outstanding for.
 func TestPluginRuntimePiClassBudget(t *testing.T) {
 	// The gate's own CI job runs without -race for exactly this reason; the repository-wide
 	// `go test -race ./...` still compiles and type-checks this file, it simply does not time it.

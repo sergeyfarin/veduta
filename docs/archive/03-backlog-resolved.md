@@ -1,9 +1,13 @@
 # 03 — Resolved gaps and issues
 
-The closed half of [03-backlog.md](03-backlog.md). Entries are kept rather than deleted: each one
+The closed half of the former `docs/03-backlog.md`. Entries are kept rather than deleted: each one
 records what the gap was, which milestone found it, and where the fix actually landed, so the
 history of "we knew about this since when" survives and a reader chasing a `docs/03-backlog.md`
-pointer in the source finds the answer here.
+pointer in the source or the history finds the answer here.
+
+**Archived 2026-10-02.** Open gaps are now tracked as
+[GitHub issues](https://github.com/sergeyfarin/veduta/issues); the ten entries still open on that
+date became issues #1-#10. This file is no longer added to: a closed issue is its own record.
 
 Grouped by where the fix landed, not by when the gap was found. Nothing here needs action.
 
@@ -318,7 +322,7 @@ schema and in at least one Go type but silently unenforced by the code that shou
 them. The review's proposed fix (unify into one type) is declined: each shape earns its difference
 from a real, previously-made decision - `integrations.Limits` needs pointer fields specifically so
 an explicit `cacheEntries: 0` is distinguishable from "unset" (see the `CacheEntries can't
-represent an explicit zero` entry in [03-backlog.md](03-backlog.md), still open, for the one place
+represent an explicit zero` entry, now [issue #9](https://github.com/sergeyfarin/veduta/issues/9), still open, for the one place
 that distinction still isn't threaded through), `manifestload.Limits` is post-reconciliation and
 has no such ambiguity to represent, and
 `capabilities.Limits` is intentionally narrower because the broker never enforces the declarative
@@ -603,8 +607,8 @@ type-asserts to `map[string]any` and the recursion can reach one through a neste
 `TestInvokeWithNullParamsAppliesDefaultsInsteadOfPanicking` covers `null`, `{}` and no bytes at
 all, and fails against the old code with the original panic.
 
-That the panic was *fatal* is tracked separately and is still open - see
-[03-backlog.md](03-backlog.md).
+That the panic was *fatal* was tracked separately and has since been closed - see
+[the entry below](#a-panic-inside-a-card-refresh-killed-the-process-and-leaked-its-single-flight-entry).
 
 ### No committed compose.yaml, despite A4 planning one
 
@@ -709,7 +713,7 @@ The proof is that a real integration works through the runtime, SDK, HTTP broker
 it does not need to prove that the same integration is impossible in the declarative DSL.
 This preserves the existing PascalCase tolerance, scenario coverage and real-module ARM64
 budget workload without a release-time rewrite. No replacement proof case or declarative
-migration is required for 0.1. See [decision 0003](decisions/0003-jellyfin-wasm-proof-case.md)
+migration is required for 0.1. See [decision 0003](../decisions/0003-jellyfin-wasm-proof-case.md)
 for scope and conditions for revisiting it.
 
 ### The quick start named an image that could not run it
@@ -942,7 +946,7 @@ Both integrations it cost were rewritten: `plugins/arcane` 0.2.0 takes `environm
 `"0"`) against `GET /api/environments/*/containers`, and `plugins/homeassistant` 0.2.0's `sensor`
 reads `GET /api/states/{entityId}` instead of the whole state set. Both need re-approval, since
 their routes changed. A missing Home Assistant entity is now a 404 that fails the card; see
-[the new entry on reading 404 as absent](03-backlog.md#a-pipeline-step-cannot-read-404-as-absent).
+[the new entry on reading 404 as absent](https://github.com/sergeyfarin/veduta/issues/8).
 
 The work also found, and fixed first, a real route bypass through `?` and `#` in a path segment;
 see the entry above this one.
@@ -981,7 +985,7 @@ Found 2026-09-16 while assessing an external design recommendation to embed Merm
 as card content. The assessment's incidental finding matters more than its subject: the Widget
 Document has no `chart`, `sparkline` or `gauge` block. `chart` is in fact the string the renderer
 tests use as their example of an *unknown* block type
-([BlockRenderer.test.ts](../web/src/lib/blocks/BlockRenderer.test.ts), `UnknownBlock.test.ts`).
+([BlockRenderer.test.ts](../../web/src/lib/blocks/BlockRenderer.test.ts), `UnknownBlock.test.ts`).
 
 The data for one is already there and already declared. J1 retains bounded numeric history for
 declared signals, and `schemas/plugin-manifest.v1.schema.json`'s own description of that retention
@@ -992,12 +996,12 @@ A native block is the shape that fits: points in, an SVG element tree out, drawn
 component like every other block. No library, no injection sink, no new threat model. Mermaid and
 Vega-Lite are the shape that does not - both render by constructing DOM or SVG themselves and
 inserting it, which needs either `{@html}` (failed in CI by
-[no_html_directive_test.go](../internal/contracts/no_html_directive_test.go)) or the sandboxed
+[no_html_directive_test.go](../../internal/contracts/no_html_directive_test.go)) or the sandboxed
 iframe block already considered and rejected under
-[should there be a frontend plugin surface at all?](#open-question-should-there-be-a-frontend-plugin-surface-at-all).
+[should there be a frontend plugin surface at all?](https://github.com/sergeyfarin/veduta/issues/1).
 Recording that here so the comparison is not re-derived the next time someone asks about
 Mermaid - and it is now settled in
-[decision 0004](decisions/0004-card-expressiveness-and-the-presentation-contract.md), which
+[decision 0004](../decisions/0004-card-expressiveness-and-the-presentation-contract.md), which
 keeps the Widget Document closed and takes the native block as the one thing worth adopting
 from the proposal that raised this.
 
@@ -1174,6 +1178,21 @@ owner-only, which is the property the counter-argument above was about; other lo
 cannot read it. `integrations.LockFileMode` names it and `TestWriteLock_ModeIsOwnerWriteGroupRead`
 pins it. An existing lock keeps its mode until the next approval rewrites it.
 
+### The documented approve flow had no way to grant a limit above its documented default
+
+Found while implementing D2b's `Grants`/`ReconcileAtApproval`. The contract suite already encoded
+`effective(k) = min(core maximum, manifest value-or-default, approved value-or-default)`, with the
+approved side taken from the lock entry's own optional `limits:` - so an integration approved
+without that override stays at the documented default whatever its manifest asks for (glances
+requests `timeoutMs: 4000`, and `examples/veduta.lock.yaml` was missing the matching override
+until D2b caught it). `internal/integrations.Grants` gained an additive `Limits` field, and the CLI
+and REST handler echo the manifest's requested limits back by default. Not a defect, but section 6
+of the architecture showed the `POST /approve` body without the field, so a second client written
+from that prose would have missed it.
+
+**Resolved 2026-10-02,** while moving the backlog to GitHub issues: section 6's illustrative body
+now carries `limits?`, followed by a paragraph on the reconciliation rule and on `manifestLimits`.
+
 ### Did WASM add enough value to justify further development?
 
 **Parked, 2026-09-16. Requirements under review.** The runtime and Rust SDK exist,
@@ -1207,7 +1226,7 @@ Candidates discussed, **not scheduled**:
 
 The 0.1 decision to retain the existing Jellyfin implementation is unchanged;
 it is not evidence that future integrations need WASM. See
-[decision 0003](decisions/0003-jellyfin-wasm-proof-case.md).
+[decision 0003](../decisions/0003-jellyfin-wasm-proof-case.md).
 Priority: parked until a requirements review after 0.1, not a release blocker.
 
 **Decided, 2026-09-29:** the review runs after the native time-series block (Phase M3) lands, not
@@ -1215,7 +1234,7 @@ before. The rain and energy candidates above need a way to draw a series before 
 how to fetch one can be judged, and without that block the comparison would be against a card that
 cannot show the result.
 
-**Resolved 2026-09-30 by [decision 0005](decisions/0005-wasm-frozen.md), frozen.** No: not yet, and
+**Resolved 2026-09-30 by [decision 0005](../decisions/0005-wasm-frozen.md), frozen.** No: not yet, and
 not enough to grow. WASM stays as a frozen, experimental escape hatch - maintained, secured and
 tested, never extended - and the formats that were its candidates above (ICS, RSS/Atom XML,
 Prometheus text) are to be served by core decoders on declarative pipeline steps when a concrete
@@ -1238,7 +1257,7 @@ with no forbidden imports and passes the G1 conformance suite plus S1a ARM
 budgets. The Go backend is a separate decision and remains in place; see
 `docs/decisions/0001-backend-language.md`.
 
-**Closed as won't-do, 2026-09-30, by [decision 0005](decisions/0005-wasm-frozen.md).** A second
+**Closed as won't-do, 2026-09-30, by [decision 0005](../decisions/0005-wasm-frozen.md).** A second
 guest language only makes sense for a WASM path that grows, and the path is frozen. Rust remains the
 only guest SDK. If WASM is ever reopened, this question is part of weighing the investment, not a
 separate item.
@@ -1258,7 +1277,7 @@ ones that decide whether a Pi-class host is a supported target or an aspiration.
 **arm64 is measured, 2026-09-17, and it passes with an order of magnitude of headroom.** The
 deferral of the day before assumed this needed a board nobody has. It did not: L3's load gate was
 already running on GitHub's native four-core ARM64 runner, and that job now runs
-[`TestPluginRuntimePiClassBudget`](../internal/integrations/wasm/budget_test.go) beside it. The
+[`TestPluginRuntimePiClassBudget`](../../internal/integrations/wasm/budget_test.go) beside it. The
 test loads `plugins/jellyfin/jellyfin.wasm` - the committed module, the fixtures the golden test
 pins, the limits a real approval grants - and measures cold compilation, compilation from a warm
 cache, warm invocation over 24 calls, and resident growth per additional loaded instance, read
@@ -1305,7 +1324,7 @@ integrations are unaffected on every architecture; they never enter the WASM run
 Nothing user-facing over-claimed this in the meantime: the README, `docs/getting-started.md` and
 `docs/docker.md` promise multi-arch *images*, never Pi-class *performance*.
 
-**Closed by disclosure, 2026-09-30, under [decision 0005](decisions/0005-wasm-frozen.md).** arm64 is
+**Closed by disclosure, 2026-09-30, under [decision 0005](../decisions/0005-wasm-frozen.md).** arm64 is
 measured and release-gated, as above. armv7 is not, and will not be while WASM is frozen: buying
 hardware to measure a path that is not growing is not worth it, and declarative integrations - all
 but one - never enter the WASM runtime on any architecture. `docs/docker.md` states that the armv7

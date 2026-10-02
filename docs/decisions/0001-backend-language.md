@@ -95,8 +95,8 @@ Another guest language becomes supported when a prototype demonstrates, with mea
 - a pass through the G1 conformance suite and the S1a ARM budgets,
 - and a maintained PDK, so the ABI does not become this project's to own.
 
-Go is the obvious candidate and is already tracked in `docs/03-backlog.md` ("Go plugin SDK requires
-a maintained WASI-free toolchain"); it fails the first two criteria today. Python is further away:
+Go is the obvious candidate and is already recorded in `docs/archive/03-backlog-resolved.md`
+("Go plugin SDK requires a maintained WASI-free toolchain"); it fails the first two criteria today. Python is further away:
 the official Extism Python PDK packages an interpreter into the module and requires WASI even when
 the plugin needs no system access, which conflicts directly with the no-WASI sandbox and the
 Pi-class size and latency targets. Running Python as a subprocess or sidecar would mean owning

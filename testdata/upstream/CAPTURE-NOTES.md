@@ -2,7 +2,7 @@
 
 Produced by `hack/capture-upstream-fixtures.sh` on 2026-09-09 against live servers, then
 **scrubbed by hand** before committing. See `docs/spikes/s2-upstream-reality-check.md` for the
-findings these files support and `docs/03-backlog.md` for follow-up work.
+findings these files support and `docs/archive/03-backlog-resolved.md` for the follow-up work.
 
 ## Immich 3.1.0
 

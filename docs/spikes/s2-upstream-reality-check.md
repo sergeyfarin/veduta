@@ -2,7 +2,7 @@
 
 **Status:** specification pass complete; live-server pass run 2026-09-09 — Immich confirmed, Jellyfin
 findings force a manifest/G4 rewrite (see [Live-server pass](#live-server-pass-2026-09-09) and
-`docs/03-backlog.md`).
+`docs/archive/03-backlog-resolved.md`).
 **Blocks:** E3 (Immich vertical slice) — cleared, cold-latency AC met. G4 (Jellyfin WASM plugin) —
 still blocked pending the rewrite.
 
@@ -20,7 +20,7 @@ Against the authoritative machine-readable contracts, not documentation prose:
 | `immich/server/src/controllers/*.controller.ts` | main | 2026-09-05 |
 
 Everything below marked **[spec]** is settled. Everything marked **[live]** cannot be settled from a
-specification and needs a real server — see [Outstanding](#outstanding-needs-a-live-server).
+specification and needs a real server — see the [live-server pass](#live-server-pass-2026-09-09).
 
 ---
 

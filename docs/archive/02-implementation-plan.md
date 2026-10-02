@@ -1,9 +1,13 @@
 # 02 — Implementation plan
 
+> **Archived 2026-10-02.** Every phase here is complete; Phase M closed with 0.2.1. Open and
+> planned work is tracked as [GitHub issues](https://github.com/sergeyfarin/veduta/issues). See
+> [the archive index](README.md).
+
 Sized for a single developer (or one coding agent) working in 0.5–2 day slices. Every issue is
 independently implementable, testable and mergeable. Estimates are ideal developer-days.
 
-The [private activity feed proposal](proposals/0001-private-activity-feed.md) runs alongside this
+The [private activity feed proposal](../proposals/0001-private-activity-feed.md) runs alongside this
 plan, not inside it. The dashboard remains the main line of work. The feed's immediate step is a
 limited, time-boxed test that adds a built-in Activity card to the dashboard. Any later stage waits
 for that test's recorded result, and none reorders or delays the milestones below.
@@ -12,7 +16,7 @@ for that test's recorded result, and none reorders or delays the milestones belo
 
 ## Part 0 — Contract freeze (0.5 d, before anything else)
 
-The review round in [00-review-and-prior-art.md §7](00-review-and-prior-art.md) changed four
+The review round in [00-review-and-prior-art.md §7](../00-review-and-prior-art.md) changed four
 contracts that everything downstream encodes. Land them as schemas + fixtures **first**, because
 each one invalidates every golden test and every integration if it changes later:
 
@@ -94,11 +98,11 @@ acceptance, not E1 implementation** · **DONE — spec pass + live pass (2026-09
 confirmed, E3 cold-latency AC met; Jellyfin's `/Users/Me` fix was wrong and was rewritten to a
 single sorted `GET /Items` (Approach A), module rebuilt and re-approved.**
 
-Findings and consequences: [docs/spikes/s2-upstream-reality-check.md](spikes/s2-upstream-reality-check.md).
+Findings and consequences: [docs/spikes/s2-upstream-reality-check.md](../spikes/s2-upstream-reality-check.md).
 The specification pass found two defects that would have surfaced in E3 and G4: Immich's
 `/server/statistics` is admin-only, and Jellyfin 12 removed `/Users/{userId}/Items` entirely. Both
 manifests are corrected. The live pass runs
-[`hack/capture-upstream-fixtures.sh`](../hack/capture-upstream-fixtures.sh) against real servers to
+[`hack/capture-upstream-fixtures.sh`](../../hack/capture-upstream-fixtures.sh) against real servers to
 answer what a specification cannot — chiefly the actual `Content-Type` of an Immich thumbnail,
 which originally appeared to decide whether the asset proxy could compare headers at all.
 **Corrected during E1 implementation:** architecture §7 already says content type is sniffed and
@@ -147,8 +151,8 @@ predicates) where either language is equally trivial. Full rationale, the correc
 
 ### S4 — Visual prototype · 1 d · **blocks B1** · **DONE**
 
-Delivered: [docs/spikes/s4-visual-prototype.html](spikes/s4-visual-prototype.html), with the
-decisions it settles written up in [s4-visual-prototype.md](spikes/s4-visual-prototype.md).
+Delivered: [docs/spikes/s4-visual-prototype.html](../spikes/s4-visual-prototype.html), with the
+decisions it settles written up in [s4-visual-prototype.md](../spikes/s4-visual-prototype.md).
 24 tokens, 8 block renderings, all four card states, both themes, no per-card CSS and no external
 requests. Notable outcomes for B1: status is never colour alone; metrics use tabular numerals;
 aspect ratios come from the block so nothing reflows when an image lands; container queries rather
@@ -1356,7 +1360,7 @@ Creates: `internal/integrations/wasm/` (Extism/wazero host, compilation cache, s
 memory/deadline/output limits, instance lifecycle).
 Tests: **the conformance suite from S1, promoted to CI** — no filesystem, no env, no sockets, no
 native HTTP, deadline kill, memory trap, output cap, and a corrupted module rejected before compile.
-Implementation and scope: [S1 / G1 sandbox decision](spikes/s1-wasm-sandbox.md).
+Implementation and scope: [S1 / G1 sandbox decision](../spikes/s1-wasm-sandbox.md).
 S1a's hardware acceptance is met on native arm64, measured 2026-09-17 by
 `TestPluginRuntimePiClassBudget` in the `arm-budgets` CI job: 244 ms cold compile, 12 ms from a
 warm cache, a 1.765 ms warm-invocation median and 1.0 MiB resident per added instance, against
@@ -1380,7 +1384,7 @@ AC: a new plugin can be scaffolded and built in under five minutes following the
 
 **G4 · Jellyfin plugin — VERTICAL SLICE #2** · 1 d · deps: G2, S2 · **DONE, live-validated against
 Jellyfin 12.0.0 on 2026-09-09**
-Retained for 0.1 as the production WASM proof case ([decision 0003](decisions/0003-jellyfin-wasm-proof-case.md)).
+Retained for 0.1 as the production WASM proof case ([decision 0003](../decisions/0003-jellyfin-wasm-proof-case.md)).
 The integration uses the broker to send the `Authorization: MediaBrowser Token="..."` header (F6,
 now `[live]`-confirmed as the only scheme in the 12.0.0 OpenAPI), fan out to a sorted
 recently-added query plus two typed counts plus the session list, and mint poster asset refs.
@@ -1637,7 +1641,7 @@ and never occupying the tags that a stable release would.
    it, with the release job correctly skipped because it is `push`-only.
 
 3. **Triage the open backlog into alpha blockers and post-alpha work.**
-   **Done, 2026-09-17: no open item in [docs/03-backlog.md](03-backlog.md) blocks the alpha.**
+   **Done, 2026-09-17: no open item in `docs/03-backlog.md` blocks the alpha.**
    The three that could plausibly have:
    - *Action execution is not implemented.* Not a blocker **because** the controls render disabled
      and every document now says so. It would become one the moment anything claimed otherwise.
@@ -1724,7 +1728,7 @@ The response scan covers a header secret. **Found on the way and fixed first:** 
 in a path segment slipped a query or a shorter path past route authorisation in 0.1.0–0.1.2
 ([entry](03-backlog-resolved.md#a-path-segment-could-carry-a-query-or-fragment-past-route-authorisation)),
 released as 0.1.3; and a `${secret:…}` in a connection header had been sent as literal text. Left
-open: [reading a 404 as absent](03-backlog.md#a-pipeline-step-cannot-read-404-as-absent), since
+open: [reading a 404 as absent](https://github.com/sergeyfarin/veduta/issues/8), since
 Home Assistant's missing-entity case now fails the card with the status.
 **M3 · Native time-series block** · 3 d · deps: none · **DONE, 2026-09-29** — the
 [0.2 item the backlog named](03-backlog-resolved.md#there-was-no-native-visualisation-block-for-retained-history),
@@ -1762,10 +1766,10 @@ naming the setting and the absolute path - refused by `serve`, warned about by `
 which never creates it - [entry](03-backlog-resolved.md#a-relative-serverdatadir-produced-a-sqlite-error-naming-neither-the-setting-nor-the-path).
 The lock file is written `0640`, matching `veduta.yaml`: group-readable so it can be committed, and
 owner-only to write -
-[entry](03-backlog-resolved.md#veduta-lock-yaml-was-written-0600-by-a-uid-the-operator-is-not).
+[entry](03-backlog-resolved.md#vedutalockyaml-was-written-0600-by-a-uid-the-operator-is-not).
 Released as 0.2.1.
 **M6 · Decisions to record, no code** — **DECIDED, 2026-09-29**, all three as proposed; the WASM
-review itself concluded 2026-09-30 in [decision 0005](decisions/0005-wasm-frozen.md): frozen, with
+review itself concluded 2026-09-30 in [decision 0005](../decisions/0005-wasm-frozen.md): frozen, with
 formats served by core decoders instead.
 The [WASM review](03-backlog-resolved.md#did-wasm-add-enough-value-to-justify-further-development) runs
 after M3, since the rain and energy candidates it is waiting on need that block to be judged at
@@ -1778,7 +1782,7 @@ the meantime.
 **Phase M is complete.** 0.2.1 (2026-09-30) carries M2–M5. No next phase is planned yet. One
 candidate is recorded here so it is not lost, and is not committed: **core decoders for formats a
 manifest cannot read** - ICS for a calendar agenda, XML for RSS/Atom feeds - each added when a
-concrete integration needs it, as [decision 0005](decisions/0005-wasm-frozen.md) directs, with the
+concrete integration needs it, as [decision 0005](../decisions/0005-wasm-frozen.md) directs, with the
 JSON decoder's budgets, a fuzz target and an adversarial corpus.
 
 ---

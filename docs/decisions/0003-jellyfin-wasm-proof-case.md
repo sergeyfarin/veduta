@@ -54,5 +54,5 @@ A review after 0.1 must start with a concrete need, compare declarative and upst
 alternatives, and account for maintenance, resource and permission costs. Keeping
 WASM parked or reducing its role are valid outcomes. Candidate integrations and
 review criteria are recorded in the
-[open requirements review](../03-backlog-resolved.md#did-wasm-add-enough-value-to-justify-further-development).
+[open requirements review](../archive/03-backlog-resolved.md#did-wasm-add-enough-value-to-justify-further-development).
 Visualization work is independent of this decision.

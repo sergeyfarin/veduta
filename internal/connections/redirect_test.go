@@ -60,7 +60,7 @@ func TestRedirectPolicy_NoAllowedPathsMeansAnyPathOnTheSameHostIsFine(t *testing
 // to actually applying on a followed redirect too. The residual gap it does NOT close - re-checking
 // the lock's approved route against the redirect target - was closed separately by
 // capabilities.Grant.Authorize, plumbed in through redirectauth.go; see
-// docs/03-backlog-resolved.md and TestBroker_HTTP_RedirectToAnUnapprovedRouteIsDenied.
+// docs/archive/03-backlog-resolved.md and TestBroker_HTTP_RedirectToAnUnapprovedRouteIsDenied.
 func TestRedirectPolicy_RefusesRedirectOutsideAllowedPaths(t *testing.T) {
 	base := mustParseURL(t, "https://svc.example/")
 	policy := redirectPolicy(base, 1, []string{"/api/public"}, Auth{}, nil)

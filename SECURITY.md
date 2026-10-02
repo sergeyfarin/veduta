@@ -84,8 +84,8 @@ exists will be closed with a pointer here; a report that one is *worse than docu
 - **`auth: none` and `--i-know-what-im-doing` do what they say.** Running Veduta unauthenticated off
   loopback, without TLS, or with a wide `trustedProxies` range is an operator decision, and the
   deployment checklist in [docs/security.md](docs/security.md) is the countermeasure.
-- **32-bit `linux/arm/v7` WASM performance is unmeasured**, as recorded in
-  [docs/03-backlog.md](docs/03-backlog.md). It is a support-claim gap, not a security one.
+- **32-bit `linux/arm/v7` WASM performance is unmeasured**, as disclosed in
+  [docs/docker.md](docs/docker.md). It is a support-claim gap, not a security one.
 
 ## Disclosure
 

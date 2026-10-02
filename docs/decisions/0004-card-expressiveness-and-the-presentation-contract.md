@@ -25,7 +25,7 @@ writing down once.
    registry keyed by `type`, unknown types rendering a labelled placeholder. A
    new block type is a deliberate core change. This is the status quo restated,
    not a new restriction — see
-   [should there be a frontend plugin surface at all?](../03-backlog.md#open-question-should-there-be-a-frontend-plugin-surface-at-all).
+   [should there be a frontend plugin surface at all?](https://github.com/sergeyfarin/veduta/issues/1).
 3. **Adaptive Cards is not adopted**, as a schema or as an interoperability
    format, for 0.1 or as a planned direction.
 4. **Mermaid and Vega-Lite are not embedded.** Neither as a block type, nor
@@ -36,10 +36,10 @@ writing down once.
 6. **What is taken from the proposal is the visualisation gap, natively.** A
    chart or sparkline block drawn as an SVG element tree by a Svelte component,
    like every other block — tracked as
-   [no native visualisation block for retained history](../03-backlog-resolved.md#there-was-no-native-visualisation-block-for-retained-history)
+   [no native visualisation block for retained history](../archive/03-backlog-resolved.md#there-was-no-native-visualisation-block-for-retained-history)
    and scheduled for 0.2, not for the alpha.
 7. **Directive syntax stays a candidate for the authoring layer only**, recorded
-   in [markdown has no authoring syntax for structure](../03-backlog.md#markdown-is-prose-only-with-no-authoring-syntax-for-structure),
+   in [markdown has no authoring syntax for structure](https://github.com/sergeyfarin/veduta/issues/10),
    deferred with no work planned.
 
 ## Evidence

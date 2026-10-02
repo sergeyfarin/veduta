@@ -7,7 +7,7 @@
 // `pnpm gen-types` regenerates; CI runs it and fails the build with `git diff --exit-code` if the
 // checked-in files differ from what regeneration produces - drift becomes a build failure, not
 // something noticed later. See internal/widgets and internal/state (the Go half) and
-// docs/02-implementation-plan.md milestone B2.
+// docs/archive/02-implementation-plan.md milestone B2.
 import { compile } from 'json-schema-to-typescript';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';

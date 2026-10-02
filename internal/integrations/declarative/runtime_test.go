@@ -69,7 +69,7 @@ func (fixtureBroker) Emit(context.Context, capabilities.Grant, capabilities.Even
 // An asset node mints the ref and nothing else, so an image can carry alt text. It could not while
 // the node evaluated to a whole {"ref": …} object: any sibling key stopped it being an asset node,
 // which left every declarative integration unable to describe its own images. See
-// docs/03-backlog-resolved.md.
+// docs/archive/03-backlog-resolved.md.
 func TestAssetNodeIsAValueSoImagesCanCarryAltText(t *testing.T) {
 	m, err := manifestload.Load(filepath.Join("..", "..", "..", "plugins", "immich", "manifest.yaml"))
 	if err != nil {

@@ -2,7 +2,7 @@
   import type { WidgetDocument } from '../types/widget';
   import Icon from '../Icon.svelte';
 
-  // Rendered, real, and permanently disabled in 0.1 (docs/02-implementation-plan.md B4): the
+  // Rendered, real, and permanently disabled in 0.1 (docs/archive/02-implementation-plan.md B4): the
   // buttons a card declares are visible, but there is no wiring behind them yet. Executing an
   // action needs authentication, an authorization check and an audit trail on the core side
   // (docs/01-architecture.md section 8), none of which exists before Phase D/H land - showing an

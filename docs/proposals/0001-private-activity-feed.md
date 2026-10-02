@@ -11,8 +11,9 @@ decision, a release commitment, or shipped functionality.
 It is too early to change direction. The dashboard's own hypothesis, that visually rich
 third-party integrations can work through a constrained, host-rendered contract, still needs
 outside installs, more integrations, and ordinary use before it can be judged. Dashboard work
-therefore continues as the [implementation plan](../02-implementation-plan.md) and the
-[backlog](../03-backlog.md) describe, and the feed must not delay it.
+therefore continues as its [open issues](https://github.com/sergeyfarin/veduta/issues) describe,
+and the feed must not delay it. The limited test below is tracked in
+[issue #13](https://github.com/sergeyfarin/veduta/issues/13).
 
 The feed runs in parallel under four constraints:
 
@@ -286,7 +287,7 @@ authority to write its approved source, not to read the aggregated feed or any c
 This introduces event metadata, not a second presentation language. Review the source and output
 contract against decision 0004 before implementation. Any required change to a frozen contract
 needs a separately accepted decision, schema, and adversarial fixtures. Action blocks remain
-display-only under the existing [0.2 decision](../03-backlog.md#action-execution-is-not-implemented).
+display-only under the existing [0.2 decision](https://github.com/sergeyfarin/veduta/issues/2).
 
 The later stages do not require public sharing, household permissions, autonomous service actions,
 a general workflow editor, arbitrary frontend plugins, automatic travel-booking extraction, native
@@ -329,7 +330,7 @@ shell, a readable column width, clear hierarchy, bounded previews, and expandabl
 supply content and semantic hints; they do not supply CSS, HTML, or scripts. Review mobile and
 desktop, light and dark themes, keyboard access, contrast, and empty, stale, error, and
 long-content states. Visual acceptance needs human review, because the
-[current pixel threshold has known gaps](../03-backlog.md#the-visual-baselines-per-pixel-threshold-hides-whole-area-changes).
+[current pixel threshold has known gaps](https://github.com/sergeyfarin/veduta/issues/4).
 
 ## Publishing policy
 

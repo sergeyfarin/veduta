@@ -17,7 +17,7 @@
   // cross-fade. Image.blurhash exists in the schema for a true decoded-thumbnail placeholder;
   // implementing the BlurHash algorithm itself (decode -> pixel grid -> canvas) is real,
   // separable work deferred rather than rushed in alongside three new block types - this is a
-  // deliberate, named scope boundary, not an oversight. See docs/02-implementation-plan.md B4.
+  // deliberate, named scope boundary, not an oversight. See docs/archive/02-implementation-plan.md B4.
   const aspect = $derived(cssAspectRatio(item.image.aspect) ?? defaultAspect);
 </script>
 

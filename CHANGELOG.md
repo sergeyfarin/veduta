@@ -11,6 +11,17 @@ project is pre-1.0:
 > pinned in `veduta.lock.yaml`, so an incompatible plugin fails closed rather than misbehaving;
 > expect to rebuild and re-approve third-party plugins when upgrading.
 
+## Unreleased
+
+### Changed
+
+- Open gaps and planned work moved from `docs/03-backlog.md` to
+  [GitHub issues](https://github.com/sergeyfarin/veduta/issues). The finished implementation plan
+  and the resolved-gap record moved to [docs/archive/](docs/archive/README.md), and
+  `CONTRIBUTING.md` now describes how work is tracked and how a release is cut.
+- `docs/01-architecture.md` section 6 shows the optional `limits` field in the approval request
+  and explains when it is needed.
+
 ## 0.2.2 — 2026-09-30
 
 Upgrade instructions, a new light backdrop for the Veil preset, and the decision to freeze the
@@ -341,9 +352,9 @@ disabled; execution is not implemented in this release.
   cold-validation targets, so weakening the sandbox to accommodate it was refused. Rust is the
   supported plugin language.
 - Open gaps found during implementation are tracked honestly in
-  [docs/03-backlog.md](docs/03-backlog.md) rather than left implicit, and each one is named there
+  [docs/03-backlog.md](https://github.com/sergeyfarin/veduta/issues) rather than left implicit, and each one is named there
   with its priority; closed ones move to
-  [docs/03-backlog-resolved.md](docs/03-backlog-resolved.md) with an account of where the fix
+  [docs/archive/03-backlog-resolved.md](docs/archive/03-backlog-resolved.md) with an account of where the fix
   landed. Nothing in that open list is a known defect in a shipped path: the two that were - a
   Widget Document check that existed but was never called, and a live-update slot that leaked when
   a slow stream was dropped - are fixed in this release.

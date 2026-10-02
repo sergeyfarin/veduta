@@ -70,7 +70,7 @@ kill criteria were never in danger, and per-call instantiation is vindicated - t
 creates and discards is the cheap part. armv7 remains
 unmeasured for want of a native 32-bit runner, as does the guest toolchain size comparison, which
 was a Rust-versus-Go question G3 settled on other grounds. See
-[03-backlog.md](../03-backlog-resolved.md#arm-runtime-performance-was-measured-on-arm64-only).
+[the resolved entry](../archive/03-backlog-resolved.md#arm-runtime-performance-was-measured-on-arm64-only).
 
 Validation for this implementation: `go vet ./...` and `go test -race ./...`
 passed, as did golangci-lint for the changed WASM and manifest-loader packages.

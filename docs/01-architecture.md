@@ -1,8 +1,9 @@
 # 01 — Architecture and contracts
 
-Version 0.1 target. Everything here is a proposal to be adjusted by the spikes in
-[02-implementation-plan.md](02-implementation-plan.md), except where marked **frozen**
-(changing it later is expensive, so it is decided now).
+Written as the 0.1 target and kept current since. It began as a proposal to be adjusted by the
+spikes in the [implementation plan](archive/02-implementation-plan.md), now archived, except where
+marked **frozen** (changing it later is expensive, so it was decided up front). Open questions
+against it are tracked as [GitHub issues](https://github.com/sergeyfarin/veduta/issues).
 
 ---
 
@@ -163,8 +164,8 @@ type Connection struct {
     Docker *DockerConfig
 }
 
-// TODO(D1): connections that reach the PUBLIC INTERNET (weather, RSS, market data - see spike
-// S4) are a different trust category from LAN services. They want a `scope: lan | internet`
+// OPEN (issue #11): connections that reach the PUBLIC INTERNET (weather, RSS, market data - see
+// spike S4) are a different trust category from LAN services. They want a `scope: lan | internet`
 // marker, tighter rate limits, and a rule that an integration granted an internet slot may not
 // also hold a LAN slot - otherwise a feed integration becomes an exfiltration path for data read
 // from a local service.
@@ -785,14 +786,18 @@ window in which the reviewed manifest and the approved manifest can differ.
        → { manifestSha256, currentLock, diff: { addedRoutes[], removedRoutes[],
              addedCapabilities[], raisedLimits[], bodyBearingRoutes[] } }
 2. POST /api/v1/integrations/{id}/approve
-       { expectedManifestSha256, grants: { capabilities[], routes[] } }
+       { expectedManifestSha256, grants: { capabilities[], routes[], limits? } }
 3. Server recomputes the digest; if it differs from expectedManifestSha256 → 409 Conflict
    with the new diff. Nothing is approved.
 ```
 
 The client sends the **exact grants it is approving**, not a bare "yes", so approving a subset is
 natural and a race cannot widen the grant. `veduta integration approve <id>` performs the same two
-steps.
+steps. `grants.limits` is optional, and it is the only way to grant a limit above its documented
+default: each effective limit is `min(core maximum, manifest value-or-default, approved
+value-or-default)`, so an approval without it holds the integration at the defaults whatever its
+manifest requests. The preview's `manifestLimits` exists so a client approving everything can echo
+it back unchanged, which is what the CLI does; a client may narrow it instead.
 
 **Re-authentication.** CSRF proves the browser session issued the request; it does not prove a
 person is present. Approval therefore requires a fresh authentication within a short sudo window
@@ -831,7 +836,7 @@ string and then parsed as a URL, which gives both characters meaning: without th
 an approved `*` segment could become query keys no route allowlisted, or cut the request short of
 the approved path. A request's query travels only in its query map, and the connection layer
 refuses a path carrying either character on its own as well, for callers that do not go through
-the broker. See [the resolved backlog entry](03-backlog-resolved.md#a-path-segment-could-carry-a-query-or-fragment-past-route-authorisation).
+the broker. See [the resolved backlog entry](archive/03-backlog-resolved.md#a-path-segment-could-carry-a-query-or-fragment-past-route-authorisation).
 
 Glob patterns are additionally restricted at schema level: `*` matches within one segment and never
 crosses `/`; **multi-segment `**` is not part of v1** at all, because "`/a/**/b`" has no unambiguous
@@ -1371,7 +1376,7 @@ user needs that, the webhook channel hands off to n8n/Node-RED, which is the cor
 | D3 | Credentials live in the core; integrations use slots | **Frozen** | See C2/C3 |
 | D4 | Asset refs are broker-minted signed tokens | **Frozen** | See C9 |
 | D5 | YAML is the single source of truth | **Frozen for 0.1** | Avoids duelling stores; GUI is additive later |
-| D6 | Extism on wazero for WASM | **Adopted and measured** — [G1 sandbox decision](spikes/s1-wasm-sandbox.md) | Per-call instances. S1b's kill criteria (50 ms warm invocation, 20 MB resident per instance) are [met on native arm64 with 20-28× headroom](03-backlog-resolved.md#arm-runtime-performance-was-measured-on-arm64-only) against the real Jellyfin module: 1.765 ms warm, 1.0 MiB per instance, 244 ms cold compile. armv7 has no native runner and is unmeasured |
+| D6 | Extism on wazero for WASM | **Adopted and measured** — [G1 sandbox decision](spikes/s1-wasm-sandbox.md) | Per-call instances. S1b's kill criteria (50 ms warm invocation, 20 MB resident per instance) are [met on native arm64 with 20-28× headroom](archive/03-backlog-resolved.md#arm-runtime-performance-was-measured-on-arm64-only) against the real Jellyfin module: 1.765 ms warm, 1.0 MiB per instance, 244 ms cold compile. armv7 has no native runner and is unmeasured |
 | D7 | `expr-lang/expr` for mapping and rules | **Decided — S3** | Ergonomics decide it, not safety: D3's manifest DSL is templating-shaped (`map`/`filter`/`sortBy`/`take`/string and date helpers), which is what expr already looks like natively; CEL optimises for boolean policy predicates and would push a manifest-DSL redesign around CEL's macro model rather than a library swap. CEL's actual edge — an interpreter that accounts for its own comprehensions — is answered by D47 instead: expr is used as a parser/evaluator only, never as the sandbox |
 | D8 | No SSH in 0.1 | **Decided** | See C4; host metrics come from Glances/Beszel over HTTP |
 | D9 | SSE, one stream per tab | Decided | WebSockets only if bidirectional need appears |
