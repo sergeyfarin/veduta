@@ -267,7 +267,8 @@ as its own Widget Document change, not added to the first slice.
 group, and a group can render its members as compact subcards that look like rows, then "a
 container list with a restart button on each row" becomes one small card per container. Each
 card has its own pinned action, so B's per-row UX arrives without letting the document choose a
-target. Grouping is a layout feature worth having on its own, and it is tracked separately.
+target. Grouping is a layout feature worth having on its own, and it is tracked in
+[issue #14](https://github.com/sergeyfarin/veduta/issues/14).
 
 ### D3. Who places the buttons
 
