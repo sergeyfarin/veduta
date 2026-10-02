@@ -42,7 +42,8 @@ release readiness or interface stability.
 
 Action blocks are currently display-only and remain disabled. Executing approved actions needs a
 separate design and implementation; it is tracked in
-[issue #2](https://github.com/sergeyfarin/veduta/issues/2).
+[issue #2](https://github.com/sergeyfarin/veduta/issues/2), and the proposed design is
+[proposal 0002](docs/proposals/0002-action-execution.md).
 
 Detailed engineering progress and remaining work live outside this README:
 
@@ -51,6 +52,7 @@ Detailed engineering progress and remaining work live outside this README:
 - [Design research and product scope](docs/00-review-and-prior-art.md)
 - [Product rationale and dashboard comparison](docs/why-veduta.md)
 - [Proposal: an activity feed, tested alongside the dashboard](docs/proposals/0001-private-activity-feed.md)
+- [Proposal: executing actions](docs/proposals/0002-action-execution.md)
 - [Theming and visual-customisation decision](docs/decisions/0002-theming-and-visual-customisation.md)
 - [Why cards are not extensible with JS, CSS, Mermaid or Adaptive Cards](docs/decisions/0004-card-expressiveness-and-the-presentation-contract.md)
 - [Why WebAssembly integrations are frozen](docs/decisions/0005-wasm-frozen.md)
