@@ -1,10 +1,11 @@
 # Proposal: executing actions
 
-Status: proposed 2026-10-02, for [issue #2](https://github.com/sergeyfarin/veduta/issues/2). This
-is the design that issue asks for before any code. Nothing here is implemented, and action
-controls stay display-only until the open decisions below are settled and the work is planned.
-Six decisions are open. Each has a recommendation, and the rest of the document assumes the
-recommendations are accepted.
+Status: **deprioritised future direction**, 2026-10-02, for
+[issue #2](https://github.com/sergeyfarin/veduta/issues/2). This is the design that issue asks
+for before any code. Its six decisions were settled the same day (see [Decisions](#decisions)),
+and the design was then deliberately put aside. Work goes first to making the dashboard usable,
+good-looking, and easy to configure. Nothing here is implemented or scheduled. Action controls stay
+display-only, and documentation keeps describing them that way, until this is picked up again.
 
 ## Where things stand
 
@@ -63,10 +64,12 @@ execution time:
 
 1. **The manifest declares it**: id, title, effect class, typed parameters and exactly one
    request. This is a request for authority, like a route.
-2. **The lock approves it**: the approval diff lists added actions with their effect class and
-   request, first, above everything else. The diff marks them the way it marks body-bearing
-   routes today, and approving them needs an explicit keystroke. Adding an action to a manifest
-   changes its digest, so an installed integration cannot gain an action without re-approval.
+2. **The lock approves its route.** An action's request must match a manifest route marked
+   `use: action`, and that route is approved like any other. The lock gains no new section:
+   approval already records routes, and the manifest digest already covers the action
+   declaration, so adding an action, or changing its effect class, forces re-approval. The
+   approval diff lists `use: action` routes first with their action's effect class, and they need
+   the explicit keystroke that non-`GET` routes already need.
 3. **The card configuration enables it**, with its parameters pinned:
 
 ```yaml
@@ -111,42 +114,39 @@ The document's `actions` block stays in Widget Document v1 unchanged, so no froz
 breaks. It stays permanently display-only and is documented as presentation, then removed at the
 next `apiVersion`.
 
-### Execution is prepare-then-execute
+### Execution is one bound request
 
 ```
-1. POST /api/v1/cards/{card}/actions/{action}/prepare
-       { binding }
-   → 200 { nonce, expiresAt, confirmation: { title, effect, target[] } }
-   → 409 { binding }   if the action changed since the card state was rendered
-2. POST /api/v1/cards/{card}/actions/{action}/execute
-       { nonce }
-   → 200 { outcome: "succeeded" | "failed" | "unknown", status?, message, auditId }
+POST /api/v1/cards/{card}/actions/{action}
+     { binding }
+  → 200 { outcome: "succeeded" | "failed" | "unknown", status?, message, auditId }
+  → 409 { binding }   the action changed since the card state was rendered; nothing ran
 ```
 
-**Approval binding.** `binding` is an HMAC under the instance key over: card id, action id,
-integration id and manifest digest, the approved action entry from the lock, the connection id
-and its **revision**, and the resolved parameters. `prepare` recomputes it from the current
-configuration, lock and connection, and returns `409` on any difference. Nothing is prepared in
-that case. This is the approval TOCTOU fix applied again: what the person saw is what runs.
-Re-pointing the connection, rotating its secret, editing the card's parameters or re-approving the
-manifest all invalidate an open button.
+**Approval binding.** `binding` is a SHA-256 digest over: card id, action id, integration id and
+manifest digest, the approved `use: action` route, the connection id and its **revision**, and the
+resolved parameters. The server recomputes it from the current configuration, lock and connection,
+and returns `409` on any difference. This is the approval TOCTOU fix applied again: what the person
+saw is what runs. Re-pointing the connection, rotating its secret, editing the card's parameters or
+re-approving the manifest all invalidate an open button. A plain digest is enough, because every
+input is either already visible to the viewer or, like the revision, random.
 
-**Confirmation.** For `disruptive` actions the frontend shows a modal before `execute`. The modal
-text is **core-authored** from the manifest title, the card label and the resolved parameters, for
-example *"Restart container: jellyfin, on docker-local"*. It never uses document text. `routine`
-actions chain the two calls with no dialog. Every action uses the same two steps, so replay
-protection does not depend on the effect class.
+**Confirmation.** For `disruptive` actions the frontend shows a modal before it sends the request.
+The modal text is **core-authored** from the manifest title, the card label and the resolved
+parameters, for example *"Restart container: jellyfin, on docker-local"*. It never uses document
+text. `routine` actions send at once.
 
-**Replay.** The nonce is 256 random bits, single-use and valid for 60 seconds. It is bound to the
-session, card, action and binding, and held in memory, so a restart fails closed. A replayed or
-expired nonce gets `410` and an audit entry.
+**Replay.** There is no separate prepare step and no nonce. A first draft had both, and they
+guarded nothing the rest does not: anyone who can replay a request already holds the session and
+can simply click. A cross-site page cannot send the request at all (below). Accidental repeats,
+like a double click or a retried fetch, are absorbed by single-flight and the cooldown.
 
 **Cross-site requests.** The existing protections stay: double-submit CSRF and `SameSite=Strict`.
-Both action endpoints also require `Origin` to equal the server's own origin, falling back to
+The action endpoint also requires `Origin` to equal the server's own origin, falling back to
 `Sec-Fetch-Site: same-origin`. A request with neither header is refused. This adds a check that
 does not depend on the cookie policy.
 
-**Bounded inputs.** Request bodies carry only an opaque binding or nonce, each at most 512 bytes,
+**Bounded inputs.** The request body carries only the binding, at most 512 bytes,
 decoded strictly with unknown fields rejected. Parameters are pinned in configuration and
 validated against the manifest's parameter schema at config load. The schema uses the same
 restricted JSON Schema subset as operation `params`, plus a required `pattern` or `enum` on every
@@ -209,12 +209,23 @@ Auditing is write-ahead and fails closed:
 
 Detail is actor, IP, hashed session id, card, action, integration id and version, manifest digest,
 connection id and revision, resolved parameters, method and canonical path. It never includes
-headers or bodies. Refusals (binding `409`, replay `410`, rate limit, unauthorised group) are
-audited too, since repeated refusals are what probing looks like. A `started` row with no result
+headers or bodies. Refusals (a stale binding, an in-flight or cooldown `409`, a rate limit, a user
+outside the action groups) are audited too, since repeated refusals are what probing looks like. A `started` row with no result
 after a crash is itself the record of an `unknown` outcome. An audit viewer is not part of this
 work. `sqlite3` and a later read-only page can read the table.
 
-## Open decisions
+## Decisions
+
+Settled 2026-10-02. The tables record what was weighed.
+
+| | Decision |
+| --- | --- |
+| D1 | **A, simplified**: manifest declares, an approved `use: action` route authorises, card config enables. No new lock section, and one request instead of prepare and execute |
+| D2 | **A**: targets pinned in card config. Per-row buttons wait for card grouping, below |
+| D3 | **A**: the core renders a config-driven action row |
+| D4 | **A**: confirmation modal, no re-authentication |
+| D5 | **A**: refused under `auth: none`, with no override |
+| D6 | **A**: the document's `confirm` and `danger` are ignored, then removed at the next `apiVersion` |
 
 ### D1. What grants an action
 
@@ -227,6 +238,21 @@ work. `sqlite3` and a later read-only page can read the table.
 **Recommendation: A**, built in two slices. Docker builtin actions come first, because they need
 no manifest or lock change and prove the execution core. Manifest actions follow.
 
+**Is A too much for a personal dashboard?** It was reviewed for exactly that, and two parts of the
+first draft were cut. Most of the cost is the execution core: the binding, Origin check,
+single-flight, write-ahead audit and failure outcomes. Every option needs that core, B and C
+included. What A adds on top is small once it reuses what exists:
+
+- *Cut:* a separate lock section for actions. Actions authorise through `use: action` routes,
+  which the existing approval, diff and digest machinery already handle.
+- *Cut:* the prepare step and its nonce, for the reasons under [Replay](#execution-is-one-bound-request).
+- *Kept:* the manifest `actions` entry (id, title, effect, parameters, one request), a new route
+  use kind, and card `actions` in config.
+
+A is also the easier option for the person configuring. Under B they write an HTTP method, path
+and body for every button. Under A they write `action: restart` with `params: { container:
+jellyfin }`, and the integration author has already worked out the API.
+
 ### D2. Where a target comes from
 
 | Option | For | Against |
@@ -236,6 +262,12 @@ no manifest or lock change and prove the execution core. Manifest actions follow
 
 **Recommendation: A** now. B is a real UX gain, but it should be designed when someone needs it,
 as its own Widget Document change, not added to the first slice.
+
+**Decided: A, with per-row buttons coming from card grouping instead.** If cards can belong to a
+group, and a group can render its members as compact subcards that look like rows, then "a
+container list with a restart button on each row" becomes one small card per container. Each
+card has its own pinned action, so B's per-row UX arrives without letting the document choose a
+target. Grouping is a layout feature worth having on its own, and it is tracked separately.
 
 ### D3. Who places the buttons
 
@@ -274,26 +306,26 @@ A stolen session is already covered by revocable sessions, expiry and the audit 
 
 **Recommendation: A.** It follows from D3.
 
-## Implementation outline, once decided
+## Implementation outline, when picked up
 
 Not scheduled. Each slice is a releasable state, and every security check lands with a test that
 is shown to fail when its guard is removed.
 
 1. **Contracts.** Card config `actions`, CardState `actions`, the auth-mode rules above, and docs
-   (README, security.md, configuration.md). Manifest and lock `actions` are designed here but
-   ship in slice 4.
-2. **Execution core with Docker.** Prepare and execute endpoints, binding, nonce, Origin check,
+   (README, security.md, configuration.md). Manifest `actions` and `use: action` are designed here
+   but ship in slice 4.
+2. **Execution core with Docker.** The action endpoint, binding, Origin check,
    single-flight, rate limits, write-ahead audit, `use: action` in the broker, Docker
    `start`/`stop`/`restart` behind `allowActions`.
 3. **Frontend.** Core-rendered action row, confirmation modal, outcome toasts, SSE event, and e2e
    against a real `veduta serve` with a fake Docker endpoint.
-4. **Manifest actions.** Schema, digest and lock changes, approval-diff presentation, declarative
+4. **Manifest actions.** Manifest schema, `use: action` routes, approval-diff presentation, declarative
    executor, then first-party actions: Home Assistant scripts and scenes, Proxmox guest power, and
    library scans.
 
 Tests that must be shown to fail when their guard is removed include: a stale binding after a
-connection revision change, a parameter edit or a re-approval; nonce replay, expiry and use from
-another session; a cross-origin `Origin`; a missing CSRF header; a data operation calling a
+connection revision change, a parameter edit or a re-approval; a second request while one is in
+flight, and one inside the cooldown; a cross-origin `Origin`; a missing CSRF header; a data operation calling a
 `use: action` route and the reverse; an audit insert failure stopping execution; card actions
 under `auth: none` failing to load; a forward-auth user outside `actionGroups`; and a
 document-supplied `confirm: false` having no effect on a disruptive action.

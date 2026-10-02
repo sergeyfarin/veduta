@@ -40,10 +40,10 @@ loader, integration runtimes, capability broker, authentication, persistence, no
 packaging automation. These components have automated tests, but their presence does not imply
 release readiness or interface stability.
 
-Action blocks are currently display-only and remain disabled. Executing approved actions needs a
-separate design and implementation; it is tracked in
-[issue #2](https://github.com/sergeyfarin/veduta/issues/2), and the proposed design is
-[proposal 0002](docs/proposals/0002-action-execution.md).
+Action blocks are currently display-only and remain disabled. Executing actions has a design,
+[proposal 0002](docs/proposals/0002-action-execution.md), but it is deliberately deprioritised
+behind dashboard usability and configuration; it is tracked in
+[issue #2](https://github.com/sergeyfarin/veduta/issues/2).
 
 Detailed engineering progress and remaining work live outside this README:
 
