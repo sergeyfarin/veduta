@@ -71,7 +71,8 @@ summary for screen readers. It comes in two forms, and a block is exactly one of
 readings, and the integration passes the points on. Timestamps must be full RFC 3339 with seconds
 and a zone (`2026-09-29T10:00:00Z`), real, and strictly increasing; an upstream that sends
 `2026-09-29T10:00` needs `+ ":00Z"` (or its real offset) in the expression, or the document is
-refused. A `null` value is a gap, drawn as one.
+refused. An upstream that sends Unix seconds, such as Prometheus, needs `fromUnix` (see
+[Time](#time) below). A `null` value is a gap, drawn as one.
 
 ```yaml
 - type: series
@@ -101,6 +102,21 @@ not retain fails the card.
 
 `plugins/glances/manifest.yaml` uses the bound form. A new card's chart is empty until it has run a
 few times, and a period when the card could not refresh shows as a gap.
+
+### Time
+
+Expressions have two clocks and two conversions:
+
+- `now` is the time the invocation started, the same instant in every step, so a request's `start`
+  and `end` agree. `now()` reads the clock again at each call. Either takes `duration`
+  arithmetic: `now - duration("24h")`.
+- `unix(t)` gives whole Unix seconds from a time or an RFC 3339 string, for a request value:
+  `start: { expr: 'string(unix(now - duration("24h")))' }`.
+- `fromUnix(n)` gives the RFC 3339 text a series point needs from Unix seconds, keeping a
+  fraction to the millisecond: `t: { expr: 'fromUnix(p[0])' }`.
+
+These and expr's own builtins are the only functions a manifest can call. A method on a value,
+such as `now.Unix()`, is refused when the manifest loads.
 
 An upstream field that is sometimes missing needs `{ if: …, then: … }`, which omits the key or list element entirely rather than emitting `null`:
 

@@ -13,6 +13,13 @@ project is pre-1.0:
 
 ## Unreleased
 
+### Added
+
+- Manifest expressions can convert between Unix seconds and RFC 3339: `fromUnix(n)` for a series
+  point's timestamp and `unix(t)` for a request value such as a query window's start. Before
+  this, a manifest could not chart an upstream that sends Unix timestamps.
+  ([#18](https://github.com/sergeyfarin/veduta/issues/18))
+
 ### Changed
 
 - Open gaps and planned work moved from `docs/03-backlog.md` to

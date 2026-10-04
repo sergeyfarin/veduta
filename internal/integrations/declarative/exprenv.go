@@ -6,7 +6,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"reflect"
+	"time"
 
 	"github.com/expr-lang/expr"
 	"github.com/expr-lang/expr/ast"
@@ -81,6 +83,8 @@ func compile(source string, max int) (*vm.Program, error) {
 			}
 			return out, nil
 		}, new(func(context.Context, any, any) any)),
+		expr.Function("fromUnix", func(p ...any) (any, error) { return fromUnix(p[0]) }, new(func(any) string)),
+		expr.Function("unix", func(p ...any) (any, error) { return unix(p[0]) }, new(func(any) int)),
 	)
 	for n := range predicates {
 		opts = append(opts, expr.EnableBuiltin(n))
@@ -122,6 +126,56 @@ func endpoint(v any, last bool) (any, error) {
 	}
 	return rv.Index(n).Interface(), nil
 }
+
+// maxUnixSeconds is 9999-12-31T23:59:59Z, the last instant a four-digit-year timestamp - the only
+// kind a widget document accepts - can name.
+const maxUnixSeconds = 253402300799
+
+// fromUnix turns Unix seconds, as Prometheus and most metrics APIs send them, into the RFC 3339
+// text a series point needs. A fraction is kept to the millisecond: finer would only carry float
+// noise, and coarser could collapse two sub-second samples into one timestamp the series
+// validator then refuses as not increasing.
+func fromUnix(v any) (string, error) {
+	var f float64
+	switch n := v.(type) {
+	case int:
+		f = float64(n)
+	case int64:
+		f = float64(n)
+	case float64:
+		f = n
+	case json.Number:
+		x, err := n.Float64()
+		if err != nil {
+			return "", fmt.Errorf("fromUnix: %q is not a number", n)
+		}
+		f = x
+	default:
+		return "", fmt.Errorf("fromUnix requires a number of seconds, got %T", v)
+	}
+	if math.IsNaN(f) || f < 0 || f > maxUnixSeconds {
+		return "", fmt.Errorf("fromUnix: %v is not a timestamp between 1970 and 9999", f)
+	}
+	return time.UnixMilli(int64(math.Round(f * 1000))).UTC().Format(time.RFC3339Nano), nil
+}
+
+// unix is fromUnix's inverse for request values: whole Unix seconds from now(), a time derived
+// from it (now() - duration("24h")), or an RFC 3339 string read from an upstream.
+func unix(v any) (int, error) {
+	switch t := v.(type) {
+	case time.Time:
+		return int(t.Unix()), nil
+	case string:
+		x, err := time.Parse(time.RFC3339Nano, t)
+		if err != nil {
+			return 0, fmt.Errorf("unix: %q is not an RFC 3339 timestamp", t)
+		}
+		return int(x.Unix()), nil
+	default:
+		return 0, fmt.Errorf("unix requires a time or an RFC 3339 string, got %T", v)
+	}
+}
+
 func run(ctx context.Context, p *vm.Program, env map[string]any, b *budget) (any, error) {
 	env["__ctx"] = context.WithValue(ctx, budgetKey{}, b)
 	return expr.Run(p, env)

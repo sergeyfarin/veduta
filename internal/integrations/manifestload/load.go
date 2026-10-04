@@ -450,6 +450,10 @@ func compileExprSource(src string, line, col, max int) (*Expression, error) {
 	return &Expression{src, line, col, v.count}, nil
 }
 
+// CoreFunctions are the functions Veduta adds to manifest expressions beyond expr's own builtins.
+// The declarative runtime registers exactly these; a test there keeps the two in step.
+var CoreFunctions = map[string]bool{"fromUnix": true, "unix": true}
+
 type exprVisitor struct {
 	count int
 	err   error
@@ -474,7 +478,12 @@ func (v *exprVisitor) Visit(p *ast.Node) { //nolint:revive // ast.Visitor requir
 			v.err = errors.New("matches is not supported")
 		}
 	case *ast.CallNode:
-		v.err = errors.New("custom function calls are not supported")
+		// Only a bare call to a core function: a method on a Go value (date(x).Format(...)) or any
+		// other name stays refused, so the callable surface is expr's classified builtins plus
+		// this list, both of which the declarative runtime's tests pin.
+		if id, ok := n.Callee.(*ast.IdentifierNode); !ok || !CoreFunctions[id.Value] {
+			v.err = errors.New("custom function calls are not supported")
+		}
 	case *ast.VariableDeclaratorNode, *ast.SequenceNode, *ast.SliceNode, *ast.ChainNode, *ast.BytesNode:
 		v.err = fmt.Errorf("expression node %T is not supported", n)
 	case *ast.NilNode, *ast.IntegerNode, *ast.FloatNode, *ast.BoolNode, *ast.StringNode, *ast.ConstantNode,

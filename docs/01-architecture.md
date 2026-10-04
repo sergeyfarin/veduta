@@ -504,7 +504,8 @@ handling, closures); D3 contributes every operation whose cost can scale with it
 
 This makes the manifest DSL a **deliberately smaller, explicitly supported surface**, not "whatever
 `expr` happens to ship": `map`, `filter`, `sortBy`, `take`, `sum`, `len`, arithmetic/comparison/
-boolean operators, string helpers, `bytes`, `date`, and whatever further template-specific helpers
+boolean operators, string helpers, `bytes`, `date`, the constant-cost time conversions `unix` and
+`fromUnix`, and whatever further template-specific helpers
 a card actually needs — reviewed for charging semantics before it is added, since an unreviewed
 `expr` builtin that turns out to scale with input is a sandbox hole the moment a manifest starts
 relying on it. The first draft of this format mixed quoted expressions (`'"Photos"'`), an

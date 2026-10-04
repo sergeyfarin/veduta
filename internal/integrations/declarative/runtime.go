@@ -226,6 +226,8 @@ func (i *instance) Invoke(ctx context.Context, req integrations.InvokeRequest) (
 	ctx, cancel = context.WithDeadline(ctx, deadline)
 	defer cancel()
 	b := &budget{ctx: ctx, deadline: deadline, iterations: i.manifest.Limits.Iterations, maxBytes: i.manifest.Limits.InputMB << 20, maxNodes: i.manifest.Limits.JSONNodes}
+	// Bare `now` is this value, one instant for the whole invocation, so a query's start and end
+	// agree; `now()` is expr's builtin and reads the clock again at each call.
 	env := map[string]any{"params": params, "now": time.Now().UTC(), "__grant": req.Grant}
 	for _, step := range op.Pipeline {
 		if e := b.check(); e != nil {
