@@ -25,6 +25,7 @@ files=(
   immich/manifest.yaml
   jellyfin/manifest.yaml
   jellyfin/jellyfin.wasm
+  prometheus/manifest.yaml
   proxmox/manifest.yaml
 )
 

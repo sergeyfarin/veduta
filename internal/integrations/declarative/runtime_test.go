@@ -156,15 +156,31 @@ func TestBeszelGoldenPipeline(t *testing.T) {
 	}
 }
 
+// Found rather than listed, like the contract test's schema check: a named list left five of the
+// eight declarative manifests out, and `veduta manifest digest` - the release workflow's check -
+// only hashes a manifest, so an expression that does not compile would otherwise first fail on
+// an administrator's machine.
 func TestLoadCompilesAllShippedDeclarativeManifests(t *testing.T) {
-	for _, name := range []string{"beszel", "glances", "immich"} {
-		m, err := manifestload.Load(filepath.Join("..", "..", "..", "plugins", name, "manifest.yaml"))
+	paths, err := filepath.Glob(filepath.Join("..", "..", "..", "plugins", "*", "manifest.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	declarative := 0
+	for _, path := range paths {
+		m, err := manifestload.Load(path)
 		if err != nil {
-			t.Fatal(err)
+			t.Fatalf("%s: %v", path, err)
 		}
+		if m.Runtime != "declarative" {
+			continue
+		}
+		declarative++
 		if _, err = New(fixtureBroker{}).Load(context.Background(), integrations.Installed{Manifest: m, Lock: &integrations.LockEntry{ManifestSHA256: m.Digest}}); err != nil {
-			t.Fatalf("%s: %v", name, err)
+			t.Fatalf("%s: %v", path, err)
 		}
+	}
+	if declarative < 8 {
+		t.Fatalf("found %d declarative manifests under plugins/, want at least 8", declarative)
 	}
 }
 

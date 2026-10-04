@@ -67,3 +67,29 @@ sorted `GET /Items` query — no `/Users/Me`, no user-scoped `/Items/Latest`.
   removed. No `NowPlayingItem` (nobody was streaming at capture time).
 - `poster-noauth.bin` — replaced with a **synthetic 400×600 baseline JPEG**. Real capture was
   `image/jpeg`, 153 KB.
+
+## Prometheus 3.15.0
+
+Captured 2026-10-04 by `hack/capture-prometheus-fixtures.sh` from a stock `prom/prometheus`
+container scraping only itself, a few minutes after it started. Every file is the body exactly as
+served; nothing was scrubbed, because a self-scraping Prometheus holds nothing private.
+
+| File | Request | Status |
+| --- | --- | --- |
+| `query-vector-one.json` | `GET /api/v1/query` `sum(up)` | 200 |
+| `query-vector-many.json` | `GET /api/v1/query` `sum by (handler) (prometheus_http_requests_total)` | 200 |
+| `query-scalar.json` | `GET /api/v1/query` `scalar(sum(up))` | 200 |
+| `query-empty.json` | `GET /api/v1/query` `veduta_no_such_metric` | 200 |
+| `query-nan.json` | `GET /api/v1/query` `(sum(up) - sum(up)) / 0` | 200 |
+| `query-bad.json` | `GET /api/v1/query` `sum((` | 400 |
+| `query-range.json` | `GET /api/v1/query_range` `sum(rate(prometheus_http_requests_total[1m]))`, 1 h at 15 s | 200 |
+| `query-range-empty.json` | `GET /api/v1/query_range` `veduta_no_such_metric`, 1 h at 15 s | 200 |
+
+- Every sample value is a **string**, `"NaN"` included; timestamps are JSON numbers of Unix
+  seconds (whole here, because the capture passed whole-second `time`/`start`).
+- A scalar result is the bare pair `[t, "v"]`, not a list; a vector is a list of
+  `{metric, value}`, a matrix a list of `{metric, values}`.
+- No samples is `"result": []` with status 200, not an error. A query that does not parse is
+  400 with `{"status":"error","errorType":"bad_data","error":…}`.
+- The range result only covers the minutes the server had been running: a matrix has no points
+  where there was no data, rather than nulls.

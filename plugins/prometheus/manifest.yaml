@@ -1,0 +1,245 @@
+# Cards from PromQL: Prometheus keeps the history and does the aggregation, and a card asks it a
+# few questions through its JSON query API. The card supplies the PromQL; this manifest supplies
+# nothing but the two read-only query endpoints, so an approval grants reading every series that
+# Prometheus holds and nothing else - not the admin, rules, targets or write paths.
+apiVersion: veduta.dev/v1
+kind: Integration
+metadata:
+  id: prometheus
+  name: Prometheus
+  version: 0.1.0
+  description: Values, charts and top-N lists from PromQL queries against a Prometheus server.
+  license: Apache-2.0
+  icon: sh:prometheus
+spec:
+  runtime: declarative
+  slots:
+    - name: server
+      kind: http
+      description: A Prometheus server, or one serving the same /api/v1 query API
+  capabilities: [http]
+  limits: { httpRequests: 6, timeoutMs: 5000, inputMB: 2, iterations: 5000 }
+  operations:
+    # Up to six instant queries, one value each. A query should return one series - a vector with
+    # one sample, or a scalar; wrap anything wider in sum() or similar, since only the first sample
+    # is shown. A query with no samples shows a dash rather than failing the card, because "no
+    # series yet" is an ordinary state for a new exporter.
+    - id: stat
+      name: Values
+      defaultRefresh: 1m
+      routes:
+        - { slot: server, method: GET, path: /api/v1/query, queryKeys: [query], reason: Instant PromQL query }
+      signals:
+        # The first query's value, so a rule or a bound chart can follow one number.
+        - { name: value, type: number, unit: none, history: true }
+      params:
+        type: object
+        required: [queries]
+        additionalProperties: false
+        properties:
+          queries:
+            type: array
+            minItems: 1
+            maxItems: 6
+            items:
+              type: object
+              required: [label, query]
+              additionalProperties: false
+              properties:
+                label:  { type: string, minLength: 1, maxLength: 64 }
+                query:  { type: string, minLength: 1, maxLength: 2048 }
+                format: { enum: [number, count, bytes, bytes-rate, percent, duration, temperature] }
+                unit:   { type: string, maxLength: 16 }
+      pipeline:
+        - as: q0
+          request: { slot: server, method: GET, path: /api/v1/query, query: { query: { expr: 'params.queries[0].query' } } }
+        - as: q1
+          when: { expr: 'len(params.queries) > 1' }
+          request: { slot: server, method: GET, path: /api/v1/query, query: { query: { expr: 'params.queries[1].query' } } }
+        - as: q2
+          when: { expr: 'len(params.queries) > 2' }
+          request: { slot: server, method: GET, path: /api/v1/query, query: { query: { expr: 'params.queries[2].query' } } }
+        - as: q3
+          when: { expr: 'len(params.queries) > 3' }
+          request: { slot: server, method: GET, path: /api/v1/query, query: { query: { expr: 'params.queries[3].query' } } }
+        - as: q4
+          when: { expr: 'len(params.queries) > 4' }
+          request: { slot: server, method: GET, path: /api/v1/query, query: { query: { expr: 'params.queries[4].query' } } }
+        - as: q5
+          when: { expr: 'len(params.queries) > 5' }
+          request: { slot: server, method: GET, path: /api/v1/query, query: { query: { expr: 'params.queries[5].query' } } }
+      output:
+        title: Prometheus
+        status:
+          level: ok
+        signals:
+          # Prometheus sends every sample value as a string, including "NaN" and "+Inf", which
+          # are not numbers JSON can carry; those, like an empty result, leave the signal absent.
+          value:
+            if: { expr: 'first(q0.data.resultType == "scalar" ? [q0.data.result[1]] : map(q0.data.result, .value[1])) not in [nil, "NaN", "+Inf", "-Inf"]' }
+            then:
+              value: { expr: 'float(first(q0.data.resultType == "scalar" ? [q0.data.result[1]] : map(q0.data.result, .value[1])))' }
+        blocks:
+          - type: metrics
+            items:
+              # Pairs each configured query with its response, and reduces the response to its
+              # first sample's value string (nil when there is none).
+              each: { expr: 'map(map(params.queries, ({"q": #, "r": [q0, q1, q2, q3, q4, q5][#index].data})), ({"q": .q, "v": first(.r.resultType == "scalar" ? [.r.result[1]] : map(.r.result, .value[1]))}))' }
+              as: s
+              item:
+                label:  { expr: s.q.label }
+                value:  { expr: 's.v in [nil, "NaN", "+Inf", "-Inf"] ? nil : float(s.v)' }
+                format: { expr: 's.q.format ?? "number"' }
+                unit:
+                  if: { expr: 's.q.unit != nil' }
+                  then: { expr: s.q.unit }
+
+    # Up to four range queries drawn as lines over a fixed window. The step is chosen so a line
+    # has at most 241 points, inside a series block's 288. Each query should return one series;
+    # only the first is drawn.
+    - id: series
+      name: Chart
+      defaultRefresh: 2m
+      routes:
+        - { slot: server, method: GET, path: /api/v1/query_range, queryKeys: [end, query, start, step], reason: Range PromQL query }
+      params:
+        type: object
+        required: [lines]
+        additionalProperties: false
+        properties:
+          title:  { type: string, maxLength: 64 }
+          window: { enum: [1h, 6h, 24h, 7d], default: 24h }
+          format: { enum: [number, count, bytes, bytes-rate, percent, duration, temperature] }
+          unit:   { type: string, maxLength: 16 }
+          min:    { type: number }
+          max:    { type: number }
+          lines:
+            type: array
+            minItems: 1
+            maxItems: 4
+            items:
+              type: object
+              required: [label, query]
+              additionalProperties: false
+              properties:
+                label: { type: string, minLength: 1, maxLength: 64 }
+                query: { type: string, minLength: 1, maxLength: 2048 }
+      pipeline:
+        - as: l0
+          request:
+            slot: server
+            method: GET
+            path: /api/v1/query_range
+            query:
+              query: { expr: 'params.lines[0].query' }
+              start: { expr: 'string(unix(now) - {"1h": 3600, "6h": 21600, "24h": 86400, "7d": 604800}[params.window])' }
+              end:   { expr: 'string(unix(now))' }
+              step:  { expr: 'string({"1h": 15, "6h": 90, "24h": 360, "7d": 2520}[params.window])' }
+        - as: l1
+          when: { expr: 'len(params.lines) > 1' }
+          request:
+            slot: server
+            method: GET
+            path: /api/v1/query_range
+            query:
+              query: { expr: 'params.lines[1].query' }
+              start: { expr: 'string(unix(now) - {"1h": 3600, "6h": 21600, "24h": 86400, "7d": 604800}[params.window])' }
+              end:   { expr: 'string(unix(now))' }
+              step:  { expr: 'string({"1h": 15, "6h": 90, "24h": 360, "7d": 2520}[params.window])' }
+        - as: l2
+          when: { expr: 'len(params.lines) > 2' }
+          request:
+            slot: server
+            method: GET
+            path: /api/v1/query_range
+            query:
+              query: { expr: 'params.lines[2].query' }
+              start: { expr: 'string(unix(now) - {"1h": 3600, "6h": 21600, "24h": 86400, "7d": 604800}[params.window])' }
+              end:   { expr: 'string(unix(now))' }
+              step:  { expr: 'string({"1h": 15, "6h": 90, "24h": 360, "7d": 2520}[params.window])' }
+        - as: l3
+          when: { expr: 'len(params.lines) > 3' }
+          request:
+            slot: server
+            method: GET
+            path: /api/v1/query_range
+            query:
+              query: { expr: 'params.lines[3].query' }
+              start: { expr: 'string(unix(now) - {"1h": 3600, "6h": 21600, "24h": 86400, "7d": 604800}[params.window])' }
+              end:   { expr: 'string(unix(now))' }
+              step:  { expr: 'string({"1h": 15, "6h": 90, "24h": 360, "7d": 2520}[params.window])' }
+      output:
+        title: Prometheus
+        status:
+          level: ok
+        blocks:
+          - type: series
+            title:
+              if: { expr: 'params.title != nil' }
+              then: { expr: params.title }
+            format:
+              if: { expr: 'params.format != nil' }
+              then: { expr: params.format }
+            unit:
+              if: { expr: 'params.unit != nil' }
+              then: { expr: params.unit }
+            min:
+              if: { expr: 'params.min != nil' }
+              then: { expr: params.min }
+            max:
+              if: { expr: 'params.max != nil' }
+              then: { expr: params.max }
+            series:
+              each: { expr: 'map(params.lines, ({"label": .label, "r": [l0, l1, l2, l3][#index].data}))' }
+              as: line
+              item:
+                label: { expr: line.label }
+                points:
+                  each: { expr: 'len(line.r.result) > 0 ? first(line.r.result).values : []' }
+                  as: p
+                  item:
+                    t: { expr: 'fromUnix(p[0])' }
+                    # A value JSON cannot carry is a gap, which the chart draws as one.
+                    v: { expr: 'p[1] in ["NaN", "+Inf", "-Inf"] ? nil : float(p[1])' }
+
+    # One instant query returning many series, ranked by value: the busiest devices, the fullest
+    # disks. Each row is titled by one of the series' labels.
+    - id: top
+      name: Ranking
+      defaultRefresh: 1m
+      routes:
+        - { slot: server, method: GET, path: /api/v1/query, queryKeys: [query], reason: Instant PromQL query }
+      params:
+        type: object
+        required: [query, label]
+        additionalProperties: false
+        properties:
+          title:    { type: string, maxLength: 64 }
+          query:    { type: string, minLength: 1, maxLength: 2048 }
+          label:    { type: string, pattern: "^[a-zA-Z_][a-zA-Z0-9_]{0,63}$" }
+          subtitle: { type: string, pattern: "^[a-zA-Z_][a-zA-Z0-9_]{0,63}$" }
+          format:   { enum: [number, count, bytes, bytes-rate, percent, duration, temperature], default: number }
+          limit:    { type: integer, minimum: 1, maximum: 20, default: 5 }
+      pipeline:
+        - as: r
+          request: { slot: server, method: GET, path: /api/v1/query, query: { query: { expr: params.query } } }
+      output:
+        title: Prometheus
+        status:
+          level: ok
+        blocks:
+          - type: list
+            title:
+              if: { expr: 'params.title != nil' }
+              then: { expr: params.title }
+            empty: No series
+            items:
+              each: { expr: 'take(sortBy(filter(map(r.data.result, ({"m": .metric, "v": .value[1]})), .v not in ["NaN", "+Inf", "-Inf"]), float(.v), "desc"), params.limit)' }
+              as: row
+              item:
+                title: { expr: 'row.m[params.label] ?? ("(no " + params.label + ")")' }
+                subtitle:
+                  if: { expr: 'params.subtitle != nil && row.m[params.subtitle] != nil' }
+                  then: { expr: 'row.m[params.subtitle]' }
+                value:  { expr: float(row.v) }
+                format: { expr: params.format }

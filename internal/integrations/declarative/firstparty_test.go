@@ -324,7 +324,7 @@ func TestFirstPartyManifests_AgainstDocumentedResponseShapes(t *testing.T) {
 // destroyed through the very APIs they talk to, and a route grant is the only thing standing
 // between an approved manifest and a POST .../stop.
 func TestFirstPartyManifests_DeclareOnlyReadRoutes(t *testing.T) {
-	for _, plugin := range []string{"proxmox", "homeassistant", "arcane", "dockhand"} {
+	for _, plugin := range []string{"proxmox", "homeassistant", "arcane", "dockhand", "prometheus"} {
 		t.Run(plugin, func(t *testing.T) {
 			m, err := manifestload.Load(filepath.Join("..", "..", "..", "plugins", plugin, "manifest.yaml"))
 			if err != nil {

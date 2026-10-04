@@ -1,8 +1,8 @@
 # Shipped integrations
 
-Ten integrations ship with Veduta. Two are compiled into the binary; the other eight are files in
-[`plugins/`](../plugins/) that sit beside it — seven declarative manifests and one WebAssembly
-module. All eight cross the same approval boundary a third-party integration does: they are
+Eleven integrations ship with Veduta. Two are compiled into the binary; the other nine are files in
+[`plugins/`](../plugins/) that sit beside it — eight declarative manifests and one WebAssembly
+module. All nine cross the same approval boundary a third-party integration does: they are
 listed, diffed and approved in `veduta.lock.yaml` rather than inheriting the binary's trust.
 Nothing here is active until you approve it.
 
@@ -18,9 +18,10 @@ Nothing here is active until you approve it.
 | [`homeassistant`](../plugins/homeassistant/manifest.yaml) | `overview`, `sensor` | a long-lived access token | declarative |
 | [`arcane`](../plugins/arcane/manifest.yaml) | `containers` | an API key | declarative |
 | [`dockhand`](../plugins/dockhand/manifest.yaml) | `overview` | an API token | declarative |
+| [`prometheus`](../plugins/prometheus/manifest.yaml) | `stat`, `series`, `top` | a Prometheus server; PromQL on each card | declarative |
 
 Every one of these declares its complete upstream request surface in its manifest, and every route
-in the seven declarative manifests is a `GET`. None of them can act on the system it watches: an
+in the eight declarative manifests is a `GET`. None of them can act on the system it watches: an
 integration that could stop a container or call a Home Assistant service would need a route
 declaring that method and path, and none does.
 
@@ -193,6 +194,84 @@ rules:
     notify: [phone]
     resolve: true
 ```
+
+## Prometheus
+
+Prometheus keeps the history and does the aggregation; a card asks it a few PromQL questions
+through its JSON query API and shows the answers. Use it for whatever already lands in Prometheus
+(router and per-device traffic exporters, DNS exporters, anything with a `/metrics` endpoint)
+rather than teaching Veduta each source. Hosts that run Beszel or Glances are better served by
+those integrations directly.
+
+```yaml
+connections:
+  prometheus:
+    kind: http
+    baseUrl: http://prometheus.lan:9090
+    auth: { type: none }
+```
+
+The manifest declares two routes, `GET /api/v1/query` and `GET /api/v1/query_range`, and nothing
+else, so the admin API, rule and target listings and remote write are unreachable through it. An
+approval does grant reading **every series that Prometheus holds**, because the query is the
+card's to choose: put Prometheus behind authentication of its own if some of its series should
+not reach the dashboard.
+
+Three operations:
+
+- `stat` shows up to six instant queries as values. Each query should return one sample (wrap a
+  wider result in `sum()`, since only the first sample is shown); one with no samples, or a `NaN`,
+  shows a dash rather than failing the card. The first query's value is also the `value` signal,
+  absent when there is nothing to read.
+- `series` draws up to four range queries over a `window` of `1h`, `6h`, `24h` (the default) or
+  `7d`. The step is chosen from the window so a line stays within the chart's 288 points: 15 s,
+  90 s, 6 min and 42 min. Each query should return one series; only the first is drawn.
+- `top` ranks the series one instant query returns, largest first, titling each row by the metric
+  label named in `label` (and optionally subtitling it by `subtitle`). `limit` is 1-20, default 5.
+
+`format` takes the dashboard's value formats: `number`, `count`, `bytes`, `bytes-rate`,
+`percent`, `duration` or `temperature`. **`percent` expects a 0-1 fraction**, so divide a 0-100
+metric by 100 in the query. Give a chart or a list `span: { rows: 2 }`; one row is too short for
+either.
+
+```yaml
+      - id: internet
+        title: Internet
+        integration: prometheus
+        operation: stat
+        slots: { server: prometheus }
+        params:
+          queries:
+            - { label: Today, query: 'sum(increase(wan_rx_bytes_total[1d]))', format: bytes }
+            - { label: Now,   query: 'sum(rate(wan_rx_bytes_total[2m]))',     format: bytes-rate }
+
+      - id: family-traffic
+        title: Family, last 24 hours
+        integration: prometheus
+        operation: series
+        slots: { server: prometheus }
+        span: { rows: 2 }
+        params:
+          format: bytes-rate
+          lines:
+            - { label: Desktop, query: 'sum(rate(client_rx_bytes_total{client="desktop"}[5m]))' }
+            - { label: Console, query: 'sum(rate(client_rx_bytes_total{client="console"}[5m]))' }
+
+      - id: top-talkers
+        title: Busiest devices today
+        integration: prometheus
+        operation: top
+        slots: { server: prometheus }
+        span: { rows: 2 }
+        params:
+          query: 'topk(5, sum by (client) (increase(client_rx_bytes_total[1d])))'
+          label: client
+          format: bytes
+```
+
+The metric names above are placeholders: use whatever your exporters publish, which the
+Prometheus web UI will list. A query Prometheus cannot parse fails the card with HTTP 400; try it
+in that UI first, where the error says what is wrong.
 
 ## Host metrics
 

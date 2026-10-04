@@ -48,6 +48,7 @@ veduta-<version>-<target>/
 │   ├── glances/manifest.yaml
 │   ├── homeassistant/manifest.yaml
 │   ├── immich/manifest.yaml
+│   ├── prometheus/manifest.yaml
 │   ├── proxmox/manifest.yaml
 │   └── jellyfin/{manifest.yaml,jellyfin.wasm}
 └── LICENSE, LICENSING.md, LICENSE-PLUGIN-EXCEPTION.txt, THIRD-PARTY-NOTICES.md, README.md
