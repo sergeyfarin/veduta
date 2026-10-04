@@ -13,7 +13,7 @@
     "check": "go vet ./... && go test ./... && pnpm --filter veduta-web check && pnpm --filter veduta-web test",
     "test": "go test ./... && pnpm --filter veduta-web test",
     "contracts": "go test ./internal/contracts/...",
-    "update": "pnpm --recursive update --latest && go get -u ./... && go mod tidy",
+    "update": "pnpm --recursive update --latest '!typescript' && pnpm --filter veduta-web add -D typescript@6 && go get -u ./... && go mod tidy",
     "lint": "go vet ./... && golangci-lint run ./... && pnpm --filter veduta-web check && pnpm --filter veduta-web test",
     "gen-types": "pnpm --filter veduta-web gen-types",
     "gen-docs": "go run ./hack/gen-config-reference.go"
