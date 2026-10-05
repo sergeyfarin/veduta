@@ -5,7 +5,7 @@ kind: Integration
 metadata:
   id: beszel
   name: Beszel
-  version: 0.1.0
+  version: 0.1.1
   description: CPU, memory, disk, network, temperature and uptime from a Beszel Hub.
   license: MIT
   icon: sh:beszel
@@ -61,9 +61,9 @@ spec:
         blocks:
           - type: progress
             items:
-              - { label: CPU,    progress: { expr: first(system.items).info.cpu / 100 }, value: { expr: first(system.items).info.cpu }, format: percent }
-              - { label: Memory, progress: { expr: first(system.items).info.mp / 100 },  value: { expr: first(system.items).info.mp },  format: percent }
-              - { label: Disk,   progress: { expr: first(system.items).info.dp / 100 },  value: { expr: first(system.items).info.dp },  format: percent }
+              - { label: CPU,    progress: { expr: first(system.items).info.cpu / 100 }, value: { expr: first(system.items).info.cpu / 100 }, format: percent }
+              - { label: Memory, progress: { expr: first(system.items).info.mp / 100 },  value: { expr: first(system.items).info.mp / 100 },  format: percent }
+              - { label: Disk,   progress: { expr: first(system.items).info.dp / 100 },  value: { expr: first(system.items).info.dp / 100 },  format: percent }
           - type: metrics
             items:
               - { label: Uptime,     value: { expr: first(system.items).info.u },  format: duration }

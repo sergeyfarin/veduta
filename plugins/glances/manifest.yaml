@@ -4,7 +4,7 @@ kind: Integration
 metadata:
   id: glances
   name: Glances
-  version: 0.2.0
+  version: 0.2.1
   description: CPU, memory, filesystem and uptime for a Linux host running Glances.
   license: Apache-2.0
   icon: sh:glances
@@ -53,11 +53,13 @@ spec:
           mem.percent:     { value: { expr: mem.percent } }
           fs.root.percent: { value: { expr: 'first(filter(fs, .mnt_point == "/")).percent' } }
         blocks:
+          # A percent-formatted value is a 0-1 fraction, like progress; the signals above stay
+          # 0-100, the unit rules are written in.
           - type: progress
             items:
-              - { label: CPU,    progress: { expr: cpu.total / 100 }, value: { expr: cpu.total }, format: percent }
-              - { label: Memory, progress: { expr: mem.percent / 100 }, value: { expr: mem.percent }, format: percent }
-              - { label: Root,   progress: { expr: 'first(filter(fs, .mnt_point == "/")).percent / 100' }, value: { expr: 'first(filter(fs, .mnt_point == "/")).percent' }, format: percent }
+              - { label: CPU,    progress: { expr: cpu.total / 100 }, value: { expr: cpu.total / 100 }, format: percent }
+              - { label: Memory, progress: { expr: mem.percent / 100 }, value: { expr: mem.percent / 100 }, format: percent }
+              - { label: Root,   progress: { expr: 'first(filter(fs, .mnt_point == "/")).percent / 100' }, value: { expr: 'first(filter(fs, .mnt_point == "/")).percent / 100' }, format: percent }
           # Drawn from what the core has retained for this card, not from the response above: the
           # integration names its own signals and never reads stored history. Glances reports these
           # as 0-100, hence number with a unit rather than percent, which expects a 0-1 fraction.

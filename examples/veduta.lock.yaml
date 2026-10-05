@@ -65,8 +65,8 @@ integrations:
       - { slot: server, method: GET, path: /Items/*/Images/Primary, use: asset }
 
   glances:
-    manifestSha256: d3e154a952bf05ac1eea44370aa58ae9c574503c7fb085422efa81ba78faf400
-    version: 0.2.0
+    manifestSha256: 4fe84cf24ff23fb11e98f35645701c8dcdc91de37e7010ac170fc2108aa8e714
+    version: 0.2.1
     runtime: declarative
     approvedAt: "2026-09-09T00:19:38Z"
     approvedBy: admin

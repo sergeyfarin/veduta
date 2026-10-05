@@ -22,7 +22,7 @@ kind: Integration
 metadata:
   id: proxmox
   name: Proxmox VE
-  version: 0.1.0
+  version: 0.1.1
   description: Node health, guest counts and cluster CPU, memory and storage usage from Proxmox VE.
   license: Apache-2.0
   icon: sh:proxmox
@@ -85,11 +85,11 @@ spec:
             items:
               - label: CPU
                 progress: { expr: 'sum(filter(cluster.data, .type == "node" && .status == "online"), .maxcpu) > 0 ? sum(filter(cluster.data, .type == "node" && .status == "online"), .cpu * .maxcpu) / sum(filter(cluster.data, .type == "node" && .status == "online"), .maxcpu) : 0' }
-                value:    { expr: 'sum(filter(cluster.data, .type == "node" && .status == "online"), .maxcpu) > 0 ? sum(filter(cluster.data, .type == "node" && .status == "online"), .cpu * .maxcpu) / sum(filter(cluster.data, .type == "node" && .status == "online"), .maxcpu) * 100 : 0' }
+                value:    { expr: 'sum(filter(cluster.data, .type == "node" && .status == "online"), .maxcpu) > 0 ? sum(filter(cluster.data, .type == "node" && .status == "online"), .cpu * .maxcpu) / sum(filter(cluster.data, .type == "node" && .status == "online"), .maxcpu) : 0' }
                 format: percent
               - label: Memory
                 progress: { expr: 'sum(filter(cluster.data, .type == "node" && .status == "online"), .maxmem) > 0 ? sum(filter(cluster.data, .type == "node" && .status == "online"), .mem) / sum(filter(cluster.data, .type == "node" && .status == "online"), .maxmem) : 0' }
-                value:    { expr: 'sum(filter(cluster.data, .type == "node" && .status == "online"), .maxmem) > 0 ? sum(filter(cluster.data, .type == "node" && .status == "online"), .mem) / sum(filter(cluster.data, .type == "node" && .status == "online"), .maxmem) * 100 : 0' }
+                value:    { expr: 'sum(filter(cluster.data, .type == "node" && .status == "online"), .maxmem) > 0 ? sum(filter(cluster.data, .type == "node" && .status == "online"), .mem) / sum(filter(cluster.data, .type == "node" && .status == "online"), .maxmem) : 0' }
                 format: percent
           - type: metrics
             items:
@@ -121,5 +121,5 @@ spec:
                 id:       { expr: store.id }
                 title:    { expr: store.storage }
                 subtitle: { expr: store.node }
-                value:    { expr: 'store.disk / store.maxdisk * 100' }
+                value:    { expr: 'store.disk / store.maxdisk' }
                 format: percent

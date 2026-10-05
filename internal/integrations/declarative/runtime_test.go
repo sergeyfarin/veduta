@@ -130,6 +130,7 @@ func TestGlancesGoldenPipeline(t *testing.T) {
 	if resp.Document.Title != "Host" || len(resp.Document.Blocks) != 5 {
 		t.Fatalf("unexpected document: %#v", resp.Document)
 	}
+	AssertPercentsAreFractions(t, resp.Document)
 	// The chart names the manifest's own retained signals and nothing else; the points are the
 	// core's to attach, so the document carries none.
 	bound := widgets.HistoryBindings(resp.Document)
@@ -154,6 +155,7 @@ func TestBeszelGoldenPipeline(t *testing.T) {
 	if resp.Document.Title != "Build host" || resp.Document.Status == nil || resp.Document.Status.Text != "up" || len(resp.Document.Blocks) != 2 {
 		t.Fatalf("unexpected document: %#v", resp.Document)
 	}
+	AssertPercentsAreFractions(t, resp.Document)
 }
 
 // Found rather than listed, like the contract test's schema check: a named list left five of the

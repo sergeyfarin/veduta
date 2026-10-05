@@ -52,6 +52,8 @@ func TestFirstPartyManifests_AgainstDocumentedResponseShapes(t *testing.T) {
 		// wantFirstListItem guards the string munging each manifest does for display, which is
 		// where upstream naming conventions (Docker's leading slash, friendly_name) actually bite.
 		wantFirstListItem string
+		// percents asserts every percent-formatted value is a 0-1 fraction (#19).
+		percents bool
 	}{{
 		// Fields per the Proxmox VE API viewer for GET /cluster/resources: type, status, node,
 		// name, cpu (a 0..1 fraction of maxcpu), maxcpu, mem/maxmem in bytes, and for storage
@@ -60,6 +62,7 @@ func TestFirstPartyManifests_AgainstDocumentedResponseShapes(t *testing.T) {
 		plugin:    "proxmox",
 		operation: "cluster-overview",
 		params:    `{}`,
+		percents:  true,
 		responses: map[string]string{"/api2/json/cluster/resources": `{"data":[
 			{"id":"node/pve1","type":"node","node":"pve1","status":"online","cpu":0.25,"maxcpu":16,"mem":8589934592,"maxmem":34359738368,"uptime":864000},
 			{"id":"node/pve2","type":"node","node":"pve2","status":"online","cpu":0.5,"maxcpu":4,"mem":2147483648,"maxmem":8589934592,"uptime":432000},
@@ -309,6 +312,9 @@ func TestFirstPartyManifests_AgainstDocumentedResponseShapes(t *testing.T) {
 				if resp.Document.Status.Text != tc.wantStatus {
 					t.Errorf("status text = %q, want %q", resp.Document.Status.Text, tc.wantStatus)
 				}
+			}
+			if tc.percents {
+				declarative.AssertPercentsAreFractions(t, resp.Document)
 			}
 			if tc.wantFirstListItem != "" {
 				if got := firstListTitle(resp.Document.Blocks); got != tc.wantFirstListItem {

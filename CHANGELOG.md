@@ -23,6 +23,15 @@ project is pre-1.0:
   from PromQL a card supplies, through the two read-only query endpoints. Tested against responses
   captured from a real Prometheus 3.15.0. See [docs/integrations.md](docs/integrations.md#prometheus).
 
+### Fixed
+
+- Glances, Beszel and Proxmox showed their percentages 100 times too large: 25% CPU read
+  "2500.0%" next to a correctly quarter-full bar. The renderer reads a percent-formatted value as
+  a 0-1 fraction, and these three manifests passed the upstream's 0-100 number. Their signals are
+  unchanged (still 0-100, so existing rules keep working), but the manifests are now `glances`
+  0.2.1, `beszel` 0.1.1 and `proxmox` 0.1.1 and need re-approval (`veduta integration diff`, then
+  `approve`). ([#19](https://github.com/sergeyfarin/veduta/issues/19))
+
 ### Changed
 
 - Open gaps and planned work moved from `docs/03-backlog.md` to
