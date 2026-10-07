@@ -18,7 +18,9 @@ spec:
       kind: http
       description: A Prometheus server, or one serving the same /api/v1 query API
   capabilities: [http]
-  limits: { httpRequests: 6, timeoutMs: 5000, inputMB: 2, iterations: 5000 }
+  # The iteration budget is the table's: it scans each later value's whole result once per row,
+  # so twenty rows against three more queries of about 700 series each fit inside it.
+  limits: { httpRequests: 6, timeoutMs: 5000, inputMB: 2, iterations: 50000 }
   operations:
     # Up to six instant queries, one value each. A query should return one series - a vector with
     # one sample, or a scalar; wrap anything wider in sum() or similar, since only the first sample
@@ -243,3 +245,103 @@ spec:
                   then: { expr: 'row.m[params.subtitle]' }
                 value:  { expr: float(row.v) }
                 format: { expr: params.format }
+
+    # Up to four instant queries side by side, one row per series: a device, its access point, its
+    # signal and its rates. Rows come from the first value's query, largest first, and are named by
+    # the metric labels in `labels`. Every other value is that row's sample in its own query: the
+    # series whose `labels` all carry the same values, or a blank where the query has none.
+    - id: table
+      name: Table
+      defaultRefresh: 1m
+      routes:
+        - { slot: server, method: GET, path: /api/v1/query, queryKeys: [query], reason: Instant PromQL query }
+      params:
+        type: object
+        required: [labels, values]
+        additionalProperties: false
+        properties:
+          title:  { type: string, maxLength: 64 }
+          labels:
+            type: array
+            minItems: 1
+            maxItems: 4
+            items:
+              type: object
+              required: [name]
+              additionalProperties: false
+              properties:
+                name:  { type: string, pattern: "^[a-zA-Z_][a-zA-Z0-9_]{0,63}$" }
+                label: { type: string, minLength: 1, maxLength: 64 }
+          values:
+            type: array
+            minItems: 1
+            maxItems: 4
+            items:
+              type: object
+              required: [label, query]
+              additionalProperties: false
+              properties:
+                label:  { type: string, minLength: 1, maxLength: 64 }
+                query:  { type: string, minLength: 1, maxLength: 2048 }
+                format: { enum: [number, count, bytes, bytes-rate, percent, duration, temperature] }
+          limit: { type: integer, minimum: 1, maximum: 20, default: 10 }
+      pipeline:
+        - as: v0
+          request: { slot: server, method: GET, path: /api/v1/query, query: { query: { expr: 'params.values[0].query' } } }
+        - as: v1
+          when: { expr: 'len(params.values) > 1' }
+          request: { slot: server, method: GET, path: /api/v1/query, query: { query: { expr: 'params.values[1].query' } } }
+        - as: v2
+          when: { expr: 'len(params.values) > 2' }
+          request: { slot: server, method: GET, path: /api/v1/query, query: { query: { expr: 'params.values[2].query' } } }
+        - as: v3
+          when: { expr: 'len(params.values) > 3' }
+          request: { slot: server, method: GET, path: /api/v1/query, query: { query: { expr: 'params.values[3].query' } } }
+      output:
+        title: Prometheus
+        status:
+          level: ok
+        blocks:
+          - type: table
+            title:
+              if: { expr: 'params.title != nil' }
+              then: { expr: params.title }
+            columns:
+              # The label columns l0-l3, then the value columns v0-v3, as many of each as configured.
+              each: { expr: 'filter(map(["l0", "l1", "l2", "l3", "v0", "v1", "v2", "v3"], ({"key": #, "i": #index % 4, "isLabel": #index < 4})), .isLabel ? .i < len(params.labels) : .i < len(params.values))' }
+              as: col
+              item:
+                key:   { expr: col.key }
+                label: { expr: 'col.isLabel ? params.labels[col.i].label ?? params.labels[col.i].name : params.values[col.i].label' }
+                format:
+                  if: { expr: '!col.isLabel' }
+                  then: { expr: 'params.values[col.i].format ?? "number"' }
+                align:
+                  if: { expr: '!col.isLabel' }
+                  then: end
+            rows:
+              each: { expr: 'take(sortBy(filter(map(v0.data.result, ({"m": .metric, "v": .value[1]})), .v not in ["NaN", "+Inf", "-Inf"]), float(.v), "desc"), params.limit)' }
+              as: row
+              # A later value is the sample of the series in its own query whose labels all match
+              # the row's; a label neither series carries counts as matching.
+              item:
+                l0: { expr: 'row.m[params.labels[0].name]' }
+                l1:
+                  if: { expr: 'len(params.labels) > 1' }
+                  then: { expr: 'row.m[params.labels[1].name]' }
+                l2:
+                  if: { expr: 'len(params.labels) > 2' }
+                  then: { expr: 'row.m[params.labels[2].name]' }
+                l3:
+                  if: { expr: 'len(params.labels) > 3' }
+                  then: { expr: 'row.m[params.labels[3].name]' }
+                v0: { expr: float(row.v) }
+                v1:
+                  if: { expr: 'len(params.values) > 1' }
+                  then: { expr: 'first(map(filter(v1.data.result, .value[1] not in ["NaN", "+Inf", "-Inf"] && .metric[params.labels[0].name] == row.m[params.labels[0].name] && (len(params.labels) < 2 || .metric[params.labels[1].name] == row.m[params.labels[1].name]) && (len(params.labels) < 3 || .metric[params.labels[2].name] == row.m[params.labels[2].name]) && (len(params.labels) < 4 || .metric[params.labels[3].name] == row.m[params.labels[3].name])), float(.value[1])))' }
+                v2:
+                  if: { expr: 'len(params.values) > 2' }
+                  then: { expr: 'first(map(filter(v2.data.result, .value[1] not in ["NaN", "+Inf", "-Inf"] && .metric[params.labels[0].name] == row.m[params.labels[0].name] && (len(params.labels) < 2 || .metric[params.labels[1].name] == row.m[params.labels[1].name]) && (len(params.labels) < 3 || .metric[params.labels[2].name] == row.m[params.labels[2].name]) && (len(params.labels) < 4 || .metric[params.labels[3].name] == row.m[params.labels[3].name])), float(.value[1])))' }
+                v3:
+                  if: { expr: 'len(params.values) > 3' }
+                  then: { expr: 'first(map(filter(v3.data.result, .value[1] not in ["NaN", "+Inf", "-Inf"] && .metric[params.labels[0].name] == row.m[params.labels[0].name] && (len(params.labels) < 2 || .metric[params.labels[1].name] == row.m[params.labels[1].name]) && (len(params.labels) < 3 || .metric[params.labels[2].name] == row.m[params.labels[2].name]) && (len(params.labels) < 4 || .metric[params.labels[3].name] == row.m[params.labels[3].name])), float(.value[1])))' }

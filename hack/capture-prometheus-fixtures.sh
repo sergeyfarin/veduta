@@ -28,6 +28,12 @@ instant query-scalar 'scalar(sum(up))'
 instant query-empty 'veduta_no_such_metric'
 instant query-nan '(sum(up) - sum(up)) / 0'
 instant query-bad 'sum(('
+# The table operation's join: the same (handler, code) series in two queries, and a third query
+# whose series lack the code label. Make a few requests first, a failing one among them, so more
+# than one code shows up: curl "$base/api/v1/query?query=sum((" and "$base/-/healthy".
+instant query-table-total 'sum by (handler, code) (prometheus_http_requests_total)'
+instant query-table-rate 'sum by (handler, code) (rate(prometheus_http_requests_total[5m]))'
+instant query-table-size 'sum by (handler) (prometheus_http_response_size_bytes_sum)'
 range query-range 'sum(rate(prometheus_http_requests_total[1m]))'
 range query-range-empty 'veduta_no_such_metric'
 echo "start=$((now - 3600)) end=$now"

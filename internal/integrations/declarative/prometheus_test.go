@@ -35,7 +35,10 @@ var promFixtures = map[string]string{
 	"veduta_no_such_metric":   "query-empty",
 	"(sum(up) - sum(up)) / 0": "query-nan",
 	"sum((":                   "query-bad",
-	"sum(rate(prometheus_http_requests_total[1m]))": "query-range",
+	"sum(rate(prometheus_http_requests_total[1m]))":                     "query-range",
+	"sum by (handler, code) (prometheus_http_requests_total)":           "query-table-total",
+	"sum by (handler, code) (rate(prometheus_http_requests_total[5m]))": "query-table-rate",
+	"sum by (handler) (prometheus_http_response_size_bytes_sum)":        "query-table-size",
 }
 
 type promUpstream struct {
@@ -47,6 +50,11 @@ func (u *promUpstream) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	u.mu.Lock()
 	u.requests = append(u.requests, r.URL)
 	u.mu.Unlock()
+	if r.URL.Query().Get("query") == promWideQuery {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(promWide())
+		return
+	}
 	name, ok := promFixtures[r.URL.Query().Get("query")]
 	if r.URL.Path == "/api/v1/query_range" && name == "query-empty" {
 		name = "query-range-empty"
@@ -65,6 +73,45 @@ func (u *promUpstream) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 	}
 	_, _ = w.Write(body)
+}
+
+// promWideQuery is answered with query-table-total's series repeated five times under five
+// instance labels: 325 series, the size of a busy home network's per-device traffic, which no
+// self-scraping Prometheus has to capture.
+const promWideQuery = "veduta_wide"
+
+func promWide() []byte {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "testdata", "upstream", "prometheus", "query-table-total.json"))
+	if err != nil {
+		panic(err)
+	}
+	var env struct {
+		Data struct {
+			Result []struct {
+				Metric map[string]string `json:"metric"`
+				Value  [2]any            `json:"value"`
+			} `json:"result"`
+		} `json:"data"`
+	}
+	if err = json.Unmarshal(raw, &env); err != nil {
+		panic(err)
+	}
+	wide := env.Data.Result[:0:0]
+	for i := range 5 {
+		for _, s := range env.Data.Result {
+			m := map[string]string{"instance": strconv.Itoa(i)}
+			for k, v := range s.Metric {
+				m[k] = v
+			}
+			s.Metric = m
+			wide = append(wide, s)
+		}
+	}
+	out, err := json.Marshal(map[string]any{"status": "success", "data": map[string]any{"resultType": "vector", "result": wide}})
+	if err != nil {
+		panic(err)
+	}
+	return out
 }
 
 // invokePrometheus runs one operation of the shipped manifest through the real broker, with the
@@ -96,7 +143,11 @@ func invokePrometheus(t *testing.T, opID, params string) (map[string]any, *promU
 		capabilities.NewCapSet("http"), routes, routes, nil,
 		capabilities.Limits{HTTPRequests: 8, ResponseMB: 8, HostCalls: 100}, capabilities.ExecutionIdentity{})
 	inst, err := declarative.New(broker).Load(context.Background(), integrations.Installed{
-		Manifest: m, Lock: &integrations.LockEntry{ManifestSHA256: m.Digest},
+		// The manifest's own budget, as approving it would record, so a test cannot pass only
+		// because the runtime's default ceilings are roomier than what the manifest asks for.
+		Manifest: m, Lock: &integrations.LockEntry{ManifestSHA256: m.Digest, EffectiveLimits: integrations.EffectiveLimits{
+			HTTPRequests: m.Limits.HTTPRequests, TimeoutMs: m.Limits.TimeoutMs, InputMB: m.Limits.InputMB, Iterations: m.Limits.Iterations,
+		}},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -336,6 +387,154 @@ func TestPrometheusTopWithoutTheLabel(t *testing.T) {
 	item := items[0].(map[string]any)
 	if item["title"] != "(no instance)" || item["subtitle"] != nil {
 		t.Errorf("item = %v, want a placeholder title and no subtitle", item)
+	}
+}
+
+// promSamples reads a captured vector as label sets with their values, for computing a table's
+// expected cells without the manifest's own matching.
+func promSamples(t *testing.T, name string) []promSample {
+	t.Helper()
+	var vector []struct {
+		Metric map[string]string `json:"metric"`
+		Value  [2]any            `json:"value"`
+	}
+	if err := json.Unmarshal(promFixture(t, name).Result, &vector); err != nil {
+		t.Fatal(err)
+	}
+	out := make([]promSample, len(vector))
+	for i, s := range vector {
+		v, err := strconv.ParseFloat(s.Value[1].(string), 64)
+		if err != nil {
+			t.Fatal(err)
+		}
+		out[i] = promSample{s.Metric, v}
+	}
+	return out
+}
+
+type promSample struct {
+	metric map[string]string
+	value  float64
+}
+
+// lookup is the sample whose labels match want's on every one of names, or nil.
+func lookup(samples []promSample, want map[string]string, names ...string) any {
+	for _, s := range samples {
+		ok := true
+		for _, n := range names {
+			ok = ok && s.metric[n] == want[n]
+		}
+		if ok {
+			return s.value
+		}
+	}
+	return nil
+}
+
+// The fixtures hold /api/v1/query twice, once per status code, with different counts and rates:
+// a row matched on handler alone would read the wrong one. The size query has no code label, so
+// it matches nothing when code is one of the row's labels.
+func TestPrometheusTable(t *testing.T) {
+	doc, up, err := invokePrometheus(t, "table", `{"title": "Requests", "limit": 4,
+		"labels": [{"name": "handler", "label": "Handler"}, {"name": "code"}],
+		"values": [
+			{"label": "Total", "query": "sum by (handler, code) (prometheus_http_requests_total)", "format": "count"},
+			{"label": "Rate", "query": "sum by (handler, code) (rate(prometheus_http_requests_total[5m]))"},
+			{"label": "Size", "query": "sum by (handler) (prometheus_http_response_size_bytes_sum)", "format": "bytes"}]}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(up.requests) != 3 {
+		t.Fatalf("made %d requests for 3 values", len(up.requests))
+	}
+	b := block(t, doc, 0)
+	if b["type"] != "table" || b["title"] != "Requests" {
+		t.Fatalf("block = %v", b)
+	}
+	cols, _ := json.Marshal(b["columns"])
+	wantCols := `[{"key":"l0","label":"Handler"},{"key":"l1","label":"code"},` +
+		`{"align":"end","format":"count","key":"v0","label":"Total"},` +
+		`{"align":"end","format":"number","key":"v1","label":"Rate"},` +
+		`{"align":"end","format":"bytes","key":"v2","label":"Size"}]`
+	if string(cols) != wantCols {
+		t.Errorf("columns = %s\nwant      %s", cols, wantCols)
+	}
+
+	total := promSamples(t, "query-table-total")
+	rate := promSamples(t, "query-table-rate")
+	rows, _ := b["rows"].([]any)
+	if len(rows) != 4 {
+		t.Fatalf("rows = %v", rows)
+	}
+	sawBoth := map[string]bool{}
+	prev := 0.0
+	for i, r := range rows {
+		row := r.(map[string]any)
+		key := map[string]string{"handler": row["l0"].(string), "code": row["l1"].(string)}
+		v0, _ := row["v0"].(float64)
+		if v0 != lookup(total, key, "handler", "code") || (i > 0 && v0 > prev) {
+			t.Errorf("rows[%d] = %v, want descending totals read from its own series", i, row)
+		}
+		if row["v1"] != lookup(rate, key, "handler", "code") {
+			t.Errorf("rows[%d].v1 = %v, want %v", i, row["v1"], lookup(rate, key, "handler", "code"))
+		}
+		if row["v2"] != nil {
+			t.Errorf("rows[%d].v2 = %v, want blank: the size series have no code label", i, row["v2"])
+		}
+		if key["handler"] == "/api/v1/query" {
+			sawBoth[key["code"]] = true
+		}
+		prev = v0
+	}
+	if !sawBoth["200"] || !sawBoth["400"] {
+		t.Errorf("the top four rows should hold /api/v1/query under both codes, got %v", rows)
+	}
+}
+
+// Matched on one label, the size query lines up with the request counts.
+func TestPrometheusTableOneLabel(t *testing.T) {
+	doc, _, err := invokePrometheus(t, "table", `{"labels": [{"name": "handler"}], "values": [
+		{"label": "Size", "query": "sum by (handler) (prometheus_http_response_size_bytes_sum)", "format": "bytes"},
+		{"label": "Missing", "query": "veduta_no_such_metric"}]}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	size := promSamples(t, "query-table-size")
+	rows, _ := block(t, doc, 0)["rows"].([]any)
+	if len(rows) != len(size) {
+		t.Fatalf("rows = %v, want one per size series", rows)
+	}
+	for i, r := range rows {
+		row := r.(map[string]any)
+		key := map[string]string{"handler": row["l0"].(string)}
+		if row["v0"] != lookup(size, key, "handler") || row["v1"] != nil {
+			t.Errorf("rows[%d] = %v", i, row)
+		}
+		if _, ok := row["l1"]; ok {
+			t.Errorf("rows[%d] has a cell for an unconfigured label: %v", i, row)
+		}
+	}
+}
+
+// The table's worst case stays inside the manifest's iteration budget: twenty rows each matched
+// against three more queries of 325 series on four labels.
+func TestPrometheusTableWithinBudget(t *testing.T) {
+	doc, _, err := invokePrometheus(t, "table", `{"limit": 20,
+		"labels": [{"name": "handler"}, {"name": "code"}, {"name": "instance"}, {"name": "job"}],
+		"values": [{"label": "a", "query": "veduta_wide"}, {"label": "b", "query": "veduta_wide"},
+			{"label": "c", "query": "veduta_wide"}, {"label": "d", "query": "veduta_wide"}]}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows, _ := block(t, doc, 0)["rows"].([]any)
+	if len(rows) != 20 {
+		t.Fatalf("rows = %d, want 20", len(rows))
+	}
+	for i, r := range rows {
+		row := r.(map[string]any)
+		if row["v3"] != row["v0"] || row["l2"] == nil {
+			t.Errorf("rows[%d] = %v, want every query to find the row's own series", i, row)
+		}
 	}
 }
 

@@ -84,6 +84,9 @@ served; nothing was scrubbed, because a self-scraping Prometheus holds nothing p
 | `query-bad.json` | `GET /api/v1/query` `sum((` | 400 |
 | `query-range.json` | `GET /api/v1/query_range` `sum(rate(prometheus_http_requests_total[1m]))`, 1 h at 15 s | 200 |
 | `query-range-empty.json` | `GET /api/v1/query_range` `veduta_no_such_metric`, 1 h at 15 s | 200 |
+| `query-table-total.json` | `GET /api/v1/query` `sum by (handler, code) (prometheus_http_requests_total)` | 200 |
+| `query-table-rate.json` | `GET /api/v1/query` `sum by (handler, code) (rate(prometheus_http_requests_total[5m]))` | 200 |
+| `query-table-size.json` | `GET /api/v1/query` `sum by (handler) (prometheus_http_response_size_bytes_sum)` | 200 |
 
 - Every sample value is a **string**, `"NaN"` included; timestamps are JSON numbers of Unix
   seconds (whole here, because the capture passed whole-second `time`/`start`).
@@ -91,5 +94,8 @@ served; nothing was scrubbed, because a self-scraping Prometheus holds nothing p
   `{metric, value}`, a matrix a list of `{metric, values}`.
 - No samples is `"result": []` with status 200, not an error. A query that does not parse is
   400 with `{"status":"error","errorType":"bad_data","error":…}`.
+- The three `query-table-*` files were captured 2026-10-07 from a fresh `prom/prometheus:v3.15.0`
+  after a few requests, three of them failing with 400, so `/api/v1/query` appears under two
+  `code` values with different counts.
 - The range result only covers the minutes the server had been running: a matrix has no points
   where there was no data, rather than nulls.

@@ -19,9 +19,11 @@ project is pre-1.0:
   point's timestamp and `unix(t)` for a request value such as a query window's start. Before
   this, a manifest could not chart an upstream that sends Unix timestamps.
   ([#18](https://github.com/sergeyfarin/veduta/issues/18))
-- A first-party `prometheus` integration: values (`stat`), charts (`series`) and rankings (`top`)
-  from PromQL a card supplies, through the two read-only query endpoints. Tested against responses
+- A first-party `prometheus` integration: values (`stat`), charts (`series`), rankings (`top`)
+  and tables (`table`) from PromQL a card supplies, through the two read-only query endpoints. Tested against responses
   captured from a real Prometheus 3.15.0. See [docs/integrations.md](docs/integrations.md#prometheus).
+  Its `table` operation lines up to four queries side by side by shared labels, such as each Wi-Fi
+  client's access point, signal and rates in one row.
 
 ### Fixed
 

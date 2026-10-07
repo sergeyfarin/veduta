@@ -18,7 +18,7 @@ Nothing here is active until you approve it.
 | [`homeassistant`](../plugins/homeassistant/manifest.yaml) | `overview`, `sensor` | a long-lived access token | declarative |
 | [`arcane`](../plugins/arcane/manifest.yaml) | `containers` | an API key | declarative |
 | [`dockhand`](../plugins/dockhand/manifest.yaml) | `overview` | an API token | declarative |
-| [`prometheus`](../plugins/prometheus/manifest.yaml) | `stat`, `series`, `top` | a Prometheus server; PromQL on each card | declarative |
+| [`prometheus`](../plugins/prometheus/manifest.yaml) | `stat`, `series`, `top`, `table` | a Prometheus server; PromQL on each card | declarative |
 
 Every one of these declares its complete upstream request surface in its manifest, and every route
 in the eight declarative manifests is a `GET`. None of them can act on the system it watches: an
@@ -217,7 +217,7 @@ approval does grant reading **every series that Prometheus holds**, because the 
 card's to choose: put Prometheus behind authentication of its own if some of its series should
 not reach the dashboard.
 
-Three operations:
+Four operations:
 
 - `stat` shows up to six instant queries as values. Each query should return one sample (wrap a
   wider result in `sum()`, since only the first sample is shown); one with no samples, or a `NaN`,
@@ -228,6 +228,11 @@ Three operations:
   90 s, 6 min and 42 min. Each query should return one series; only the first is drawn.
 - `top` ranks the series one instant query returns, largest first, titling each row by the metric
   label named in `label` (and optionally subtitling it by `subtitle`). `limit` is 1-20, default 5.
+- `table` sets up to four instant queries side by side, one row per series. Up to four `labels`
+  name the rows and become the leading columns; the rows come from the first value's query,
+  largest first, up to `limit` (1-20, default 10). Each later value is the sample of the series in
+  its own query whose labels **all** match the row's, or a blank where none does - so every query
+  must keep the labels you list (`sum by (mac, node) (...)` for both, not `by (mac)` for one).
 
 `format` takes the dashboard's value formats: `number`, `count`, `bytes`, `bytes-rate`,
 `percent`, `duration` or `temperature`. **`percent` expects a 0-1 fraction**, so divide a 0-100
@@ -267,9 +272,26 @@ either.
           query: 'topk(5, sum by (client) (increase(client_rx_bytes_total[1d])))'
           label: client
           format: bytes
+
+      - id: wifi-clients
+        title: Wi-Fi clients
+        integration: prometheus
+        operation: table
+        slots: { server: prometheus }
+        span: { columns: 2, rows: 3 }
+        params:
+          labels:
+            - { name: mac,  label: Device }
+            - { name: node, label: Access point }
+          values:
+            - { label: Signal dBm, query: 'max by (mac, node) (wifi_station_signal_dbm)' }
+            - { label: Down,   query: 'max by (mac, node) (wifi_station_receive_kilobits_per_second) * 125', format: bytes-rate }
+            - { label: Up,     query: 'max by (mac, node) (wifi_station_transmit_kilobits_per_second) * 125', format: bytes-rate }
 ```
 
-The metric names above are placeholders: use whatever your exporters publish, which the
+The Wi-Fi metrics are OpenWrt's `prometheus-node-exporter-lua-wifi_stations` collector's, with
+`node` a label your scrape config gives each access point; the other names are placeholders. Use
+whatever your exporters publish, which the
 Prometheus web UI will list. A query Prometheus cannot parse fails the card with HTTP 400; try it
 in that UI first, where the error says what is wrong.
 
