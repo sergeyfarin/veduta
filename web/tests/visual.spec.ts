@@ -62,11 +62,10 @@ test('dashboard - dark', async ({ page }) => {
 // TestBundledBackdropTone; these baselines cover what arithmetic cannot - that the blur, the
 // bundled painting and the card edges actually render.
 //
-// They do NOT cover whether the painting loaded: this suite compares with pixelmatch's default
-// per-pixel threshold of 0.2, which is generous in exactly the low-contrast places a backdrop
-// lives. Replacing Veil's backdrop outright moved 91.6% of the dark baseline's pixels and only
-// 0.02% of them far enough to count, well inside the 2% budget. So the asset is asserted
-// functionally, once, in the test below rather than hoped for here.
+// They are also the reason playwright.config.ts sets pixelmatch's per-pixel `threshold` to 0.01
+// rather than its default 0.2, which is generous in exactly the low-contrast places a backdrop
+// lives: at 0.2, replacing Veil's backdrop outright moved 91.6% of the dark baseline's pixels and
+// counted only 0.02% of them, well inside the 2% budget.
 test('dashboard - veil dark', async ({ page }) => {
   await loadDashboard(page, 'dark', 'veil');
   await stabilizeCanvas(page, 1407);
@@ -79,10 +78,10 @@ test('dashboard - veil light', async ({ page }) => {
   await expect(page).toHaveScreenshot('dashboard-veil-light.png', { fullPage: true });
 });
 
-// The screenshots above cannot see a 404 for the backdrop - see their comment - so this asserts it
-// directly: the CSS names a bundled file, and the browser gets it. Not a baseline, because what is
-// being checked is a request and a response, and pinning pixels to check a fetch is how a test ends
-// up failing for an unrelated reason.
+// A missing backdrop is a request failing, which the screenshots above would only see as a changed
+// picture - so this asserts it directly: the CSS names a bundled file, and the browser gets it. Not
+// a baseline, because what is being checked is a request and a response, and pinning pixels to
+// check a fetch is how a test ends up failing for an unrelated reason.
 for (const [scheme, file] of [['light', 'querena'], ['dark', 'vernet']] as const) {
   test(`veil ${scheme} loads its bundled backdrop`, async ({ page }) => {
     await loadDashboard(page, scheme, 'veil');

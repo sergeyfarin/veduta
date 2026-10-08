@@ -17,14 +17,28 @@ export default defineConfig({
   reporter: 'line',
   use: { baseURL: address, trace: 'retain-on-failure' },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
-  // A fresh container's font cache renders a small fraction of glyph pixels a few shades off a
-  // warm one's, even with the browser and OS image pinned identical - confirmed by regenerating
-  // the baselines and immediately re-verifying inside the same mcr.microsoft.com/playwright
-  // image: back-to-back runs in one container were byte-identical (0 diff), but a second, fresh
-  // container instance showed a ~1% pixel difference with no code change at all. A real
-  // regression is nothing like that margin - a one-line CSS change deliberately tested here moved
-  // 24-36% of pixels. 2% comfortably clears the noise floor without hiding an actual change.
-  expect: { toHaveScreenshot: { maxDiffPixelRatio: 0.02 } },
+  // Two numbers, because pixelmatch judges a change twice: `threshold` decides whether one pixel
+  // differs at all (a perceptual colour distance, 0-1), and maxDiffPixelRatio how many such pixels
+  // may differ before the screenshot fails.
+  //
+  // maxDiffPixelRatio was chosen in B5 against font-cache noise: a fresh container of the pinned
+  // mcr.microsoft.com/playwright image once rendered ~1% of glyph pixels a few shades off a warm
+  // one, while a one-line CSS change deliberately tested here moved 24-36% of pixels. 2% clears
+  // the first and not the second.
+  //
+  // `threshold` was left at pixelmatch's 0.2 until 2026-10-08, and 0.2 hides a wash across a large
+  // area - exactly where a backdrop or a card surface lives. Adding the Climate card (a 2x2 card a
+  // few shades off the grid behind it) counted 0.07% of the light baseline's pixels at 0.2, and all
+  // four desktop baselines passed against images without it; at 0.01 it counts 6.8%. Removing the
+  // card again fails all five baselines at 0.01, and only mobile (on its height) at 0.2. Replacing
+  // Veil's light backdrop counted 0.002% at 0.2 and 72% at 0.01.
+  //
+  // The noise floor at 0.01: the baselines regenerated in four fresh containers, every pair (and
+  // each against the committed baselines) compared with Playwright's own comparator - 0 pixels at
+  // every threshold down to 0.01. Only at 0 did anything count, 101 pixels (0.006%) in one
+  // veil-light pair. Change either number only after re-measuring both; a noise floor measured for
+  // one pair does not transfer to another.
+  expect: { toHaveScreenshot: { maxDiffPixelRatio: 0.02, threshold: 0.01 } },
   // Built here, not assumed: running the suite without building first would test whatever was
   // last built, silently, which is exactly the flakiness C14 warns about. --fixtures serves the
   // checked-in showcase (internal/fixtures) - no network, no real integration, nothing that can
