@@ -65,13 +65,11 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version: '1.27'
-      # v2.13.2 is the first release that understands Go 1.27: older ones fail either on the
-      # language-version check (prebuilt binaries are compiled with an older Go) or, built from
-      # source, on the standard library's export data ("export data version 4 is greater than
-      # maximum supported version 2"). install-mode: goinstall builds it with the toolchain above.
+      # Keep this version aligned with mise.toml. v2.13.2 cannot read the version-5 export data
+      # emitted by Go 1.27.2. goinstall builds the linter with the toolchain selected above.
       - uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.13.2
+          version: v2.14.0
           install-mode: goinstall
 
   plugin-sdk:

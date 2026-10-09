@@ -27,6 +27,8 @@ project is pre-1.0:
 
 ### Fixed
 
+- CI uses golangci-lint 2.14.0, matching the local toolchain. Its previous 2.13.2 pin could not
+  read Go 1.27.2's version-5 export data, so the lint job failed before it could analyse the code.
 - Glances, Beszel and Proxmox showed their percentages 100 times too large: 25% CPU read
   "2500.0%" next to a correctly quarter-full bar. The renderer reads a percent-formatted value as
   a 0-1 fraction, and these three manifests passed the upstream's 0-100 number. Their signals are
