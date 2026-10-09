@@ -5,12 +5,22 @@ both proposals, the spike and archived planning records, and the live GitHub bac
 comparisons use project-owned documentation and release notes linked below. This is advice and
 a proposed sequence of experiments, **not an accepted ADR or a commitment to implement them**.
 
+The follow-up [Homarr v2 deep dive](homarr-v2-deep-dive.md) inspects its released source,
+architecture, extension boundaries, roadmap signals and user feedback. It adds concrete upstream
+contribution options, lessons for Veduta, and alternatives such as a durable journal or declarative
+board-management tool. Its evidence qualifies the comparison below.
+
 ## Recommendation
 
 **Try current Homarr v2 against the actual desired home page before investing in another broad
 Veduta development phase.** Homarr v2 overlaps substantially with both Veduta's visible features
 and its original constrained-integration pitch. If its experience now works for you, custom
 widgets and focused upstream contributions are likely the shortest route to useful results.
+
+Include density, phone editing, loaded resource use, migration/restore and closed-browser
+observation in that trial. V2 feedback is mixed, and several early migration complaints have
+already been fixed; neither launch enthusiasm nor pre-v2 RAM complaints settle the choice.
+Dynacat also warrants a look if the desired combination is YAML, a GUI and live updates.
 
 If Veduta continues independently, its most promising role is **a calm, compact overview of home
 and lab, with a selective record of changes and clear links to the tools that own the detail**.
@@ -56,18 +66,21 @@ they are separate settings. Silent configuration promises deserve attention befo
 
 Historical documents need to be read in order. ADR 0004's original chart gap was closed by 0.2;
 ADR 0003's WASM proof-case discussion was narrowed by ADR 0005; archived phases are completion
-records, not a current roadmap. The September comparison in [Why Veduta](why-veduta.md) predates
-Homarr v2. This review supplements those records rather than rewriting their historical evidence.
+records, not a current roadmap. The original September comparison in [Why Veduta](why-veduta.md)
+predated Homarr v2 and has since been updated. This review supplements those records rather than
+rewriting their historical evidence.
 
 ## What the surrounding tools already do well
 
 These are fit assessments inferred from documented behavior, not comparative performance tests
-or security audits. None of the products was newly deployed as part of this review.
+or security audits. None of the products was newly deployed as part of this review. The follow-up
+deep dive also includes pinned Homarr source inspection and dated community reports.
 
 | Tool | Established role and evidence | Consequence for Veduta |
 | --- | --- | --- |
 | Homepage | YAML service groups, links, multiple widgets per service and a large service-widget catalogue ([services](https://gethomepage.dev/configs/services/), [widgets](https://gethomepage.dev/widgets/index.html)) | A links-and-counters replacement has limited differentiation. Preserve importing and useful recipes; avoid catalogue parity. |
 | Glance | A feed-oriented dashboard with YAML, custom API templates and HTTP extensions; its documented fetching is page-load/cache driven ([overview](https://github.com/glanceapp/glance), [extensions](https://github.com/glanceapp/glance/blob/main/docs/extensions.md)) | A pleasant information page is already served. Veduta's persisted background observations could matter for incidents, but a generic RSS page is a weak new direction. |
+| Dynacat | A Glance fork with dynamic updates and a GUI that writes the same YAML users can edit manually ([project](https://github.com/Panonim/dynacat)) | Small deployment, YAML, GUI and live updates together are not sufficient differentiation. Test upkeep, presentation and authority boundaries. |
 | Homarr v2 | Browser-managed boards, responsive layouts and permissions; custom widgets with separately stored credentials and restricted templates ([boards](https://homarr.dev/docs/management/boards/), [custom widgets](https://homarr.dev/docs/management/custom-widgets/)) | The strongest direct alternative. Test extending it before duplicating its editor, groups, controls and distribution. |
 | Dashy | Configurable sections and dynamic widgets, with a browser configuration workflow ([widgets](https://dashy.to/docs/widgets/), [configuration](https://dashy.to/docs/configuring/)) | Extreme customisation is occupied territory. Veduta's curated appearance can be a preference, but needs usability evidence. |
 | Grafana with Prometheus | Querying, exploration, alerting, dashboard variables and time ranges; Canvas supports arranged elements and data-bound connections ([overview](https://grafana.com/docs/grafana/latest/introduction/), [Canvas](https://grafana.com/docs/grafana/latest/visualizations/panels-visualizations/visualizations/canvas/)) | Use Veduta for a few selected values and trends. Let Grafana own historical investigation and the current house/network-diagram trial. |

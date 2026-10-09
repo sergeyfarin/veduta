@@ -52,6 +52,7 @@ Detailed engineering progress and remaining work live outside this README:
 - [Design research and product scope](docs/00-review-and-prior-art.md)
 - [Product rationale and dashboard comparison](docs/why-veduta.md)
 - [Product direction review: options, Homarr v2, and a staged path forward](docs/product-direction.md)
+- [Homarr v2 deep dive: architecture, roadmap signals, feedback, and contribution options](docs/homarr-v2-deep-dive.md)
 - [Proposal: an activity feed, tested alongside the dashboard](docs/proposals/0001-private-activity-feed.md)
 - [Proposal: executing actions](docs/proposals/0002-action-execution.md)
 - [Theming and visual-customisation decision](docs/decisions/0002-theming-and-visual-customisation.md)

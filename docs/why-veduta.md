@@ -3,7 +3,9 @@
 > Comparison reviewed 2026-10-09, including Homarr v2. Dashboard projects change quickly; follow
 > the linked official documentation when making a deployment decision. The
 > [product direction review](product-direction.md) weighs whether to continue Veduta or extend
-> an established dashboard, with near-, mid-, and long-term options.
+> an established dashboard, with near-, mid-, and long-term options. The follow-up
+> [Homarr deep dive](homarr-v2-deep-dive.md) adds pinned source inspection, public roadmap signals,
+> and user feedback, including alternatives to building another dashboard.
 
 Veduta is not an attempt to replace every self-hosted dashboard. Mature projects already offer
 large widget catalogues, polished configuration experiences, and active communities. They are the
