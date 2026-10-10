@@ -6,6 +6,11 @@ public docs, issues, PR status and community discussions were checked separately
 does not constitute a security audit or a runtime benchmark. No Homarr deployment, upstream
 contribution, or migration was performed during this review.
 
+The **2026-10-10** follow-up, [a smaller network and DNS dashboard](network-dashboard-direction.md),
+incorporates the actual Homarr trial and supersedes the initial experiment recommendation: keep
+Homarr for the home page/media, test a focused Veduta alongside it, and retain Prometheus first.
+It also examines community-widget safety, the PromQL/Immich gaps and direct-source alternatives.
+
 ## The revised judgment
 
 **Extending Homarr is the best first experiment for getting a capable personal dashboard quickly.

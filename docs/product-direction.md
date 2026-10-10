@@ -10,6 +10,11 @@ architecture, extension boundaries, roadmap signals and user feedback. It adds c
 contribution options, lessons for Veduta, and alternatives such as a durable journal or declarative
 board-management tool. Its evidence qualifies the comparison below.
 
+The **2026-10-10** follow-up, [a smaller network and DNS dashboard](network-dashboard-direction.md),
+incorporates the actual Homarr trial and supersedes the initial experiment recommendation: keep
+Homarr for the home page/media, test a focused Veduta alongside it, and retain Prometheus first.
+It also examines community-widget safety, the PromQL/Immich gaps and direct-source alternatives.
+
 ## Recommendation
 
 **Try current Homarr v2 against the actual desired home page before investing in another broad
