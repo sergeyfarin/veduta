@@ -20,7 +20,7 @@ per-project-server-and-data-dir isolation, the `PLAYWRIGHT_PROJECT` env switch f
 engine locally vs. the full matrix in CI, and building the frontend before the suite runs rather
 than testing whatever was last on disk. Don't re-derive those from scratch; adapt them.
 
-**Update (B5): Veduta now depends on Playwright itself** (`@playwright/test` 1.63.0; B5 pinned
+**Update (B5): Veduta now depends on Playwright itself** (`@playwright/test` 1.64.1; B5 pinned
 1.62.1 to match the sibling project's already-cached engine, and a later dependency sweep moved
 it) —
 `web/playwright.config.ts` and `web/tests/visual.spec.ts` are the real visual regression suite,
@@ -36,7 +36,7 @@ on first push. Do it inside the exact image CI uses instead:
 
 ```bash
 docker run --rm -v "$(pwd)":/work -w /work -e CI=true \
-  mcr.microsoft.com/playwright:v1.63.0-noble bash -c '
+  mcr.microsoft.com/playwright:v1.64.1-noble bash -c '
     git config --global --add safe.directory /work
     curl -sSL https://go.dev/dl/go1.27.0.linux-amd64.tar.gz -o /tmp/go.tgz
     tar -C /usr/local -xzf /tmp/go.tgz
